@@ -1,0 +1,6 @@
+name = "ocr-github-app-worker"
+main = "src/index.ts"
+compatibility_date = "2024-04-01"
+
+[vars]
+# 環境変数設定 (Secrets は wrangler secret put または GitHub Secrets 経由)

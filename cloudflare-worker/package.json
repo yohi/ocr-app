@@ -1,0 +1,17 @@
+{
+  "name": "ocr-github-app-worker",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@octokit/auth-app": "^7.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240405.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  }
+}
