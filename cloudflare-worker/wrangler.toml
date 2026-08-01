@@ -3,4 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-04-01"
 
 [vars]
-# 環境変数設定 (Secrets は wrangler secret put または GitHub Secrets 経由)
+# 環境変数設定
+# Secrets (GITHUB_APP_PRIVATE_KEY, WEBHOOK_SECRET) はデプロイワークフローが
+# GitHub Actions の Secrets から自動設定します (手動登録は不要)。
+# 以下を実際の値に置き換えてください。
+# GITHUB_APP_ID = "12345678"
+# TARGET_DISPATCH_REPO = "yohi/ocr-app"  # 任意 (未設定時は yohi/ocr-app)
