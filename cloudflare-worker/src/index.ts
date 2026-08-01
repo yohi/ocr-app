@@ -165,28 +165,35 @@ export default {
         const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/.github";
 
         // 中央リポジトリの Actions (repository_dispatch) を起動
-        const res = await fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/vnd.github.v3+json",
-            "User-Agent": "Cloudflare-Worker-OCR-App",
-          },
-          body: JSON.stringify({
-            event_type: "open_code_review_trigger",
-            client_payload: {
-              target_repo: `${repoOwner}/${repoName}`,
-              pr_number: prNumber,
-              commit_sha: payload.pull_request.head.sha,
-              installation_id: payload.installation.id,
+        const dispatchAbortController = new AbortController();
+        const dispatchTimeout = setTimeout(() => dispatchAbortController.abort(), 10_000);
+        try {
+          const res = await fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/vnd.github.v3+json",
+              "User-Agent": "Cloudflare-Worker-OCR-App",
             },
-          }),
-        });
+            body: JSON.stringify({
+              event_type: "open_code_review_trigger",
+              client_payload: {
+                target_repo: `${repoOwner}/${repoName}`,
+                pr_number: prNumber,
+                commit_sha: payload.pull_request.head.sha,
+                installation_id: payload.installation.id,
+              },
+            }),
+            signal: dispatchAbortController.signal,
+          });
 
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("Dispatch failed:", res.status, errText);
-          return new Response("Dispatch failed", { status: res.status });
+          if (!res.ok) {
+            const errText = await res.text();
+            console.error("Dispatch failed:", res.status, errText);
+            return new Response("Dispatch failed", { status: res.status });
+          }
+        } finally {
+          clearTimeout(dispatchTimeout);
         }
       }
 
