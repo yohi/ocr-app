@@ -10,7 +10,7 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 - **`.github/workflows/deploy-cloudflare-worker.yml`**: Cloudflare Worker 自動/手動デプロイ用ワークフロー
 - **`.github/workflows/ocr-engine.yml`**: `repository_dispatch` を検知して対象 PR に
   `ocr review` を実行するワークフローエンジン
-- **`.github/workflows/scripts/post-ocr-comments.js`**: レビュー結果を PR にインライン投稿するスクリプト
+- **`.github/workflows/scripts/post-ocr-comments.mjs`**: レビュー結果を PR にインライン投稿するスクリプト
 
 ## Cloudflare Worker 設定契約
 

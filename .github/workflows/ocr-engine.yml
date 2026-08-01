@@ -64,7 +64,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          node .ocr-app-tools/.github/workflows/scripts/post-ocr-comments.js \
+          node .ocr-app-tools/.github/workflows/scripts/post-ocr-comments.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
             --pr "${{ github.event.client_payload.pr_number }}" \
             --result "/tmp/ocr-result.json"
