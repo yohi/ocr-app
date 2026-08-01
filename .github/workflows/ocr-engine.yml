@@ -13,17 +13,6 @@ jobs:
   run-ocr-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Target Repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.event.client_payload.target_repo }}
-          ref: ${{ github.event.client_payload.commit_sha }}
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
@@ -34,6 +23,18 @@ jobs:
           permission-pull-requests: write
           permission-issues: write
           permission-contents: read
+
+      - name: Checkout Target Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.target_repo }}
+          ref: ${{ github.event.client_payload.commit_sha }}
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Install OpenCodeReview
         run: npm install -g @alibaba-group/open-code-review@latest

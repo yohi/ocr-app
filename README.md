@@ -52,8 +52,8 @@ sequenceDiagram
     CW->>CW: Webhook 署名検証
     CW->>GH: GitHub App token 発行
     CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
-    CR->>TR: 対象リポジトリ・コミットを checkout
     CR->>GH: GitHub App token 発行
+    CR->>TR: 対象リポジトリ・コミットを checkout
     CR->>CR: npm install & ocr review 実行
     CR->>TR: レビューコメントを PR に投稿
 ```
@@ -71,8 +71,8 @@ sequenceDiagram
      `open_code_review_trigger` タイプの dispatch を送信します。
    - payload には `target_repo`、`pr_number`、`commit_sha`、`installation_id` が含まれます。
 5. **中央リポジトリの `ocr-engine.yml` が起動**
-   - 対象リポジトリ・コミットを checkout します。
    - GitHub App token を発行します。
+   - 対象リポジトリ・コミットを checkout します。
    - `@alibaba-group/open-code-review` をインストール・設定します。
    - `ocr review` を実行します。
 6. **レビュー結果の投稿**
@@ -120,8 +120,8 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 2. OCR で使用する LLM の URL、認証トークン、モデル名を Secrets に登録します。
 3. Anthropic API を使用する場合は Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
 4. Worker から dispatch されると、以下の処理が実行されます。
-   - 対象リポジトリ・コミットの checkout
    - GitHub App token の発行
+   - 対象リポジトリ・コミットの checkout
    - `@alibaba-group/open-code-review` のインストールと設定
    - `ocr review` の実行
    - レビュー結果を PR にインライン投稿
