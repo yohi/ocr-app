@@ -162,7 +162,7 @@ export default {
           installationId: payload.installation.id,
         });
 
-        const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/.github";
+        const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
 
         // 中央リポジトリの Actions (repository_dispatch) を起動
         const dispatchAbortController = new AbortController();
