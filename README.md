@@ -7,7 +7,7 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 
 - **`cloudflare-worker/`**: GitHub App からの Webhook を受信し、
   `repository_dispatch` を送る Cloudflare Worker (無料枠)
-- **`.github/workflows/deploy-cloudflare-worker.yml`**: Cloudflare Worker 自動/手動デプロイ用ワークフロー
+- **`.github/workflows/deploy-cloudflare-worker.yml`**: Cloudflare Worker 手動デプロイ用ワークフロー
 - **`.github/workflows/ocr-engine.yml`**: `repository_dispatch` を検知して対象 PR に
   `ocr review` を実行するワークフローエンジン
 - **`.github/workflows/scripts/post-ocr-comments.mjs`**: レビュー結果を PR にインライン投稿するスクリプト
@@ -21,7 +21,7 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | `GITHUB_APP_ID` | はい | GitHub App の ID |
 | `GITHUB_APP_PRIVATE_KEY` | はい | GitHub App の秘密鍵 |
 | `WEBHOOK_SECRET` | はい | Webhook 署名検証用シークレット |
-| `TARGET_DISPATCH_REPO` | いいえ | dispatch 先リポジトリ。未設定時は `yohi/.github` |
+| `TARGET_DISPATCH_REPO` | いいえ | dispatch 先リポジトリ。未設定時は `yohi/ocr-app` |
 
 ### Webhook と GitHub App
 
@@ -34,6 +34,154 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | GitHub App 権限（dispatch 先） | `TARGET_DISPATCH_REPO` の `Contents: write` |
 
 > **注意**: Webhook の Secret と Worker の環境変数 `WEBHOOK_SECRET` には必ず同じ値を設定してください。
+
+## GitHub Apps 経由の実行フロー
+
+GitHub App としてインストールされたリポジトリで PR が開かれると、
+以下の流れで自動的にコードレビューが実行されます。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GH as GitHub
+    participant CW as Cloudflare Worker
+    participant CR as 中央リポジトリ<br/>(TARGET_DISPATCH_REPO)
+    participant TR as 対象リポジトリ
+
+    GH->>CW: pull_request webhook<br/>(opened / synchronize / reopened)
+    CW->>CW: Webhook 署名検証
+    CW->>GH: GitHub App token 発行
+    CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
+    CR->>TR: 対象リポジトリ・コミットを checkout
+    CR->>GH: GitHub App token 発行
+    CR->>CR: npm install & ocr review 実行
+    CR->>TR: レビューコメントを PR に投稿
+```
+
+### 各ステップの詳細
+
+1. **PR イベントの発火**
+   - `pull_request` イベントのうち `opened` / `synchronize` / `reopened` のみを処理します。
+2. **Cloudflare Worker での署名検証**
+   - `X-Hub-Signature-256` ヘッダーを `WEBHOOK_SECRET` で検証します。
+3. **GitHub App token の発行**
+   - Worker が `GITHUB_APP_ID` / `GITHUB_APP_PRIVATE_KEY` を使って token を生成します。
+4. **`repository_dispatch` の送信**
+   - `TARGET_DISPATCH_REPO`（未設定時は `yohi/ocr-app`）に対して、
+     `open_code_review_trigger` タイプの dispatch を送信します。
+   - payload には `target_repo`、`pr_number`、`commit_sha`、`installation_id` が含まれます。
+5. **中央リポジトリの `ocr-engine.yml` が起動**
+   - 対象リポジトリ・コミットを checkout します。
+   - GitHub App token を発行します。
+   - `@alibaba-group/open-code-review` をインストール・設定します。
+   - `ocr review` を実行します。
+6. **レビュー結果の投稿**
+   - `.github/workflows/scripts/post-ocr-comments.mjs` を使って、
+     対象 PR にインラインでレビューコメントを投稿します。
+7. **失敗時**
+   - `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
+     `ocr-debug-logs` という Artifact として保存します。
+
+## GitHub Actions による構築
+
+本リポジトリでは、Cloudflare Worker のデプロイと OCR レビューエンジンの実行を
+GitHub Actions で自動化しています。
+
+### 1. Cloudflare Worker のデプロイ
+
+`.github/workflows/deploy-cloudflare-worker.yml` を使用します。
+
+| 項目 | 内容 |
+| --- | --- |
+| トリガー | `workflow_dispatch`（手動実行のみ） |
+| 必要な Secret | `CLOUDFLARE_API_TOKEN` |
+| 作業ディレクトリ | `cloudflare-worker` |
+
+1. [Cloudflare API トークン](https://dash.cloudflare.com/profile/api-tokens) を作成し、
+   Worker 編集に必要な権限を付与します。
+2. 本リポジトリの **Settings > Secrets and variables > Actions** に
+   `CLOUDFLARE_API_TOKEN` を登録します。
+3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
+   「Run workflow」を押して手動デプロイします。
+
+### 2. OCR レビューエンジンの実行
+
+`.github/workflows/ocr-engine.yml` は、`repository_dispatch` イベントで起動します。
+Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送信されます。
+
+| 項目 | 内容 |
+| --- | --- |
+| トリガー | `repository_dispatch`（`open_code_review_trigger`） |
+| 必要な Secrets | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, `OCR_LLM_MODEL` |
+| 任意の Variables | `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
+| 必要な Permissions | `contents: read`, `pull-requests: write`, `issues: write` |
+
+1. GitHub App の ID と秘密鍵を Secrets に登録します。
+2. OCR で使用する LLM の URL、認証トークン、モデル名を Secrets に登録します。
+3. Anthropic API を使用する場合は Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
+4. Worker から dispatch されると、以下の処理が実行されます。
+   - 対象リポジトリ・コミットの checkout
+   - GitHub App token の発行
+   - `@alibaba-group/open-code-review` のインストールと設定
+   - `ocr review` の実行
+   - レビュー結果を PR にインライン投稿
+
+失敗時には `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
+`ocr-debug-logs` という Artifact として保存します。
+
+## LLM の設定
+
+OCR を実行する前に、使用する LLM プロバイダーの設定が必要です。
+
+### ローカルで設定する場合
+
+対話形式でプロバイダーとモデルを選び、接続確認まで行えます。
+
+```bash
+ocr config provider   # プロバイダー選択
+ocr config model      # モデル選択
+ocr llm test          # 接続確認
+```
+
+設定は `~/.opencodereview/config.json` に保存されます。
+
+### GitHub Actions で設定する場合
+
+`.github/workflows/ocr-engine.yml` では、以下の Secrets / Variables を使って
+LLM を設定します。
+
+| 名前 | 種別 | 説明 |
+| --- | --- | --- |
+| `OCR_LLM_URL` | Secret | LLM API のエンドポイント URL |
+| `OCR_LLM_AUTH_TOKEN` | Secret | API キーまたは認証トークン |
+| `OCR_LLM_MODEL` | Secret | 使用するモデル名 |
+| `OCR_LLM_USE_ANTHROPIC` | Variable | Anthropic API 使用時は `true`、それ以外は `false` |
+
+#### 設定例：Anthropic
+
+| 名前 | 値の例 |
+| --- | --- |
+| `OCR_LLM_URL` | `https://api.anthropic.com/v1/messages` |
+| `OCR_LLM_AUTH_TOKEN` | `sk-ant-...` |
+| `OCR_LLM_MODEL` | `claude-opus-4-6` |
+| `OCR_LLM_USE_ANTHROPIC` | `true` |
+
+#### 設定例：OpenAI / OpenAI 互換 API
+
+| 名前 | 値の例 |
+| --- | --- |
+| `OCR_LLM_URL` | `https://api.openai.com/v1/chat/completions` |
+| `OCR_LLM_AUTH_TOKEN` | `sk-...` |
+| `OCR_LLM_MODEL` | `gpt-4o` |
+| `OCR_LLM_USE_ANTHROPIC` | `false` |
+
+### ヒント
+
+- Anthropic の URL は `/v1/messages`、OpenAI 互換の URL は `/v1/chat/completions` で終わる必要があります。
+- `OCR_LLM_USE_ANTHROPIC` は Repository Variable なので、
+  **Settings > Secrets and variables > Actions > Variables** タブで設定してください。
+- すでに Claude Code で `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` を
+  設定している場合、OCR はそれらを自動的に利用できます。
 
 ## セットアップ詳細
 
