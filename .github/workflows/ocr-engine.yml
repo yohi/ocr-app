@@ -1,0 +1,80 @@
+name: OpenCodeReview Engine (App Worker Dispatch Handler)
+
+on:
+  repository_dispatch:
+    types: [open_code_review_trigger]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  run-ocr-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Target Repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.client_payload.target_repo }}
+          ref: ${{ github.event.client_payload.commit_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GITHUB_APP_ID }}
+          private-key: ${{ secrets.GITHUB_APP_PRIVATE_KEY }}
+          installation-id: ${{ github.event.client_payload.installation_id }}
+          permission-pull-requests: write
+          permission-issues: write
+          permission-contents: read
+
+      - name: Install OpenCodeReview
+        run: npm install -g @alibaba-group/open-code-review@latest
+
+      - name: Configure OCR
+        run: |
+          ocr config set llm.url "${{ secrets.OCR_LLM_URL }}"
+          ocr config set llm.auth_token "${{ secrets.OCR_LLM_AUTH_TOKEN }}"
+          ocr config set llm.model "${{ secrets.OCR_LLM_MODEL }}"
+          ocr config set llm.use_anthropic "${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}"
+          ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
+
+      - name: Run OCR review
+        run: |
+          ocr review \
+            --background "PR #${{ github.event.client_payload.pr_number }}" \
+            --format json \
+            --audience agent \
+            > /tmp/ocr-result.json 2> /tmp/ocr-stderr.log
+
+      - name: Checkout ocr-app scripts
+        uses: actions/checkout@v4
+        with:
+          path: .ocr-app-tools
+
+      - name: Post review comments
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          node .ocr-app-tools/.github/workflows/scripts/post-ocr-comments.mjs \
+            --repo "${{ github.event.client_payload.target_repo }}" \
+            --pr "${{ github.event.client_payload.pr_number }}" \
+            --result "/tmp/ocr-result.json"
+
+      - name: Upload result artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-debug-logs
+          path: |
+            /tmp/ocr-result.json
+            /tmp/ocr-stderr.log
+          if-no-files-found: ignore

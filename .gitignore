@@ -1,0 +1,12 @@
+# OpenCode / AI agent runtime state
+.omo/
+.sisyphus/
+.codegraph/
+
+# Node.js
+node_modules/
+cloudflare-worker/package-lock.json
+
+# Wrangler / Cloudflare Workers
+cloudflare-worker/.wrangler/
+cloudflare-worker/dist/
