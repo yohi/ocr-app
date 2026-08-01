@@ -156,19 +156,21 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 
 | 登録先 | 名前 | 説明 |
 | --- | --- | --- |
-| Actions | `GITHUB_APP_ID` | GitHub App の ID |
+| Actions | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
+| Actions | `GITHUB_APP_ID` | GitHub App の ID（ocr-engine.yml 用） |
 | Actions | `GITHUB_APP_PRIVATE_KEY` | Private key の内容 |
-| Worker | `GITHUB_APP_ID` | GitHub App の ID |
-| Worker | `GITHUB_APP_PRIVATE_KEY` | Private key の内容 |
-| Worker | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
-| Worker | `TARGET_DISPATCH_REPO` | dispatch 先（任意） |
+| Actions | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
+| `wrangler.toml` `[vars]` | `GITHUB_APP_ID` | GitHub App の ID（Worker 用） |
+| `wrangler.toml` `[vars]` | `TARGET_DISPATCH_REPO` | dispatch 先（任意） |
 
 - **GitHub Actions**: 本リポジトリの
   **Settings → Secrets and variables → Actions** に登録します。
   LLM 関連の Secrets は [LLM の設定](#llm-の設定) を参照してください。
-- **Cloudflare Worker**: `wrangler secret put` または
-  Cloudflare ダッシュボードから設定します
-  （デプロイワークフローはコードのみをデプロイします）。
+- **Cloudflare Worker**: `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` は
+  デプロイワークフローが Actions の Secrets から自動設定するため、
+  Worker 側の個別登録は不要です。
+  `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は `wrangler.toml` の
+  `[vars]` に記述します。
   詳細は [Cloudflare Worker 設定契約](#cloudflare-worker-設定契約) を参照。
 
 ## GitHub Actions による構築
@@ -183,17 +185,20 @@ GitHub Actions で自動化しています。
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `workflow_dispatch`（手動実行のみ） |
-| 必要な Secret | `CLOUDFLARE_API_TOKEN` |
+| 必要な Secrets | `CLOUDFLARE_API_TOKEN` ほか 2 件（下記手順 2 参照） |
 | 作業ディレクトリ | `cloudflare-worker` |
 
 1. [Cloudflare API トークン](https://dash.cloudflare.com/profile/api-tokens) を作成し、
    Worker 編集に必要な権限を付与します。
 2. 本リポジトリの **Settings > Secrets and variables > Actions** に
-   `CLOUDFLARE_API_TOKEN` を登録します。
+   `CLOUDFLARE_API_TOKEN` / `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
+   を登録します。
 3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
    「Run workflow」を押して手動デプロイします。
-   Worker の環境変数（`GITHUB_APP_ID` など）は
-   [GitHub App の作成と設定](#github-app-の作成と設定) を参照してください。
+   デプロイ時に `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` が
+   Worker の Secrets として自動設定されます。
+   `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は `wrangler.toml` の
+   `[vars]` に記述します（[GitHub App の作成と設定](#github-app-の作成と設定) 参照）。
 
 ### 2. OCR レビューエンジンの実行
 
