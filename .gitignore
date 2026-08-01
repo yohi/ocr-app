@@ -5,6 +5,7 @@
 
 # Node.js
 node_modules/
+cloudflare-worker/package-lock.json
 
 # Wrangler / Cloudflare Workers
 cloudflare-worker/.wrangler/
