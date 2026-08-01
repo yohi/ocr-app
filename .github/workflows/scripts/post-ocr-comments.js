@@ -89,6 +89,7 @@ function githubApi(method, path, body = null) {
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
+      res.on('error', reject);
       res.on('end', () => {
         try {
           resolve({ status: res.statusCode, data: data ? JSON.parse(data) : null });
@@ -172,6 +173,7 @@ async function postReviewComments() {
   const review = await githubApi('POST', `/pulls/${prNumber}/reviews`, {
     commit_id: headSha,
     event: 'COMMENT',
+    body: '',
     comments: reviewComments,
   });
 
@@ -199,10 +201,12 @@ function findDiffPosition(comment, filesMap) {
       if (match) {
         const startLine = parseInt(match[1]);
         const count = match[2] ? parseInt(match[2]) : 1;
-        const endLine = count > 0 ? startLine + count - 1 : startLine;
-        if (comment.line >= startLine && comment.line <= endLine) {
-          position = { line: comment.line, side: 'RIGHT' };
-          break;
+        if (count > 0) {
+          const endLine = startLine + count - 1;
+          if (comment.line >= startLine && comment.line <= endLine) {
+            position = { line: comment.line, side: 'RIGHT' };
+            break;
+          }
         }
       }
     }
@@ -215,4 +219,3 @@ postReviewComments().catch(err => {
   console.error('Error posting comments:', err);
   process.exit(1);
 });
-
