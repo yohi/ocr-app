@@ -145,8 +145,10 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 1. 後述の手順で Cloudflare Worker をデプロイします。
 2. Worker の URL（`https://ocr-github-app-worker.<サブドメイン>.workers.dev/`）
    を App の **Webhook URL** に設定します。
-3. App の **Webhook secret** に Worker の `WEBHOOK_SECRET` と同じ値を
-   設定します。
+3. App の **Webhook secret** には、作成時に自分で入力した値を設定します。
+   GitHub は作成後にこの値を表示しないため、値が不明な場合は
+   **General** タブの **Change secret** で再生成してください。
+   設定した値がそのまま Worker の `WEBHOOK_SECRET` になります。
 4. App 設定の **Advanced** タブ → **Recent Deliveries** で
    `ping` イベントの応答が 200 になることを確認します。
 
