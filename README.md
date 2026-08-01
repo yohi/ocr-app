@@ -180,8 +180,20 @@ LLM を設定します。
 - Anthropic の URL は `/v1/messages`、OpenAI 互換の URL は `/v1/chat/completions` で終わる必要があります。
 - `OCR_LLM_USE_ANTHROPIC` は Repository Variable なので、
   **Settings > Secrets and variables > Actions > Variables** タブで設定してください。
-- すでに Claude Code で `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` を
-  設定している場合、OCR はそれらを自動的に利用できます。
+- Claude Code で **ローカル実行**する場合、
+  `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` を
+  設定していれば、OCR はそれらを自動的に利用できます。
+  ただし、これらは **GitHub Actions では自動的に利用されません**。
+  Actions では `OCR_LLM_URL` / `OCR_LLM_AUTH_TOKEN` / `OCR_LLM_MODEL` を Secrets として登録し、
+  `ocr-engine.yml` 内で以下のように `ocr config set` へ明示的にマッピングしてください。
+
+  ```yaml
+  - name: Configure OCR
+    run: |
+      ocr config set llm.url "${{ secrets.OCR_LLM_URL }}"
+      ocr config set llm.auth_token "${{ secrets.OCR_LLM_AUTH_TOKEN }}"
+      ocr config set llm.model "${{ secrets.OCR_LLM_MODEL }}"
+  ```
 
 ## セットアップ詳細
 
