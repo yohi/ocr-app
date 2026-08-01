@@ -156,12 +156,12 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 
 | 登録先 | 名前 | 説明 |
 | --- | --- | --- |
-| Actions | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
-| Actions | `GH_APP_ID` | GitHub App の ID（ocr-engine.yml 用） |
-| Actions | `GH_APP_PRIVATE_KEY` | Private key の内容 |
-| Actions | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
-| `wrangler.toml` `[vars]` | `GITHUB_APP_ID` | GitHub App の ID（Worker 用） |
-| `wrangler.toml` `[vars]` | `TARGET_DISPATCH_REPO` | dispatch 先（任意） |
+| Actions (Secret) | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
+| Actions (Secret) | `GH_APP_ID` | GitHub App の ID（ocr-engine.yml 用） |
+| Actions (Secret) | `GH_APP_PRIVATE_KEY` | Private key の内容 |
+| Actions (Secret) | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
+| Actions (Variable) | `GH_APP_ID` | GitHub App の ID（Worker 用・Secret と同じ値） |
+| Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
 >
 > **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
 > そのため Actions 側では `GH_APP_ID` / `GH_APP_PRIVATE_KEY` という名前で登録します。
@@ -170,10 +170,10 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
   **Settings → Secrets and variables → Actions** に登録します。
   LLM 関連の Secrets は [LLM の設定](#llm-の設定) を参照してください。
 - **Cloudflare Worker**: Secrets `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` は
-  デプロイワークフローが Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）から
-  自動設定するため、Worker 側の個別登録は不要です。
-  `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は `wrangler.toml` の
-  `[vars]` に記述します。
+  デプロイワークフローが Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）から、
+  Vars `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は Actions の
+  Repository Variables（`GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`）から
+  自動設定するため、Worker 側の個別登録・`wrangler.toml` の編集は不要です。
   詳細は [Cloudflare Worker 設定契約](#cloudflare-worker-設定契約) を参照。
 
 ## GitHub Actions による構築
@@ -188,20 +188,20 @@ GitHub Actions で自動化しています。
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `workflow_dispatch`（手動実行のみ） |
-| 必要な Secrets | `CLOUDFLARE_API_TOKEN` ほか 2 件（下記手順 2 参照） |
+| 必要な Secrets / Variables | `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`（Secret）と `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`（Variable・下記手順 2 参照） |
 | 作業ディレクトリ | `cloudflare-worker` |
 
 1. [Cloudflare API トークン](https://dash.cloudflare.com/profile/api-tokens) を作成し、
    Worker 編集に必要な権限を付与します。
-2. 本リポジトリの **Settings > Secrets and variables > Actions** に
-   `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
-   を登録します。
+2. 本リポジトリの **Settings > Secrets and variables > Actions** に登録します。
+   - **Secrets** タブ: `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
+   - **Variables** タブ: `GH_APP_ID`（Secret と同じ値）/ `GH_TARGET_DISPATCH_REPO`（任意）
 3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
    「Run workflow」を押して手動デプロイします。
-   デプロイ時に Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）が
-   Worker の Secrets（`GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）として自動設定されます。
-   `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は `wrangler.toml` の
-   `[vars]` に記述します（[GitHub App の作成と設定](#github-app-の作成と設定) 参照）。
+   デプロイ時に以下が自動設定されます。
+   - Secrets: `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` → Worker の `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
+   - Vars: `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO` → Worker の `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO`
+   `wrangler.toml` の編集は不要です（[GitHub App の作成と設定](#github-app-の作成と設定) 参照）。
 
 ### 2. OCR レビューエンジンの実行
 
