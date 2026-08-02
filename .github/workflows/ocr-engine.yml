@@ -13,14 +13,21 @@ jobs:
   run-ocr-review:
     runs-on: ubuntu-latest
     steps:
+      - name: Parse target repo
+        id: parse-target
+        env:
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+        run: |
+          echo "owner=${TARGET_REPO%%/*}" >> "$GITHUB_OUTPUT"
+          echo "repo=${TARGET_REPO##*/}" >> "$GITHUB_OUTPUT"
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ split(github.event.client_payload.target_repo, '/')[0] }}
-          repositories: ${{ split(github.event.client_payload.target_repo, '/')[1] }}
+          owner: ${{ steps.parse-target.outputs.owner }}
+          repositories: ${{ steps.parse-target.outputs.repo }}
           permission-pull-requests: write
           permission-issues: write
           permission-contents: read
