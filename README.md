@@ -82,6 +82,104 @@ sequenceDiagram
    - `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
      `ocr-debug-logs` という Artifact として保存します。
 
+## GitHub App の作成と設定
+
+GitHub App は以下の 2 つの認証に使用されます。
+
+- **Cloudflare Worker**: `pull_request` イベントの受信と
+  `repository_dispatch` 送信時の認証
+- **ocr-engine.yml**: 対象リポジトリの checkout と
+  レビューコメント投稿時の認証
+
+### 1. GitHub App の作成
+
+1. **Settings → Developer settings → GitHub Apps → New GitHub App**
+   を開きます。
+2. 以下の項目を入力します。
+
+   | 項目 | 値 |
+   | --- | --- |
+   | GitHub App name | 任意（例: `OCR App Backend`） |
+   | Homepage URL | 任意（例: 本リポジトリの URL） |
+   | Webhook URL | 後述の Worker の URL（作成後も変更可） |
+   | Webhook secret | ランダムな文字列（Worker と同一値） |
+
+3. **Permissions** を以下のように設定します。
+
+   | Permission | Access |
+   | --- | --- |
+   | Contents | Read & write |
+   | Pull requests | Read & write |
+   | Issues | Read & write |
+
+   **Contents: Read & write** は `repository_dispatch` の送信に、
+   **Pull requests / Issues: Read & write** はレビューコメントの
+   投稿に必要です。
+
+4. **Subscribe to events** で **Pull requests** を選択します。
+5. **Where can this GitHub App be installed?** は
+   **Any account** を選択します。
+6. **Create GitHub App** をクリックします。
+
+### 2. Private key の生成
+
+1. App 設定ページの **Private keys** で **Generate a private key** を
+   クリックします。
+2. ダウンロードされた `.pem` ファイルを安全に保管します。
+   - この内容（`-----BEGIN ... PRIVATE KEY-----` で始まる文字列）が
+     Actions の Secret `GH_APP_PRIVATE_KEY` として使用されます。
+
+### 3. App のインストール
+
+1. **Install App** をクリックし、インストール先を選択します。
+2. **Only select repositories** で以下を含めます。
+   - レビュー対象のリポジトリ
+   - `TARGET_DISPATCH_REPO`（dispatch 先。未設定時は `yohi/ocr-app`。
+     レビュー対象リポジトリと同一アカウントであること）
+3. **Install** をクリックします。
+
+Installation ID は Webhook の `installation.id` から自動取得されるため、
+手動での記録は不要です。ただし、dispatch の送信にもこの Installation ID で
+発行したトークンが使用されます。そのため dispatch 先は Webhook を受け取った
+インストール（同一アカウント）内に存在する必要があり、別アカウントの
+リポジトリへの dispatch には対応していません。
+
+### 4. Webhook の設定
+
+1. 後述の手順で Cloudflare Worker をデプロイします。
+2. Worker の URL（`https://ocr-github-app-worker.<サブドメイン>.workers.dev/`）
+   を App の **Webhook URL** に設定します。
+3. App の **Webhook secret** には、作成時に自分で入力した値を設定します。
+   GitHub は作成後にこの値を表示しないため、値が不明な場合は
+   **General** タブの **Change secret** で再生成してください。
+   設定した値がそのまま Worker の `WEBHOOK_SECRET` になります。
+4. App 設定の **Advanced** タブ → **Recent Deliveries** で
+   `ping` イベントの応答が 200 になることを確認します。
+
+### 5. Secrets / Variables の登録
+
+| 登録先 | 名前 | 説明 |
+| --- | --- | --- |
+| Actions (Secret) | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
+| Actions (Secret) | `GH_APP_ID` | GitHub App の ID（ocr-engine.yml 用） |
+| Actions (Secret) | `GH_APP_PRIVATE_KEY` | Private key の内容 |
+| Actions (Secret) | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
+| Actions (Variable) | `GH_APP_ID` | GitHub App の ID（Worker 用・Secret と同じ値） |
+| Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
+>
+> **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
+> そのため Actions 側では `GH_APP_ID` / `GH_APP_PRIVATE_KEY` という名前で登録します。
+
+- **GitHub Actions**: 本リポジトリの
+  **Settings → Secrets and variables → Actions** に登録します。
+  LLM 関連の Secrets は [LLM の設定](#llm-の設定) を参照してください。
+- **Cloudflare Worker**: Secrets `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` は
+  デプロイワークフローが Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）から、
+  Vars `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は Actions の
+  Repository Variables（`GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`）から
+  自動設定するため、Worker 側の個別登録・`wrangler.toml` の編集は不要です。
+  詳細は [Cloudflare Worker 設定契約](#cloudflare-worker-設定契約) を参照。
+
 ## GitHub Actions による構築
 
 本リポジトリでは、Cloudflare Worker のデプロイと OCR レビューエンジンの実行を
@@ -94,15 +192,20 @@ GitHub Actions で自動化しています。
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `workflow_dispatch`（手動実行のみ） |
-| 必要な Secret | `CLOUDFLARE_API_TOKEN` |
+| 必要な Secrets / Variables | `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`（Secret）と `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`（Variable・下記手順 2 参照） |
 | 作業ディレクトリ | `cloudflare-worker` |
 
 1. [Cloudflare API トークン](https://dash.cloudflare.com/profile/api-tokens) を作成し、
    Worker 編集に必要な権限を付与します。
-2. 本リポジトリの **Settings > Secrets and variables > Actions** に
-   `CLOUDFLARE_API_TOKEN` を登録します。
+2. 本リポジトリの **Settings > Secrets and variables > Actions** に登録します。
+   - **Secrets** タブ: `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
+   - **Variables** タブ: `GH_APP_ID`（Secret と同じ値）/ `GH_TARGET_DISPATCH_REPO`（任意）
 3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
    「Run workflow」を押して手動デプロイします。
+   デプロイ時に以下が自動設定されます。
+   - Secrets: `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` → Worker の `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
+   - Vars: `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO` → Worker の `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO`
+   `wrangler.toml` の編集は不要です（[GitHub App の作成と設定](#github-app-の作成と設定) 参照）。
 
 ### 2. OCR レビューエンジンの実行
 
@@ -112,11 +215,12 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `repository_dispatch`（`open_code_review_trigger`） |
-| 必要な Secrets | `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, `OCR_LLM_MODEL` |
+| 必要な Secrets | `GH_APP_ID`, `GH_APP_PRIVATE_KEY`, `OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, `OCR_LLM_MODEL` |
 | 任意の Variables | `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
 | 必要な Permissions | `contents: read`, `pull-requests: write`, `issues: write` |
 
-1. GitHub App の ID と秘密鍵を Secrets に登録します。
+1. [GitHub App の作成と設定](#github-app-の作成と設定) に従って
+   App を作成し、ID と秘密鍵を Secrets に登録します。
 2. OCR で使用する LLM の URL、認証トークン、モデル名を Secrets に登録します。
 3. Anthropic API を使用する場合は Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
 4. Worker から dispatch されると、以下の処理が実行されます。

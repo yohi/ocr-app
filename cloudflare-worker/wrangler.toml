@@ -1,6 +1,8 @@
 name = "ocr-github-app-worker"
 main = "src/index.ts"
 compatibility_date = "2024-04-01"
+compatibility_flags = ["nodejs_compat"]
 
-[vars]
-# 環境変数設定 (Secrets は wrangler secret put または GitHub Secrets 経由)
+# 環境変数・Secrets は deploy-cloudflare-worker.yml が自動設定します（手動登録・編集は不要）。
+# - Secrets: GITHUB_APP_PRIVATE_KEY, WEBHOOK_SECRET（Actions の Secrets から）
+# - Vars:    GITHUB_APP_ID, TARGET_DISPATCH_REPO（Actions の Repository Variables から）
