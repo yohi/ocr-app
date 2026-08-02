@@ -231,6 +231,54 @@ async function hasValidWebhookSignature(
   return timingSafeEqual(expectedSignature, receivedSignature);
 }
 
+async function createCheckRun(
+  token: string,
+  repoOwner: string,
+  repoName: string,
+  headSha: string,
+): Promise<number | null> {
+  const abortController = new AbortController();
+  const timeout = setTimeout(() => abortController.abort(), 10_000);
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repoOwner}/${repoName}/check-runs`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Cloudflare-Worker-OCR-App",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "OpenCodeReview",
+          head_sha: headSha,
+          status: "queued",
+          details_url: `https://github.com/${repoOwner}/${repoName}/actions`,
+        }),
+        signal: abortController.signal,
+      },
+    );
+
+    if (!res.ok) {
+      console.error("Failed to create check run:", res.status, await res.text());
+      return null;
+    }
+
+    const data: unknown = await res.json();
+    if (isRecord(data) && typeof data.id === "number") {
+      return data.id;
+    }
+    console.error("Invalid check run response:", JSON.stringify(data));
+    return null;
+  } catch (error: unknown) {
+    console.error("Error creating check run:", error instanceof Error ? error.message : error);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sendRepositoryDispatch(
   env: Env,
   token: string,
@@ -240,6 +288,7 @@ async function sendRepositoryDispatch(
     commit_sha: string;
     base_ref: string;
     installation_id: number;
+    check_run_id: number | null;
   },
 ): Promise<Response | null> {
   const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
@@ -386,12 +435,19 @@ export default {
           const repoName = payload.repository.name;
           const prNumber = payload.number;
           const token = await getInstallationToken(env, payload.installation.id);
+          const checkRunId = await createCheckRun(
+            token,
+            repoOwner,
+            repoName,
+            payload.pull_request.head.sha,
+          );
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
             base_ref: payload.pull_request.base.ref,
             installation_id: payload.installation.id,
+            check_run_id: checkRunId,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;
@@ -458,6 +514,7 @@ export default {
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,
             installation_id: payload.installation.id,
+            check_run_id: null,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;

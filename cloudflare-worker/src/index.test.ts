@@ -165,8 +165,8 @@ describe("issue_comment mention flow", () => {
     const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
     expect(dispatchBody.event_type).toBe("open_code_review_trigger");
     expect(dispatchBody.client_payload.base_ref).toBe("main");
+    expect(dispatchBody.client_payload.check_run_id).toBeNull();
   });
-
   it("continues pull request fetch and dispatch when reaction fails", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Internal Server Error" }) // reaction fails
@@ -216,8 +216,10 @@ describe("pull_request opened flow", () => {
     vi.restoreAllMocks();
   });
 
-  it("dispatches repository_dispatch with base_ref", async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
+  it("dispatches repository_dispatch with base_ref and check_run_id", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) }) // create check run
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
 
     const body = JSON.stringify(basePayload);
     const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
@@ -233,12 +235,16 @@ describe("pull_request opened flow", () => {
     const response = await worker.fetch(request, env);
     expect(response.status).toBe(200);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [dispatchCall] = fetchMock.mock.calls;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [checkRunCall, dispatchCall] = fetchMock.mock.calls;
+    expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
+    expect((checkRunCall[1] as RequestInit | undefined)?.method).toBe("POST");
+    expect((checkRunCall[1] as RequestInit | undefined)?.body).toContain("queued");
     expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
     const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
     expect(dispatchBody.event_type).toBe("open_code_review_trigger");
     expect(dispatchBody.client_payload.base_ref).toBe("main");
     expect(dispatchBody.client_payload.commit_sha).toBe("abc123");
+    expect(dispatchBody.client_payload.check_run_id).toBe(98765);
   });
 });

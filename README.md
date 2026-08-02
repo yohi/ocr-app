@@ -148,10 +148,12 @@ GitHub App は以下の 2 つの認証に使用されます。
    | Contents | Read & write |
    | Pull requests | Read & write |
    | Issues | Read & write |
+   | Checks | Read & write |
 
    **Contents: Read & write** は `repository_dispatch` の送信に、
    **Pull requests / Issues: Read & write** はレビューコメントの
    投稿に必要です。
+   **Checks: Read & write** はレビュー進捗を PR の Checks 欄に表示するために必要です。
 
 4. **Subscribe to events** で **Pull requests** と **Issue comments** を選択します。
 5. **Where can this GitHub App be installed?** は
