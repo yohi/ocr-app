@@ -380,9 +380,9 @@ npm install --save-dev vitest
 }
 ```
 
-- [ ] **Step 3: `isIssueCommentPayload` と mention パターンのテストを作成する**
+- [ ] **Step 3: `isIssueCommentPayload` と mention パターンのテストを追加する**
 
-`cloudflare-worker/src/index.test.ts` を作成：
+既存の `cloudflare-worker/src/index.test.ts` を保持しつつ、以下を追加する：
 
 ```typescript
 import { describe, it, expect } from "vitest";
