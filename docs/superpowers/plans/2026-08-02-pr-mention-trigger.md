@@ -171,14 +171,22 @@ try {
 上記を以下で置き換え：
 
 ```typescript
+const token = await getInstallationToken(env, payload.installation.id);
+const checkRunId = await createCheckRun(
+  token,
+  repoOwner,
+  repoName,
+  payload.pull_request.head.sha,
+);
 const dispatchError = await sendRepositoryDispatch(env, token, {
   target_repo: `${repoOwner}/${repoName}`,
   pr_number: prNumber,
   commit_sha: payload.pull_request.head.sha,
+  base_ref: payload.pull_request.base.ref,
   installation_id: payload.installation.id,
+  check_run_id: checkRunId,
 });
 if (dispatchError) return dispatchError;
-```
 
 - [ ] **Step 5: `issue_comment` イベントハンドラブランチを追加する**
 
