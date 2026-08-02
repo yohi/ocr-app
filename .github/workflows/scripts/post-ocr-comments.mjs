@@ -61,6 +61,10 @@ function readResult(resultPath) {
   return result;
 }
 
+function isValidLineNumber(value) {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
 function normalizeComment(comment) {
   if (!comment || typeof comment !== 'object') {
     return null;
@@ -69,13 +73,14 @@ function normalizeComment(comment) {
   const body = typeof comment.body === 'string'
     ? comment.body
     : typeof comment.content === 'string' ? comment.content : null;
-  let line = typeof comment.line === 'number' ? comment.line : null;
-  if (line === null) {
-    if (typeof comment.end_line === 'number') {
-      line = comment.end_line;
-    } else if (typeof comment.start_line === 'number') {
-      line = comment.start_line;
-    }
+
+  let line = null;
+  if (isValidLineNumber(comment.line)) {
+    line = comment.line;
+  } else if (isValidLineNumber(comment.end_line)) {
+    line = comment.end_line;
+  } else if (isValidLineNumber(comment.start_line)) {
+    line = comment.start_line;
   }
 
   if (!path || line === null || !body) {
