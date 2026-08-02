@@ -186,6 +186,7 @@ export function isIssueCommentPayload(payload: unknown): payload is IssueComment
 
 export function isMentioningReviewer(appSlug: string, body: string): boolean {
   const escapedSlug = appSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // `review` の直後に単語文字またはハイフンが続く場合は除外（例: reviewboard, review-x）
   const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review(?![\\w-])`, "i");
   return mentionPattern.test(body);
 }
@@ -232,13 +233,15 @@ async function hasValidWebhookSignature(
 }
 
 async function createCheckRun(
+  env: Env,
   token: string,
   repoOwner: string,
   repoName: string,
   headSha: string,
 ): Promise<number | null> {
   const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), 10_000);
+  // check run 作成は進捗表示用途なので、dispatch より短時間で打ち切る
+  const timeout = setTimeout(() => abortController.abort(), 5_000);
   try {
     const res = await fetch(
       `https://api.github.com/repos/${repoOwner}/${repoName}/check-runs`,
@@ -251,10 +254,10 @@ async function createCheckRun(
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: "OpenCodeReview",
+          name: env.CHECK_RUN_NAME || "OpenCodeReview",
           head_sha: headSha,
           status: "queued",
-          details_url: `https://github.com/${repoOwner}/${repoName}/actions`,
+          details_url: env.CHECK_RUN_DETAILS_URL || `https://github.com/${repoOwner}/${repoName}/actions`,
         }),
         signal: abortController.signal,
       },
@@ -375,6 +378,8 @@ export interface Env {
   WEBHOOK_SECRET: string;
   TARGET_DISPATCH_REPO?: string;
   GITHUB_APP_SLUG: string;
+  CHECK_RUN_NAME?: string;
+  CHECK_RUN_DETAILS_URL?: string;
 }
 
 export default {
@@ -436,6 +441,7 @@ export default {
           const prNumber = payload.number;
           const token = await getInstallationToken(env, payload.installation.id);
           const checkRunId = await createCheckRun(
+            env,
             token,
             repoOwner,
             repoName,

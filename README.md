@@ -19,6 +19,8 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | `WEBHOOK_SECRET` | はい | Webhook 署名検証用シークレット |
 | `TARGET_DISPATCH_REPO` | いいえ | dispatch 先リポジトリ。未設定時は `yohi/ocr-app` |
 | `GITHUB_APP_SLUG` | はい | GitHub App の slug。mention 検出に使用。例: `opencodereview-app` |
+| `CHECK_RUN_NAME` | いいえ | PR Checks 欄に表示する check run 名。未設定時は `OpenCodeReview` |
+| `CHECK_RUN_DETAILS_URL` | いいえ | check run の詳細リンク。未設定時は対象リポジトリの Actions ページ |
 
 ### Webhook と GitHub App
 
@@ -206,6 +208,8 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 | Actions (Variable) | `GH_APP_ID` | GitHub App の ID（Worker 用・Secret と同じ値） |
 | Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
 | Actions (Variable) | `GH_APP_SLUG` | GitHub App の slug（例: `opencodereview-app`） |
+| Actions (Variable) | `GH_CHECK_RUN_NAME` | check run 名（任意・未設定時は `OpenCodeReview`） |
+| Actions (Variable) | `GH_CHECK_RUN_DETAILS_URL` | check run 詳細リンク（任意・未設定時は対象リポジトリの Actions ページ） |
 >
 > **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
 > そのため Actions 側では `GH_APP_ID` / `GH_APP_PRIVATE_KEY` という名前で登録します。
