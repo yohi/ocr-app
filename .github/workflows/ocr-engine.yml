@@ -19,7 +19,8 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          installation-id: ${{ github.event.client_payload.installation_id }}
+          owner: ${{ split(github.event.client_payload.target_repo, '/')[0] }}
+          repositories: ${{ split(github.event.client_payload.target_repo, '/')[1] }}
           permission-pull-requests: write
           permission-issues: write
           permission-contents: read
