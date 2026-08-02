@@ -173,6 +173,12 @@ export function isIssueCommentPayload(payload: unknown): payload is IssueComment
   );
 }
 
+export function isMentioningReviewer(appSlug: string, body: string): boolean {
+  const escapedSlug = appSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review`, "i");
+  return mentionPattern.test(body);
+}
+
 function arrayBufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -253,6 +259,23 @@ async function sendRepositoryDispatch(
   return null;
 }
 
+async function getInstallationToken(
+  env: Env,
+  installationId: number,
+): Promise<string> {
+  const auth = createAppAuth({
+    appId: env.GITHUB_APP_ID,
+    privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
+  });
+
+  const { token } = await auth({
+    type: "installation",
+    installationId,
+  });
+
+  return token;
+}
+
 export interface Env {
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
@@ -270,6 +293,12 @@ export default {
     const webhookSecret = env.WEBHOOK_SECRET;
     if (typeof webhookSecret !== "string" || webhookSecret.length === 0) {
       console.error("Webhook signing secret is not configured");
+      return new Response("Internal Error", { status: 500 });
+    }
+
+    const appSlug = env.GITHUB_APP_SLUG;
+    if (typeof appSlug !== "string" || appSlug.length === 0) {
+      console.error("GITHUB_APP_SLUG is not configured");
       return new Response("Internal Error", { status: 500 });
     }
 
@@ -312,18 +341,7 @@ export default {
           const repoOwner = payload.repository.owner.login;
           const repoName = payload.repository.name;
           const prNumber = payload.number;
-
-          // GitHub App Token を発行
-          const auth = createAppAuth({
-            appId: env.GITHUB_APP_ID,
-            privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
-          });
-
-          const { token } = await auth({
-            type: "installation",
-            installationId: payload.installation.id,
-          });
-
+          const token = await getInstallationToken(env, payload.installation.id);
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
@@ -341,36 +359,36 @@ export default {
           return new Response("Invalid payload", { status: 400 });
         }
 
-        const mentionPattern = new RegExp(`@${env.GITHUB_APP_SLUG}(?:\\[bot\\])?\\s+review`);
         if (
           payload.action === "created" &&
           payload.issue.pull_request !== undefined &&
-          mentionPattern.test(payload.comment.body)
+          isMentioningReviewer(appSlug, payload.comment.body)
         ) {
           const repoOwner = payload.repository.owner.login;
           const repoName = payload.repository.name;
           const prNumber = payload.issue.number;
 
-          const auth = createAppAuth({
-            appId: env.GITHUB_APP_ID,
-            privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
-          });
+          const token = await getInstallationToken(env, payload.installation.id);
 
-          const { token } = await auth({
-            type: "installation",
-            installationId: payload.installation.id,
-          });
+          const prAbortController = new AbortController();
+          const prTimeout = setTimeout(() => prAbortController.abort(), 10_000);
+          let pullRequestResponse;
+          try {
 
-          const pullRequestResponse = await fetch(
-            `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                Accept: "application/vnd.github.v3+json",
-                "User-Agent": "Cloudflare-Worker-OCR-App",
+            pullRequestResponse = await fetch(
+              `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  Accept: "application/vnd.github.v3+json",
+                  "User-Agent": "Cloudflare-Worker-OCR-App",
+                },
+                signal: prAbortController.signal,
               },
-            },
-          );
+            );
+          } finally {
+            clearTimeout(prTimeout);
+          }
           if (!pullRequestResponse.ok) {
             return new Response("Pull request lookup failed", {
               status: pullRequestResponse.status,

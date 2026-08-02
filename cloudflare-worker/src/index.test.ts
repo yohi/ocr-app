@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isRecord, isIssueCommentPayload } from "./index";
+import { isRecord, isIssueCommentPayload, isMentioningReviewer } from "./index";
 
 describe("isRecord", () => {
   it("returns true for objects", () => {
@@ -32,28 +32,30 @@ describe("isIssueCommentPayload", () => {
   });
 });
 
-describe("mention pattern", () => {
-  const SLUG = "opencodereview-app";
-  const pattern = new RegExp(`@${SLUG}(?:\\[bot\\])?\\s+review`, "i");
-
+describe("isMentioningReviewer", () => {
   it("matches @opencodereview-app review", () => {
-    expect(pattern.test("@opencodereview-app review")).toBe(true);
+    expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app review")).toBe(true);
   });
 
   it("matches @opencodereview-app[bot] review", () => {
-    expect(pattern.test("@opencodereview-app[bot] review")).toBe(true);
+    expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app[bot] review")).toBe(true);
   });
 
   it("matches in middle of sentence", () => {
-    expect(pattern.test("レビューお願いします @opencodereview-app review")).toBe(true);
+    expect(isMentioningReviewer("opencodereview-app", "レビューお願いします @opencodereview-app review")).toBe(true);
   });
 
   it("does not match typos", () => {
-    expect(pattern.test("@opencodereview-app summary")).toBe(false);
-    expect(pattern.test("@other-bot review")).toBe(false);
+    expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app summary")).toBe(false);
+    expect(isMentioningReviewer("opencodereview-app", "@other-bot review")).toBe(false);
   });
 
   it("is case-insensitive", () => {
-    expect(pattern.test("@OPENCODEREVIEW-APP REVIEW")).toBe(true);
+    expect(isMentioningReviewer("opencodereview-app", "@OPENCODEREVIEW-APP REVIEW")).toBe(true);
+  });
+
+  it("escapes regex metacharacters in slug", () => {
+    expect(isMentioningReviewer("review.app", "@review.app review")).toBe(true);
+    expect(isMentioningReviewer("review.app", "@reviewXapp review")).toBe(false);
   });
 });
