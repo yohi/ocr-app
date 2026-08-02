@@ -134,6 +134,45 @@ function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWe
   );
 }
 
+type IssueCommentPayload = {
+  readonly action: string;
+  readonly issue: {
+    readonly number: number;
+    readonly pull_request?: {
+      readonly url: string;
+    };
+  };
+  readonly comment: {
+    readonly body: string;
+  };
+  readonly repository: {
+    readonly owner: {
+      readonly login: string;
+    };
+    readonly name: string;
+  };
+  readonly installation: {
+    readonly id: number;
+  };
+};
+
+function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
+  if (!isRecord(payload) || typeof payload.action !== "string") return false;
+  if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
+  if (!isRecord(payload.comment) || typeof payload.comment.body !== "string") return false;
+  if (!isRecord(payload.repository) || !isRecord(payload.repository.owner)) return false;
+  if (
+    typeof payload.repository.owner.login !== "string" ||
+    typeof payload.repository.name !== "string"
+  ) {
+    return false;
+  }
+  return (
+    isRecord(payload.installation) &&
+    typeof payload.installation.id === "number"
+  );
+}
+
 function arrayBufferToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -175,11 +214,51 @@ async function hasValidWebhookSignature(
   return timingSafeEqual(expectedSignature, receivedSignature);
 }
 
+async function sendRepositoryDispatch(
+  env: Env,
+  token: string,
+  clientPayload: {
+    target_repo: string;
+    pr_number: number;
+    commit_sha: string;
+    installation_id: number;
+  },
+): Promise<Response | null> {
+  const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
+  const dispatchAbortController = new AbortController();
+  const dispatchTimeout = setTimeout(() => dispatchAbortController.abort(), 10_000);
+  try {
+    const res = await fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "Cloudflare-Worker-OCR-App",
+      },
+      body: JSON.stringify({
+        event_type: "open_code_review_trigger",
+        client_payload: clientPayload,
+      }),
+      signal: dispatchAbortController.signal,
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Dispatch failed:", res.status, errText);
+      return new Response("Dispatch failed", { status: res.status });
+    }
+  } finally {
+    clearTimeout(dispatchTimeout);
+  }
+  return null;
+}
+
 export interface Env {
   GITHUB_APP_ID: string;
   GITHUB_APP_PRIVATE_KEY: string;
   WEBHOOK_SECRET: string;
   TARGET_DISPATCH_REPO?: string;
+  GITHUB_APP_SLUG: string;
 }
 
 export default {
@@ -210,7 +289,7 @@ export default {
         return new Response("OK", { status: 200 });
       }
 
-      if (githubEvent !== "pull_request") {
+      if (githubEvent !== "pull_request" && githubEvent !== "issue_comment") {
         return new Response("Invalid GitHub event", { status: 400 });
       }
 
@@ -221,61 +300,102 @@ export default {
         return new Response("Invalid payload", { status: 400 });
       }
 
-      if (!isPullRequestWebhookPayload(payload)) {
-        return new Response("Invalid payload", { status: 400 });
-      }
+      if (githubEvent === "pull_request") {
+        if (!isPullRequestWebhookPayload(payload)) {
+          return new Response("Invalid payload", { status: 400 });
+        }
 
-      const action = payload.action;
+        const action = payload.action;
 
-      // PR 開設・更新時のみトリガー
-      if (action === "opened" || action === "synchronize" || action === "reopened") {
-        const repoOwner = payload.repository.owner.login;
-        const repoName = payload.repository.name;
-        const prNumber = payload.number;
+        // PR 開設・更新時のみトリガー
+        if (action === "opened" || action === "synchronize" || action === "reopened") {
+          const repoOwner = payload.repository.owner.login;
+          const repoName = payload.repository.name;
+          const prNumber = payload.number;
 
-        // GitHub App Token を発行
-        const auth = createAppAuth({
-          appId: env.GITHUB_APP_ID,
-          privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
-        });
-
-        const { token } = await auth({
-          type: "installation",
-          installationId: payload.installation.id,
-        });
-
-        const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
-
-        // 中央リポジトリの Actions (repository_dispatch) を起動
-        const dispatchAbortController = new AbortController();
-        const dispatchTimeout = setTimeout(() => dispatchAbortController.abort(), 10_000);
-        try {
-          const res = await fetch(`https://api.github.com/repos/${dispatchRepo}/dispatches`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: "application/vnd.github.v3+json",
-              "User-Agent": "Cloudflare-Worker-OCR-App",
-            },
-            body: JSON.stringify({
-              event_type: "open_code_review_trigger",
-              client_payload: {
-                target_repo: `${repoOwner}/${repoName}`,
-                pr_number: prNumber,
-                commit_sha: payload.pull_request.head.sha,
-                installation_id: payload.installation.id,
-              },
-            }),
-            signal: dispatchAbortController.signal,
+          // GitHub App Token を発行
+          const auth = createAppAuth({
+            appId: env.GITHUB_APP_ID,
+            privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
           });
 
-          if (!res.ok) {
-            const errText = await res.text();
-            console.error("Dispatch failed:", res.status, errText);
-            return new Response("Dispatch failed", { status: res.status });
+          const { token } = await auth({
+            type: "installation",
+            installationId: payload.installation.id,
+          });
+
+          const dispatchResponse = await sendRepositoryDispatch(env, token, {
+            target_repo: `${repoOwner}/${repoName}`,
+            pr_number: prNumber,
+            commit_sha: payload.pull_request.head.sha,
+            installation_id: payload.installation.id,
+          });
+          if (dispatchResponse !== null) {
+            return dispatchResponse;
           }
-        } finally {
-          clearTimeout(dispatchTimeout);
+        }
+      }
+
+      if (githubEvent === "issue_comment") {
+        if (!isIssueCommentPayload(payload)) {
+          return new Response("Invalid payload", { status: 400 });
+        }
+
+        const mentionPattern = new RegExp(`@${env.GITHUB_APP_SLUG}(?:\\[bot\\])?\\s+review`);
+        if (
+          payload.action === "created" &&
+          payload.issue.pull_request !== undefined &&
+          mentionPattern.test(payload.comment.body)
+        ) {
+          const repoOwner = payload.repository.owner.login;
+          const repoName = payload.repository.name;
+          const prNumber = payload.issue.number;
+
+          const auth = createAppAuth({
+            appId: env.GITHUB_APP_ID,
+            privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
+          });
+
+          const { token } = await auth({
+            type: "installation",
+            installationId: payload.installation.id,
+          });
+
+          const pullRequestResponse = await fetch(
+            `https://api.github.com/repos/${repoOwner}/${repoName}/pulls/${prNumber}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github.v3+json",
+                "User-Agent": "Cloudflare-Worker-OCR-App",
+              },
+            },
+          );
+          if (!pullRequestResponse.ok) {
+            return new Response("Pull request lookup failed", {
+              status: pullRequestResponse.status,
+            });
+          }
+
+          const pullRequestPayload: unknown = await pullRequestResponse.json();
+          if (
+            !isRecord(pullRequestPayload) ||
+            !isRecord(pullRequestPayload.head) ||
+            typeof pullRequestPayload.head.sha !== "string"
+          ) {
+            return new Response("Invalid pull request response", { status: 502 });
+          }
+
+          const dispatchResponse = await sendRepositoryDispatch(env, token, {
+            target_repo: `${repoOwner}/${repoName}`,
+            pr_number: prNumber,
+            commit_sha: pullRequestPayload.head.sha,
+            installation_id: payload.installation.id,
+          });
+          if (dispatchResponse !== null) {
+            return dispatchResponse;
+          }
+          return new Response("OK", { status: 200 });
         }
       }
 
