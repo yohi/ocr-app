@@ -4,13 +4,9 @@
 GitHub App (Zero-YAML 構成) として提供するための専用バックエンドリポジトリです。
 
 ## コンポーネント構造
-
 - **`cloudflare-worker/`**: GitHub App からの Webhook を受信し、
   `repository_dispatch` を送る Cloudflare Worker (無料枠)
-- **`.github/workflows/deploy-cloudflare-worker.yml`**: Cloudflare Worker 手動デプロイ用ワークフロー
-- **`.github/workflows/ocr-engine.yml`**: `repository_dispatch` を検知して対象 PR に
-  `ocr review` を実行するワークフローエンジン
-- **`.github/workflows/scripts/post-ocr-comments.mjs`**: レビュー結果を PR にインライン投稿するスクリプト
+  - `pull_request` イベント（自動レビュー）と `issue_comment` イベント（mention トリガー）に対応
 
 ## Cloudflare Worker 設定契約
 
@@ -22,16 +18,18 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | `GITHUB_APP_PRIVATE_KEY` | はい | GitHub App の秘密鍵 |
 | `WEBHOOK_SECRET` | はい | Webhook 署名検証用シークレット |
 | `TARGET_DISPATCH_REPO` | いいえ | dispatch 先リポジトリ。未設定時は `yohi/ocr-app` |
+| `GITHUB_APP_SLUG` | はい | GitHub App の slug。mention 検出に使用。例: `opencodereview-app` |
 
 ### Webhook と GitHub App
 
 | 項目 | 値・要件 |
 | --- | --- |
 | Webhook の `Content-Type` | `application/json` |
-| Webhook event | `pull_request`（`ping` も受信可） |
+| Webhook event | `pull_request`、`issue_comment`（`ping` も受信可） |
 | 署名検証 | `X-Hub-Signature-256` ヘッダー（`sha256=<64桁の16進数>`） |
 | 送信イベント種別 | `open_code_review_trigger` |
 | GitHub App 権限（dispatch 先） | `TARGET_DISPATCH_REPO` の `Contents: write` |
+| Mention トリガー | PR コメントで `@<GITHUB_APP_SLUG> review` と入力 |
 
 > **注意**: Webhook の Secret と Worker の環境変数 `WEBHOOK_SECRET` には必ず同じ値を設定してください。
 
@@ -81,6 +79,44 @@ sequenceDiagram
 7. **失敗時**
    - `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
      `ocr-debug-logs` という Artifact として保存します。
+### Mention トリガーによる実行フロー
+
+PR コメントで `@<GITHUB_APP_SLUG> review` とメンションすることで、
+オンデマンドでコードレビューを実行できます。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant GH as GitHub
+    participant CW as Cloudflare Worker
+    participant CR as 中央リポジトリ<br/>(TARGET_DISPATCH_REPO)
+    participant TR as 対象リポジトリ
+
+    GH->>CW: issue_comment webhook<br/>(created)
+    CW->>CW: Webhook 署名検証
+    CW->>CW: コメント本文から mention を検出
+    CW->>GH: GitHub App token 発行
+    CW->>GH: GET /repos/{owner}/{repo}/pulls/{number}
+    CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
+    CR->>GH: GitHub App token 発行
+    CR->>TR: 対象リポジトリ・コミットを checkout
+    CR->>CR: npm install & ocr review 実行
+    CR->>TR: レビューコメントを PR に投稿
+```
+
+### 各ステップの詳細（Mention トリガー）
+
+1. **コメントの投稿**
+   - PR に `@opencodereview-app review` のようなコメントが投稿されます。
+2. **Cloudflare Worker での処理**
+   - `issue_comment` イベントのうち `created` のみを処理します。
+   - `issue.pull_request` の存在を確認し、PR コメントのみを対象とします。
+   - コメント本文から `@<GITHUB_APP_SLUG>(?:\[bot\])?\s+review` のパターンを検出します。
+3. **PR 詳細の取得**
+   - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
+     最新の `head.sha` を取得します。
+4. **`repository_dispatch` の送信**
+   - 以降のフローは「GitHub Apps 経由の実行フロー」の Step 3 以降と同じです。
 
 ## GitHub App の作成と設定
 
@@ -116,7 +152,7 @@ GitHub App は以下の 2 つの認証に使用されます。
    **Pull requests / Issues: Read & write** はレビューコメントの
    投稿に必要です。
 
-4. **Subscribe to events** で **Pull requests** を選択します。
+4. **Subscribe to events** で **Pull requests** と **Issue comments** を選択します。
 5. **Where can this GitHub App be installed?** は
    **Any account** を選択します。
 6. **Create GitHub App** をクリックします。
@@ -166,6 +202,7 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 | Actions (Secret) | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
 | Actions (Variable) | `GH_APP_ID` | GitHub App の ID（Worker 用・Secret と同じ値） |
 | Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
+| Actions (Variable) | `GH_APP_SLUG` | GitHub App の slug（例: `opencodereview-app`） |
 >
 > **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
 > そのため Actions 側では `GH_APP_ID` / `GH_APP_PRIVATE_KEY` という名前で登録します。
