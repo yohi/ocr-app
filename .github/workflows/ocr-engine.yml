@@ -58,6 +58,9 @@ jobs:
       - name: Run OCR review
         run: |
           ocr review \
+            --repo . \
+            --from "origin/${{ github.event.client_payload.base_ref }}" \
+            --to "${{ github.event.client_payload.commit_sha }}" \
             --background "PR #${{ github.event.client_payload.pr_number }}" \
             --format json \
             --audience agent \
@@ -79,7 +82,7 @@ jobs:
             --result "/tmp/ocr-result.json"
 
       - name: Upload result artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ocr-debug-logs

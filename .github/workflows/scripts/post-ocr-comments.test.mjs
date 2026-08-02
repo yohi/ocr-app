@@ -224,3 +224,45 @@ test('propagates a batch transport error without an individual fallback', async 
   await assert.rejects(result, transportError);
   assert.equal(requests.length, 3);
 });
+
+test('normalizes OCR-format comments (content, end_line) to body and line', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', content: 'OCR comment', end_line: 1 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].body.comments.length, 1);
+  assert.equal(requests[2].body.comments[0].body, 'OCR comment\n\n---\n*Posted by OpenCodeReview*');
+  assert.equal(requests[2].body.comments[0].line, 1);
+});
+
+test('prefers body/line over content/end_line when both are present', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', body: 'Preferred', line: 1, content: 'Ignored', end_line: 99 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+    assert.equal(requests[2].body.comments[0].body, 'Preferred\n\n---\n*Posted by OpenCodeReview*');
+    assert.equal(requests[2].body.comments[0].line, 1);
+});
+
+test('falls back to start_line when end_line is missing in OCR format', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', content: 'Start only', start_line: 1 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+    assert.equal(requests[2].body.comments[0].line, 1);
+  });

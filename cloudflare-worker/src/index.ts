@@ -98,6 +98,9 @@ type PullRequestWebhookPayload = {
     readonly head: {
       readonly sha: string;
     };
+    readonly base: {
+      readonly ref: string;
+    };
   };
 };
 
@@ -130,7 +133,9 @@ function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWe
   return (
     isRecord(payload.pull_request) &&
     isRecord(payload.pull_request.head) &&
-    typeof payload.pull_request.head.sha === "string"
+    typeof payload.pull_request.head.sha === "string" &&
+    isRecord(payload.pull_request.base) &&
+    typeof payload.pull_request.base.ref === "string"
   );
 }
 
@@ -228,6 +233,7 @@ async function sendRepositoryDispatch(
     target_repo: string;
     pr_number: number;
     commit_sha: string;
+    base_ref: string;
     installation_id: number;
   },
 ): Promise<Response | null> {
@@ -379,6 +385,7 @@ export default {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
+            base_ref: payload.pull_request.base.ref,
             installation_id: payload.installation.id,
           });
           if (dispatchResponse !== null) {
@@ -433,7 +440,9 @@ export default {
           if (
             !isRecord(pullRequestPayload) ||
             !isRecord(pullRequestPayload.head) ||
-            typeof pullRequestPayload.head.sha !== "string"
+            typeof pullRequestPayload.head.sha !== "string" ||
+            !isRecord(pullRequestPayload.base) ||
+            typeof pullRequestPayload.base.ref !== "string"
           ) {
             return new Response("Invalid pull request response", { status: 502 });
           }
@@ -442,6 +451,7 @@ export default {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
+            base_ref: pullRequestPayload.base.ref,
             installation_id: payload.installation.id,
           });
           if (dispatchResponse !== null) {

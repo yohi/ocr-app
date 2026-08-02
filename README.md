@@ -67,7 +67,7 @@ sequenceDiagram
 4. **`repository_dispatch` の送信**
    - `TARGET_DISPATCH_REPO`（未設定時は `yohi/ocr-app`）に対して、
      `open_code_review_trigger` タイプの dispatch を送信します。
-   - payload には `target_repo`、`pr_number`、`commit_sha`、`installation_id` が含まれます。
+   - payload には `target_repo`、`pr_number`、`commit_sha`、`base_ref`、`installation_id` が含まれます。
 5. **中央リポジトリの `ocr-engine.yml` が起動**
    - GitHub App token を発行します。
    - 対象リポジトリ・コミットを checkout します。
