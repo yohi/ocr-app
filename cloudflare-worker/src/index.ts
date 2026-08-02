@@ -143,9 +143,8 @@ type IssueCommentPayload = {
     };
   };
   readonly comment: {
-    readonly id: number;
-readonly body: string;
-};
+    readonly body: string;
+  };
   readonly repository: {
     readonly owner: {
       readonly login: string;
@@ -160,7 +159,7 @@ readonly body: string;
 export function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
   if (!isRecord(payload) || typeof payload.action !== "string") return false;
   if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
-  if (!isRecord(payload.comment) || typeof payload.comment.id !== "number" || typeof payload.comment.body !== "string") return false;
+  if (!isRecord(payload.comment) || typeof payload.comment.body !== "string") return false;
   if (!isRecord(payload.repository) || !isRecord(payload.repository.owner)) return false;
   if (
     typeof payload.repository.owner.login !== "string" ||
@@ -276,38 +275,6 @@ async function getInstallationToken(
 
   return token;
 }
-async function addReaction(
-  token: string,
-  repoOwner: string,
-  repoName: string,
-  commentId: number,
-): Promise<void> {
-  const reactionAbortController = new AbortController();
-  const reactionTimeout = setTimeout(() => reactionAbortController.abort(), 10_000);
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${repoOwner}/${repoName}/issues/comments/${commentId}/reactions`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github.v3+json",
-          "User-Agent": "Cloudflare-Worker-OCR-App",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content: "eyes" }),
-        signal: reactionAbortController.signal,
-      },
-    );
-    if (!res.ok) {
-      console.error("Failed to add reaction:", res.status, await res.text());
-    }
-  } catch (error: unknown) {
-    console.error("Failed to add reaction:", error instanceof Error ? error.message : String(error));
-  } finally {
-    clearTimeout(reactionTimeout);
-  }
-}
 
 export interface Env {
   GITHUB_APP_ID: string;
@@ -402,7 +369,6 @@ export default {
           const prNumber = payload.issue.number;
 
           const token = await getInstallationToken(env, payload.installation.id);
-          await addReaction(token, repoOwner, repoName, payload.comment.id);
 
           const prAbortController = new AbortController();
           const prTimeout = setTimeout(() => prAbortController.abort(), 10_000);
