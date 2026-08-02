@@ -100,6 +100,58 @@ function getValidComments(comments) {
   return validComments;
 }
 
+/**
+ * Wrap a review comment body in a Markdown code block.
+ *
+ * Uses a fence longer than any backtick run inside the body so the
+ * inner content (which may itself contain triple-backtick fenced code)
+ * is never terminated prematurely. Returns an empty string for an
+ * empty body.
+ */
+function wrapInCodeBlock(body, language = '') {
+  if (!body) {
+    return '';
+  }
+  const backtickRuns = body.match(/`+/g) || [];
+  const longestRun = backtickRuns.reduce((max, run) => Math.max(max, run.length), 0);
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${body}\n${fence}`;
+}
+
+function buildSummarySection(comments, ocrSummary) {
+  const countsByPath = new Map();
+  for (const comment of comments) {
+    countsByPath.set(comment.path, (countsByPath.get(comment.path) || 0) + 1);
+  }
+  const elapsed = ocrSummary && typeof ocrSummary.elapsed === 'string'
+    ? ` / 所要時間: ${ocrSummary.elapsed}`
+    : '';
+  const rows = [...countsByPath]
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([filePath, count]) => `| \`${filePath}\` | ${count} |`);
+
+  return [
+    '## 📋 OpenCodeReview Summary',
+    '',
+    `${comments.length} 件のコメント / ${countsByPath.size} ファイル${elapsed}`,
+    '',
+    '| ファイル | コメント数 |',
+    '| --- | --- |',
+    ...rows,
+  ].join('\n');
+}
+
+function buildCombinedCodeBlock(comments) {
+  const transcript = comments
+    .map(({ body, line, path }) => `[${path}:${line}]\n${body}`)
+    .join('\n\n');
+  return wrapInCodeBlock(transcript, 'text');
+}
+
+function buildSummaryBody(comments, ocrSummary) {
+  return `${buildSummarySection(comments, ocrSummary)}\n\n${buildCombinedCodeBlock(comments)}\n\n---\n*Posted by OpenCodeReview*`;
+}
+
 async function postSkipComment({ githubApi, prNumber, message }) {
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
@@ -109,6 +161,18 @@ async function postSkipComment({ githubApi, prNumber, message }) {
     return 1;
   }
   console.log('Posted skip comment to PR');
+  return 0;
+}
+
+async function postSummaryComment({ comments, githubApi, ocrSummary, prNumber }) {
+  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
+    body: buildSummaryBody(comments, ocrSummary),
+  });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to post Summary comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log(`Posted Summary comment for ${comments.length} review comments`);
   return 0;
 }
 
@@ -190,7 +254,7 @@ async function postReviewComments({ comments, githubApi, prNumber }) {
         path: comment.path,
         line: position.line,
         side: position.side,
-        body: `${comment.body}\n\n---\n*Posted by OpenCodeReview*`,
+        body: `${wrapInCodeBlock(comment.body)}\n\n---\n*Posted by OpenCodeReview*`,
       });
     }
   }
@@ -287,7 +351,20 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
   }
 
   const comments = getValidComments(result.comments);
-  return postReviewComments({ comments, githubApi, prNumber: config.prNumber });
+  if (comments.length === 0) {
+    return 0;
+  }
+
+  const reviewExitCode = await postReviewComments({ comments, githubApi, prNumber: config.prNumber });
+  if (reviewExitCode !== 0) {
+    return reviewExitCode;
+  }
+  return postSummaryComment({
+    comments,
+    githubApi,
+    ocrSummary: result.summary,
+    prNumber: config.prNumber,
+  });
 }
 
 const executedDirectly = process.argv[1] !== undefined &&
