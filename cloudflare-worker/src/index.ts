@@ -103,7 +103,7 @@ type PullRequestWebhookPayload = {
 
 const textEncoder = new TextEncoder();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
@@ -156,7 +156,7 @@ type IssueCommentPayload = {
   };
 };
 
-function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
+export function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
   if (!isRecord(payload) || typeof payload.action !== "string") return false;
   if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
   if (!isRecord(payload.comment) || typeof payload.comment.body !== "string") return false;
