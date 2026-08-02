@@ -131,7 +131,7 @@ describe("issue_comment mention flow", () => {
   it("adds reaction before fetching pull request and dispatches", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" } }) }) // PR
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" }, base: { ref: "main" } }) }) // PR
       .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
 
     const body = JSON.stringify(basePayload);
@@ -146,12 +146,15 @@ describe("issue_comment mention flow", () => {
     expect((reactionCall[1] as RequestInit | undefined)?.body).toBe(JSON.stringify({ content: "eyes" }));
     expect(prCall[0]).toBe("https://api.github.com/repos/owner/repo/pulls/1");
     expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
+    const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
+    expect(dispatchBody.event_type).toBe("open_code_review_trigger");
+    expect(dispatchBody.client_payload.base_ref).toBe("main");
   });
 
   it("continues pull request fetch and dispatch when reaction fails", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Internal Server Error" }) // reaction fails
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" } }) }) // PR
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" }, base: { ref: "main" } }) }) // PR
       .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
 
     const body = JSON.stringify(basePayload);
@@ -164,5 +167,62 @@ describe("issue_comment mention flow", () => {
     expect(reactionCall[0]).toContain("/issues/comments/123/reactions");
     expect(prCall[0]).toContain("/pulls/1");
     expect(dispatchCall[0]).toContain("/dispatches");
+  });
+});
+
+describe("pull_request opened flow", () => {
+  const env = {
+    GITHUB_APP_ID: "123",
+    GITHUB_APP_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEA\n-----END PRIVATE KEY-----",
+    WEBHOOK_SECRET: "test-secret",
+    GITHUB_APP_SLUG: "opencodereview-app",
+  };
+
+  const basePayload = {
+    action: "opened",
+    number: 1,
+    pull_request: {
+      head: { sha: "abc123" },
+      base: { ref: "main" },
+    },
+    repository: { owner: { login: "owner" }, name: "repo" },
+    installation: { id: 456 },
+  };
+
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("dispatches repository_dispatch with base_ref", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
+
+    const body = JSON.stringify(basePayload);
+    const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [dispatchCall] = fetchMock.mock.calls;
+    expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
+    const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
+    expect(dispatchBody.event_type).toBe("open_code_review_trigger");
+    expect(dispatchBody.client_payload.base_ref).toBe("main");
+    expect(dispatchBody.client_payload.commit_sha).toBe("abc123");
   });
 });

@@ -224,3 +224,88 @@ test('propagates a batch transport error without an individual fallback', async 
   await assert.rejects(result, transportError);
   assert.equal(requests.length, 3);
 });
+
+test('normalizes OCR-format comments (content, end_line) to body and line', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', content: 'OCR comment', end_line: 1 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].body.comments.length, 1);
+  assert.equal(requests[2].body.comments[0].body, 'OCR comment\n\n---\n*Posted by OpenCodeReview*');
+  assert.equal(requests[2].body.comments[0].line, 1);
+});
+
+test('prefers body/line over content/end_line when both are present', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', body: 'Preferred', line: 1, content: 'Ignored', end_line: 99 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+    assert.equal(requests[2].body.comments[0].body, 'Preferred\n\n---\n*Posted by OpenCodeReview*');
+    assert.equal(requests[2].body.comments[0].line, 1);
+});
+
+test('falls back to start_line when end_line is missing in OCR format', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWith(
+    [{ path: 'src/example.js', content: 'Start only', start_line: 1 }],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+    assert.equal(requests[2].body.comments[0].line, 1);
+  });
+
+test('skips comments with invalid line numbers', async () => {
+  // Given
+  const warn = mock.method(console, 'warn', () => {});
+
+  // When
+  const { exitCode, requests } = await runWith(
+    [
+      { path: 'src/example.js', body: 'zero', line: 0 },
+      { path: 'src/example.js', body: 'negative', line: -1 },
+      { path: 'src/example.js', body: 'decimal', line: 1.5 },
+      validComment('valid'),
+    ],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].body.comments.length, 1);
+  assert.equal(requests[2].body.comments[0].line, 1);
+  assert.equal(warn.mock.calls.length, 3);
+});
+
+test('skips OCR-format comments with invalid end_line or start_line', async () => {
+  // Given
+  const warn = mock.method(console, 'warn', () => {});
+
+  // When
+  const { exitCode, requests } = await runWith(
+    [
+      { path: 'src/example.js', content: 'zero end', end_line: 0 },
+      { path: 'src/example.js', content: 'negative start', start_line: -1 },
+      validComment('valid'),
+    ],
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].body.comments.length, 1);
+  assert.equal(requests[2].body.comments[0].line, 1);
+  assert.equal(warn.mock.calls.length, 2);
+});

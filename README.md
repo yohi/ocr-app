@@ -67,7 +67,7 @@ sequenceDiagram
 4. **`repository_dispatch` の送信**
    - `TARGET_DISPATCH_REPO`（未設定時は `yohi/ocr-app`）に対して、
      `open_code_review_trigger` タイプの dispatch を送信します。
-   - payload には `target_repo`、`pr_number`、`commit_sha`、`installation_id` が含まれます。
+   - payload には `target_repo`、`pr_number`、`commit_sha`、`base_ref`、`installation_id` が含まれます。
 5. **中央リポジトリの `ocr-engine.yml` が起動**
    - GitHub App token を発行します。
    - 対象リポジトリ・コミットを checkout します。
@@ -114,7 +114,8 @@ sequenceDiagram
    - コメント本文から `@<GITHUB_APP_SLUG>(?:\[bot\])?\s+review` のパターンを検出します。
 3. **PR 詳細の取得**
    - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
-     最新の `head.sha` を取得します。
+     最新の `head.sha` と `base.ref` を取得します。
+   - 取得した `base.ref` は `base_ref` として `repository_dispatch` の payload に含まれます。
 4. **`repository_dispatch` の送信**
    - 以降のフローは「GitHub Apps 経由の実行フロー」の Step 3 以降と同じです。
 

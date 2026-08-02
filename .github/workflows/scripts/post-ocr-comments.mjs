@@ -61,24 +61,44 @@ function readResult(resultPath) {
   return result;
 }
 
-function isValidComment(comment) {
-  return (
-    comment &&
-    typeof comment === 'object' &&
-    typeof comment.path === 'string' &&
-    typeof comment.line === 'number' &&
-    typeof comment.body === 'string'
-  );
+function isValidLineNumber(value) {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+function normalizeComment(comment) {
+  if (!comment || typeof comment !== 'object') {
+    return null;
+  }
+  const path = typeof comment.path === 'string' ? comment.path : null;
+  const body = typeof comment.body === 'string'
+    ? comment.body
+    : typeof comment.content === 'string' ? comment.content : null;
+
+  let line = null;
+  if (isValidLineNumber(comment.line)) {
+    line = comment.line;
+  } else if (isValidLineNumber(comment.end_line)) {
+    line = comment.end_line;
+  } else if (isValidLineNumber(comment.start_line)) {
+    line = comment.start_line;
+  }
+
+  if (!path || line === null || !body) {
+    return null;
+  }
+
+  return { path, line, body };
 }
 
 function getValidComments(comments) {
   const validComments = [];
   for (const comment of comments) {
-    if (!isValidComment(comment)) {
+    const normalized = normalizeComment(comment);
+    if (!normalized) {
       console.warn('Skipping invalid comment element in result:', JSON.stringify(comment));
       continue;
     }
-    validComments.push(comment);
+    validComments.push(normalized);
   }
   return validComments;
 }
