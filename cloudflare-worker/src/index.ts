@@ -165,6 +165,11 @@ readonly body: string;
 export function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
   if (!isRecord(payload) || typeof payload.action !== "string") return false;
   if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
+  if (payload.issue.pull_request !== undefined) {
+    if (!isRecord(payload.issue.pull_request) || typeof payload.issue.pull_request.url !== "string") {
+      return false;
+    }
+  }
   if (!isRecord(payload.comment) || typeof payload.comment.id !== "number" || typeof payload.comment.body !== "string") return false;
   if (!isRecord(payload.repository) || !isRecord(payload.repository.owner)) return false;
   if (
@@ -181,7 +186,7 @@ export function isIssueCommentPayload(payload: unknown): payload is IssueComment
 
 export function isMentioningReviewer(appSlug: string, body: string): boolean {
   const escapedSlug = appSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review`, "i");
+  const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review(?![\\w-])`, "i");
   return mentionPattern.test(body);
 }
 

@@ -71,6 +71,17 @@ describe("isIssueCommentPayload", () => {
     expect(isIssueCommentPayload({ ...basePayload, comment: { body: "@opencodereview-app review" } })).toBe(false);
     expect(isIssueCommentPayload({ ...basePayload, comment: { id: "123", body: "@opencodereview-app review" } })).toBe(false);
   });
+
+  it("returns false when issue.pull_request.url is not a string", () => {
+    const basePayload = {
+      action: "created",
+      issue: { number: 1, pull_request: { url: 123 } },
+      comment: { id: 123, body: "@opencodereview-app review" },
+      repository: { owner: { login: "owner" }, name: "repo" },
+      installation: { id: 123 },
+    };
+    expect(isIssueCommentPayload(basePayload)).toBe(false);
+  });
 });
 
 describe("isMentioningReviewer", () => {
@@ -89,6 +100,11 @@ describe("isMentioningReviewer", () => {
   it("does not match typos", () => {
     expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app summary")).toBe(false);
     expect(isMentioningReviewer("opencodereview-app", "@other-bot review")).toBe(false);
+  });
+
+  it("does not match 'reviewing' or 'review-now'", () => {
+    expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app reviewing")).toBe(false);
+    expect(isMentioningReviewer("opencodereview-app", "@opencodereview-app review-now")).toBe(false);
   });
 
   it("is case-insensitive", () => {
