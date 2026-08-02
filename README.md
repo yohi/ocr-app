@@ -114,7 +114,8 @@ sequenceDiagram
    - コメント本文から `@<GITHUB_APP_SLUG>(?:\[bot\])?\s+review` のパターンを検出します。
 3. **PR 詳細の取得**
    - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
-     最新の `head.sha` を取得します。
+     最新の `head.sha` と `base.ref` を取得します。
+   - 取得した `base.ref` は `base_ref` として `repository_dispatch` の payload に含まれます。
 4. **`repository_dispatch` の送信**
    - 以降のフローは「GitHub Apps 経由の実行フロー」の Step 3 以降と同じです。
 
