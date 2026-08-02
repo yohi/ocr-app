@@ -10,11 +10,11 @@ import { run } from './post-ocr-comments.mjs';
 
 const temporaryDirectories = [];
 
-async function createResultFile(comments) {
+async function createResultFile(content) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'post-ocr-comments-'));
   temporaryDirectories.push(directory);
   const resultPath = path.join(directory, 'result.json');
-  await fs.writeFile(resultPath, JSON.stringify({ comments }), 'utf8');
+  await fs.writeFile(resultPath, JSON.stringify(content), 'utf8');
   return resultPath;
 }
 
@@ -76,7 +76,7 @@ function reviewSetup(outcomes) {
 }
 
 async function runWith(comments, outcomes) {
-  const resultPath = await createResultFile(comments);
+  const resultPath = await createResultFile({ comments });
   const requests = installHttpsMock(outcomes);
   const exitCode = await run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
@@ -209,7 +209,7 @@ test('continues individual posting and returns one when an individual request fa
 test('propagates a batch transport error without an individual fallback', async () => {
   // Given
   const transportError = new Error('network unavailable');
-  const resultPath = await createResultFile([validComment()]);
+  const resultPath = await createResultFile({ comments: [validComment()] });
   const requests = installHttpsMock(
     reviewSetup([{ error: transportError }]),
   );
@@ -309,3 +309,58 @@ test('skips OCR-format comments with invalid end_line or start_line', async () =
   assert.equal(requests[2].body.comments[0].line, 1);
   assert.equal(warn.mock.calls.length, 2);
 });
+
+async function runWithResult(result, outcomes) {
+  const resultPath = await createResultFile(result);
+  const requests = installHttpsMock(outcomes);
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+  });
+
+  return { exitCode, requests };
+}
+
+test('posts a skip comment when OCR status is skipped with a message', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'skipped', message: 'No supported files changed.', comments: [] },
+    [{ data: { id: 1 }, status: 201 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+  assert.equal(requests[0].body.body, '⏭️ OpenCodeReview skipped: No supported files changed.');
+});
+
+test('posts a default skip comment when OCR status is skipped without a message', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'skipped', comments: [] },
+    [{ data: { id: 1 }, status: 201 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].body.body, '⏭️ OpenCodeReview skipped: No supported files changed.');
+});
+
+test('returns one when posting skip comment fails', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'skipped', message: 'No supported files changed.' },
+    [{ data: { message: 'Forbidden' }, status: 403 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+});
+

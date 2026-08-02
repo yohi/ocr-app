@@ -54,9 +54,6 @@ function readResult(resultPath) {
     throw new CliError('Invalid result format: expected an object');
   }
 
-  if (!Array.isArray(result.comments)) {
-    throw new CliError('Invalid result format: "comments" property must be an array');
-  }
 
   return result;
 }
@@ -101,6 +98,18 @@ function getValidComments(comments) {
     validComments.push(normalized);
   }
   return validComments;
+}
+
+async function postSkipComment({ githubApi, prNumber, message }) {
+  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
+    body: message,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to post skip comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log('Posted skip comment to PR');
+  return 0;
 }
 
 function createGithubApi({ repo, token }) {
@@ -264,8 +273,20 @@ function findDiffPosition(comment, filesMap) {
 export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN } = {}) {
   const config = createConfig(args, token);
   const result = readResult(config.resultPath);
-  const comments = getValidComments(result.comments);
   const githubApi = createGithubApi(config);
+
+  if (result.status === 'skipped') {
+    const skipMessage = result.message
+      ? `\u23ED\uFE0F OpenCodeReview skipped: ${result.message}`
+      : '\u23ED\uFE0F OpenCodeReview skipped: No supported files changed.';
+    return postSkipComment({ githubApi, prNumber: config.prNumber, message: skipMessage });
+  }
+
+  if (!Array.isArray(result.comments)) {
+    throw new CliError('Invalid result format: "comments" property must be an array');
+  }
+
+  const comments = getValidComments(result.comments);
   return postReviewComments({ comments, githubApi, prNumber: config.prNumber });
 }
 
