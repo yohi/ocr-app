@@ -134,11 +134,15 @@ GitHub App は以下の 2 つの認証に使用されます。
 1. **Install App** をクリックし、インストール先を選択します。
 2. **Only select repositories** で以下を含めます。
    - レビュー対象のリポジトリ
-   - `TARGET_DISPATCH_REPO`（dispatch 先。未設定時は `yohi/ocr-app`）
+   - `TARGET_DISPATCH_REPO`（dispatch 先。未設定時は `yohi/ocr-app`。
+     レビュー対象リポジトリと同一アカウントであること）
 3. **Install** をクリックします。
 
 Installation ID は Webhook の `installation.id` から自動取得されるため、
-手動での記録は不要です。
+手動での記録は不要です。ただし、dispatch の送信にもこの Installation ID で
+発行したトークンが使用されます。そのため dispatch 先は Webhook を受け取った
+インストール（同一アカウント）内に存在する必要があり、別アカウントの
+リポジトリへの dispatch には対応していません。
 
 ### 4. Webhook の設定
 
