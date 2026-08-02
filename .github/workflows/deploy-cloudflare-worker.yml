@@ -22,8 +22,10 @@ jobs:
           vars: |
             GITHUB_APP_ID
             TARGET_DISPATCH_REPO
+            GITHUB_APP_SLUG
         env:
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           GITHUB_APP_ID: ${{ vars.GH_APP_ID }}
           TARGET_DISPATCH_REPO: ${{ vars.GH_TARGET_DISPATCH_REPO || 'yohi/ocr-app' }}
+          GITHUB_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
