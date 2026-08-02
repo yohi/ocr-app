@@ -44,9 +44,11 @@ jobs:
         if: github.event.client_payload.check_run_id != null
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
         run: |
-          REPO="${{ github.event.client_payload.target_repo }}"
-          CHECK_RUN_ID="${{ github.event.client_payload.check_run_id }}"
+          REPO="${TARGET_REPO}"
+          CHECK_RUN_ID="${CHECK_RUN_ID}"
           curl -sS -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -84,12 +86,13 @@ jobs:
         env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
         run: |
           ocr review \
             --repo . \
             --from "origin/${BASE_REF}" \
             --to "${COMMIT_SHA}" \
-            --background "PR #${{ github.event.client_payload.pr_number }}" \
+            --background "PR #${PR_NUMBER}" \
             --format json \
             --audience agent \
             > /tmp/ocr-result.json 2> /tmp/ocr-stderr.log
@@ -122,9 +125,11 @@ jobs:
         if: always() && github.event.client_payload.check_run_id != null
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
         run: |
-          REPO="${{ github.event.client_payload.target_repo }}"
-          CHECK_RUN_ID="${{ github.event.client_payload.check_run_id }}"
+          REPO="${TARGET_REPO}"
+          CHECK_RUN_ID="${CHECK_RUN_ID}"
           CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
           curl -sS -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
