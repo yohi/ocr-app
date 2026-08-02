@@ -497,11 +497,18 @@ export default {
             });
           }
 
-          const pullRequestPayload: unknown = await pullRequestResponse.json();
+          let pullRequestPayload: unknown;
+          try {
+            pullRequestPayload = await pullRequestResponse.json();
+          } catch {
+            return new Response("Invalid pull request response", { status: 502 });
+          }
+
           if (
             !isRecord(pullRequestPayload) ||
             !isRecord(pullRequestPayload.head) ||
             typeof pullRequestPayload.head.sha !== "string" ||
+            pullRequestPayload.head.sha.trim().length === 0 ||
             !isRecord(pullRequestPayload.base) ||
             typeof pullRequestPayload.base.ref !== "string"
           ) {

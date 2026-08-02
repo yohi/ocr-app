@@ -184,6 +184,40 @@ describe("issue_comment mention flow", () => {
     expect(prCall[0]).toContain("/pulls/1");
     expect(dispatchCall[0]).toContain("/dispatches");
   });
+
+  it("returns 502 when pull request head.sha is empty", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ head: { sha: "" }, base: { ref: "main" } }),
+      }); // PR with empty sha
+
+    const body = JSON.stringify(basePayload);
+    const request = createIssueCommentRequest(basePayload, await calculateSignature(env.WEBHOOK_SECRET, body));
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns 502 when pull request response is not valid JSON", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token");
+        },
+      }); // PR with invalid JSON
+
+    const body = JSON.stringify(basePayload);
+    const request = createIssueCommentRequest(basePayload, await calculateSignature(env.WEBHOOK_SECRET, body));
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("pull_request opened flow", () => {
