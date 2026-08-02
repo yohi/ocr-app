@@ -19,7 +19,7 @@ describe("isIssueCommentPayload", () => {
     const payload = {
       action: "created",
       issue: { number: 1, pull_request: { url: "https://..." } },
-      comment: { body: "@opencodereview-app review" },
+      comment: { id: 123, body: "@opencodereview-app review" },
       repository: { owner: { login: "owner" }, name: "repo" },
       installation: { id: 123 },
     };
