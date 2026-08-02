@@ -54,7 +54,6 @@ function readResult(resultPath) {
     throw new CliError('Invalid result format: expected an object');
   }
 
-
   return result;
 }
 
@@ -149,7 +148,17 @@ function buildCombinedCodeBlock(comments) {
 }
 
 function buildSummaryBody(comments, ocrSummary) {
-  return `${buildSummarySection(comments, ocrSummary)}\n\n${buildCombinedCodeBlock(comments)}\n\n---\n*Posted by OpenCodeReview*`;
+  const MAX_LENGTH = 65536;
+  const footer = '\n\n---\n*Posted by OpenCodeReview*';
+  const bodyWithoutFooter = `${buildSummarySection(comments, ocrSummary)}\n\n${buildCombinedCodeBlock(comments)}`;
+
+  let body = bodyWithoutFooter;
+  if (body.length + footer.length > MAX_LENGTH) {
+    const truncatedNotice = '...（残りは省略）';
+    body = body.substring(0, MAX_LENGTH - footer.length - truncatedNotice.length) + truncatedNotice;
+  }
+
+  return body + footer;
 }
 
 async function postSkipComment({ githubApi, prNumber, message }) {

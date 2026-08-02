@@ -77,14 +77,7 @@ function reviewSetup(outcomes, summaryOutcome = { data: {}, status: 201 }) {
 }
 
 async function runWith(comments, outcomes) {
-  const resultPath = await createResultFile({ comments });
-  const requests = installHttpsMock(outcomes);
-  const exitCode = await run({
-    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
-    token: 'test-token',
-  });
-
-  return { exitCode, requests };
+  return runWithResult({ comments }, outcomes);
 }
 
 afterEach(async () => {
@@ -546,13 +539,14 @@ test('returns one when posting skip comment fails', async () => {
   // Given
   // When
   const { exitCode, requests } = await runWithResult(
-    { status: 'skipped', message: 'No supported files changed.' },
-    [{ data: { message: 'Forbidden' }, status: 403 }],
+  { status: 'skipped', message: 'No supported files changed.', comments: [] },
+  [{ data: { message: 'Forbidden' }, status: 403 }],
   );
 
   // Then
   assert.equal(exitCode, 1);
   assert.equal(requests.length, 1);
+    assert.equal(requests[0].body.body, '⏭️ OpenCodeReview skipped: No supported files changed.');
 });
 
 test('wraps each review comment body in a code block', async () => {

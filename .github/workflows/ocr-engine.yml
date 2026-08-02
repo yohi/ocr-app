@@ -40,6 +40,18 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
 
+      - name: Mark Check Run in_progress
+        if: github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPO="${{ github.event.client_payload.target_repo }}"
+          CHECK_RUN_ID="${{ github.event.client_payload.check_run_id }}"
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
+            -d '{"status":"in_progress"}'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -56,20 +68,27 @@ jobs:
           ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
 
       - name: Preview OCR targets
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.client_payload.base_ref }}
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
           ocr review \
             --repo . \
-            --from "origin/${{ github.event.client_payload.base_ref }}" \
-            --to "${{ github.event.client_payload.commit_sha }}" \
+            --from "origin/${BASE_REF}" \
+            --to "${COMMIT_SHA}" \
             --preview \
             --audience agent
 
       - name: Run OCR review
+        env:
+          BASE_REF: ${{ github.event.client_payload.base_ref }}
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
           ocr review \
             --repo . \
-            --from "origin/${{ github.event.client_payload.base_ref }}" \
-            --to "${{ github.event.client_payload.commit_sha }}" \
+            --from "origin/${BASE_REF}" \
+            --to "${COMMIT_SHA}" \
             --background "PR #${{ github.event.client_payload.pr_number }}" \
             --format json \
             --audience agent \
@@ -99,3 +118,16 @@ jobs:
             /tmp/ocr-result.json
             /tmp/ocr-stderr.log
           if-no-files-found: ignore
+      - name: Update Check Run completed
+        if: always() && github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          REPO="${{ github.event.client_payload.target_repo }}"
+          CHECK_RUN_ID="${{ github.event.client_payload.check_run_id }}"
+          CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
+            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
