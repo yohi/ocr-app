@@ -55,6 +55,15 @@ jobs:
           ocr config set llm.use_anthropic "${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}"
           ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
 
+      - name: Preview OCR targets
+        run: |
+          ocr review \
+            --repo . \
+            --from "origin/${{ github.event.client_payload.base_ref }}" \
+            --to "${{ github.event.client_payload.commit_sha }}" \
+            --preview \
+            --audience agent
+
       - name: Run OCR review
         run: |
           ocr review \
