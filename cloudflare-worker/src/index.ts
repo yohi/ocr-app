@@ -1,5 +1,87 @@
 import { createAppAuth } from "@octokit/auth-app";
 
+// --- PKCS#1 → PKCS#8 変換（WebCrypto は PKCS#8 のみサポート）---
+function pemToDer(pem: string): Uint8Array {
+  const base64 = pem
+    .replace(/-----BEGIN [^-]+-----/, "")
+    .replace(/-----END [^-]+-----/, "")
+    .replace(/\s+/g, "");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function derLength(contentsLength: number): Uint8Array {
+  if (contentsLength < 0x80) {
+    return new Uint8Array([contentsLength]);
+  }
+  const bytes: number[] = [];
+  let length = contentsLength;
+  while (length > 0) {
+    bytes.unshift(length & 0xff);
+    length >>>= 8;
+  }
+  return new Uint8Array([0x80 | bytes.length, ...bytes]);
+}
+
+function concatBytes(...arrays: Uint8Array[]): Uint8Array {
+  const totalLength = arrays.reduce((sum, array) => sum + array.length, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const array of arrays) {
+    result.set(array, offset);
+    offset += array.length;
+  }
+  return result;
+}
+
+function derSequence(contents: Uint8Array): Uint8Array {
+  return concatBytes(new Uint8Array([0x30]), derLength(contents.length), contents);
+}
+
+function derInteger(value: number): Uint8Array {
+  return new Uint8Array([0x02, 0x01, value]);
+}
+
+function derOctetString(contents: Uint8Array): Uint8Array {
+  return concatBytes(new Uint8Array([0x04]), derLength(contents.length), contents);
+}
+
+function derToPem(der: Uint8Array, label: string): string {
+  let binary = "";
+  for (const byte of der) {
+    binary += String.fromCharCode(byte);
+  }
+  const base64 = btoa(binary);
+  const lines = base64.match(/.{1,64}/g) ?? [];
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----`;
+}
+
+// rsaEncryption の OID (1.2.840.113549.1.1.1) + NULL パラメータ
+const RSA_ENCRYPTION_ALGORITHM = new Uint8Array([
+  0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00,
+]);
+
+function pkcs1ToPkcs8(pkcs1Pem: string): string {
+  const pkcs1Der = pemToDer(pkcs1Pem);
+  const version = derInteger(0);
+  const algorithm = derSequence(RSA_ENCRYPTION_ALGORITHM);
+  const privateKey = derOctetString(pkcs1Der);
+  const pkcs8Der = derSequence(concatBytes(version, algorithm, privateKey));
+  return derToPem(pkcs8Der, "PRIVATE KEY");
+}
+
+function normalizePrivateKey(privateKey: string): string {
+  const withNewlines = privateKey.replace(/\\n/g, "\n");
+  if (withNewlines.includes("BEGIN RSA PRIVATE KEY")) {
+    return pkcs1ToPkcs8(withNewlines);
+  }
+  return withNewlines;
+}
+
 type PullRequestWebhookPayload = {
   readonly action: string;
   readonly repository: {
@@ -154,7 +236,7 @@ export default {
         // GitHub App Token を発行
         const auth = createAppAuth({
           appId: env.GITHUB_APP_ID,
-          privateKey: env.GITHUB_APP_PRIVATE_KEY,
+          privateKey: normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY),
         });
 
         const { token } = await auth({
