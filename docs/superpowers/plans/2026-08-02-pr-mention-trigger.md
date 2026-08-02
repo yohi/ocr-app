@@ -65,6 +65,11 @@ type IssueCommentPayload = {
 function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
   if (!isRecord(payload) || typeof payload.action !== "string") return false;
   if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
+  if (payload.issue.pull_request !== undefined) {
+    if (!isRecord(payload.issue.pull_request) || typeof payload.issue.pull_request.url !== "string") {
+      return false;
+    }
+  }
   if (!isRecord(payload.comment) || typeof payload.comment.body !== "string") return false;
   if (!isRecord(payload.repository) || !isRecord(payload.repository.owner)) return false;
   if (
@@ -92,7 +97,9 @@ async function sendRepositoryDispatch(
     target_repo: string;
     pr_number: number;
     commit_sha: string;
+    base_ref: string;
     installation_id: number;
+    check_run_id: number | null;
   }
 ): Promise<Response | null> {
   const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
@@ -195,7 +202,7 @@ if (githubEvent === "issue_comment") {
   }
 
   const mentionPattern = new RegExp(
-    `@${env.GITHUB_APP_SLUG}(?:\\[bot\\])?\\s+review`,
+    `@${env.GITHUB_APP_SLUG}(?:\\[bot\\])?\\s+review(?![\\w-])`,
     "i"
   );
 
@@ -213,15 +220,26 @@ if (githubEvent === "issue_comment") {
     installationId: payload.installation.id,
   });
 
+  // リアクションを追加（失敗しても処理を中断しない）
+  await addReaction(token, payload.repository.owner.login, payload.repository.name, payload.comment.id);
+
   // PR 詳細を取得して head.sha を得る
   const prUrl = `https://api.github.com/repos/${payload.repository.owner.login}/${payload.repository.name}/pulls/${payload.issue.number}`;
-  const prRes = await fetch(prUrl, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github.v3+json",
-      "User-Agent": "Cloudflare-Worker-OCR-App",
-    },
-  });
+  const prAbortController = new AbortController();
+  const prTimeout = setTimeout(() => prAbortController.abort(), 10_000);
+  let prRes;
+  try {
+    prRes = await fetch(prUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github.v3+json",
+        "User-Agent": "Cloudflare-Worker-OCR-App",
+      },
+      signal: prAbortController.signal,
+    });
+  } finally {
+    clearTimeout(prTimeout);
+  }
 
   if (!prRes.ok) {
     const errText = await prRes.text();
@@ -229,17 +247,27 @@ if (githubEvent === "issue_comment") {
     return new Response("PR fetch failed", { status: 500 });
   }
 
-  const prData = await prRes.json() as { head: { sha: string } };
+  const prData: unknown = await prRes.json();
+  if (
+    !isRecord(prData) ||
+    !isRecord(prData.head) ||
+    typeof prData.head.sha !== "string" ||
+    !isRecord(prData.base) ||
+    typeof prData.base.ref !== "string"
+  ) {
+    return new Response("Invalid pull request response", { status: 502 });
+  }
 
   const dispatchError = await sendRepositoryDispatch(env, token, {
     target_repo: `${payload.repository.owner.login}/${payload.repository.name}`,
     pr_number: payload.issue.number,
     commit_sha: prData.head.sha,
+    base_ref: prData.base.ref,
     installation_id: payload.installation.id,
+    check_run_id: null,
   });
   if (dispatchError) return dispatchError;
 }
-```
 
 - [ ] **Step 6: TypeScript コンパイルを確認する**
 
@@ -268,18 +296,23 @@ git commit -m "feat(worker): issue_commentイベントでmentionトリガーを�
 - [ ] **Step 1: `wrangler.toml` のコメントを更新する**
 
 既存のコメント行：
+
 ```toml
 # - Vars:    GITHUB_APP_ID, TARGET_DISPATCH_REPO（Actions の Repository Variables から）
 ```
 
+
 以下に変更：
+
 ```toml
 # - Vars:    GITHUB_APP_ID, TARGET_DISPATCH_REPO, GITHUB_APP_SLUG（Actions の Repository Variables から）
 ```
 
+
 - [ ] **Step 2: デプロイワークフローに `GITHUB_APP_SLUG` を追加する**
 
 `.github/workflows/deploy-cloudflare-worker.yml` の `vars:` セクションを変更：
+
 
 ```yaml
           vars: |
@@ -288,12 +321,15 @@ git commit -m "feat(worker): issue_commentイベントでmentionトリガーを�
             GITHUB_APP_SLUG
 ```
 
+
 同ファイルの `env:` セクションに追加：
+
 
 ```yaml
           GITHUB_APP_ID: ${{ vars.GH_APP_ID }}
           TARGET_DISPATCH_REPO: ${{ vars.GH_TARGET_DISPATCH_REPO || 'yohi/ocr-app' }}
           GITHUB_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
+
 ```
 
 - [ ] **Step 3: GitHub Repository Variables に `GH_APP_SLUG` を登録する（手動）**
@@ -321,7 +357,7 @@ git commit -m "ci: GITHUB_APP_SLUG環境変数をデプロイ設定に追加"
 ### Task 3: テスト追加
 
 **Files:**
-- Create: `cloudflare-worker/src/index.test.ts`
+- Modify: `cloudflare-worker/src/index.test.ts`
 - Modify: `cloudflare-worker/package.json`
 
 **Interfaces:**
@@ -373,7 +409,7 @@ describe("isIssueCommentPayload", () => {
     const payload = {
       action: "created",
       issue: { number: 1, pull_request: { url: "https://..." } },
-      comment: { body: "@opencodereview-app review" },
+      comment: { id: 123, body: "@opencodereview-app review" },
       repository: { owner: { login: "owner" }, name: "repo" },
       installation: { id: 123 },
     };
@@ -388,27 +424,31 @@ describe("isIssueCommentPayload", () => {
 
 describe("mention pattern", () => {
   const SLUG = "opencodereview-app";
-  const pattern = new RegExp(`@${SLUG}(?:\\[bot\\])?\\s+review`, "i");
 
   it("matches @opencodereview-app review", () => {
-    expect(pattern.test("@opencodereview-app review")).toBe(true);
+    expect(isMentioningReviewer(SLUG, "@opencodereview-app review")).toBe(true);
   });
 
   it("matches @opencodereview-app[bot] review", () => {
-    expect(pattern.test("@opencodereview-app[bot] review")).toBe(true);
+    expect(isMentioningReviewer(SLUG, "@opencodereview-app[bot] review")).toBe(true);
   });
 
   it("matches in middle of sentence", () => {
-    expect(pattern.test("レビューお願いします @opencodereview-app review")).toBe(true);
+    expect(isMentioningReviewer(SLUG, "レビューお願いします @opencodereview-app review")).toBe(true);
   });
 
   it("does not match typos", () => {
-    expect(pattern.test("@opencodereview-app summary")).toBe(false);
-    expect(pattern.test("@other-bot review")).toBe(false);
+    expect(isMentioningReviewer(SLUG, "@opencodereview-app summary")).toBe(false);
+    expect(isMentioningReviewer(SLUG, "@other-bot review")).toBe(false);
+  });
+
+  it("does not match 'reviewing' or 'review-now'", () => {
+    expect(isMentioningReviewer(SLUG, "@opencodereview-app reviewing")).toBe(false);
+    expect(isMentioningReviewer(SLUG, "@opencodereview-app review-now")).toBe(false);
   });
 
   it("is case-insensitive", () => {
-    expect(pattern.test("@OPENCODEREVIEW-APP REVIEW")).toBe(true);
+    expect(isMentioningReviewer(SLUG, "@OPENCODEREVIEW-APP REVIEW")).toBe(true);
   });
 });
 ```

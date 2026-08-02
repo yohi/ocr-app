@@ -23,7 +23,7 @@ OCR のレビュー結果を投稿する際、従来のインラインコメン�
 
 `POST /issues/{prNumber}/comments` に1件投稿する。形式は以下のとおり。
 
-```markdown
+````markdown
 ## 📋 OpenCodeReview Summary
 
 3 件のコメント / 2 ファイル
@@ -46,8 +46,12 @@ Suggestion: ...
 
 ---
 *Posted by OpenCodeReview*
-```
+````
 
+- **Summary 本文の長さ制限**: 投稿本文は 65,536 文字（GitHub API 上限）を超えないようにする
+  - 超過する場合はコードブロック内の transcript を末尾から切り詰め、`...（残りは省略）` を付与する
+  - 切り捨ては `wrapInCodeBlock` 適用前の transcript に対して行い、コードフェンスの閉じタグが破損しないようにする
+  - フッターは常に末尾に保持する
 - **Summary セクション**: コメント総数・対象ファイル数・ファイル別コメント数を自動生成する
   - OCR 出力の `summary` フィールドは実行統計(`files_reviewed` / `comments` / `elapsed` など)であり LLM 要約ではない。
   - 自前生成の統計を主とし、`summary.elapsed` が存在する場合は所要時間を補足表示する

@@ -16,6 +16,7 @@
 - Prefix every finding in that block with `[path:line]`.
 - Derive comment and file counts from normalized valid comments, not OCR's untrusted counters.
 - If `result.summary.elapsed` is a string, include it as supplemental runtime information; do not treat OCR's `summary` as an LLM review summary.
+- The summary body must not exceed 65,536 characters. If exceeded, truncate the transcript inside the code block and append `...（残りは省略）`, preserving the closing fence and footer.
 - Do not make Git commits or pushes without an explicit user request.
 
 ---
@@ -77,10 +78,10 @@ Add tests that verify:
 // One combined fence safely contains an embedded triple-backtick body.
 // A result with no valid comments sends no Summary request.
 // A non-2xx Summary response makes run() return 1 after the inline request.
-```
+// An oversized transcript is truncated to keep the total body within 65,536 characters.
+// The truncation notice is inside the code block, and the closing fence and footer remain intact.
 
-For the embedded-fence case, assert the summary body contains a four-backtick outer fence around the whole concatenated transcript. For the failure case, pass the Summary response as `{ data: { message: 'Forbidden' }, status: 403 }`.
-
+For the embedded-fence case, assert the summary body contains a four-backtick outer fence around the whole concatenated transcript. For the failure case, pass the Summary response as `{ data: { message: 'Forbidden' }, status: 403 }`. For the oversized case, generate comments whose combined length exceeds the limit and assert the final body length is at most 65,536, the truncation notice appears inside the code block, and the closing fence and footer remain intact.
 - [ ] **Step 4: Run the focused test file and confirm failure**
 
 Run:
