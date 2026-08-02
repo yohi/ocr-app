@@ -140,24 +140,42 @@ function buildSummarySection(comments, ocrSummary) {
   ].join('\n');
 }
 
-function buildCombinedCodeBlock(comments) {
-  const transcript = comments
+function buildCombinedCodeBlock(comments, maxTranscriptLength) {
+  let transcript = comments
     .map(({ body, line, path }) => `[${path}:${line}]\n${body}`)
     .join('\n\n');
+
+  if (typeof maxTranscriptLength === 'number' && transcript.length > maxTranscriptLength) {
+    const truncatedNotice = '...（残りは省略）';
+    const truncateIndex = Math.max(0, maxTranscriptLength - truncatedNotice.length);
+    transcript = transcript.substring(0, truncateIndex) + truncatedNotice;
+  }
+
   return wrapInCodeBlock(transcript, 'text');
 }
 
 function buildSummaryBody(comments, ocrSummary) {
   const MAX_LENGTH = 65536;
   const footer = '\n\n---\n*Posted by OpenCodeReview*';
-  const bodyWithoutFooter = `${buildSummarySection(comments, ocrSummary)}\n\n${buildCombinedCodeBlock(comments)}`;
+  const summarySection = buildSummarySection(comments, ocrSummary);
+  const separator = '\n\n';
 
-  let body = bodyWithoutFooter;
-  if (body.length + footer.length > MAX_LENGTH) {
-    const truncatedNotice = '...（残りは省略）';
-    body = body.substring(0, MAX_LENGTH - footer.length - truncatedNotice.length) + truncatedNotice;
+  // Calculate initial max transcript length assuming minimal fence (```)
+  let maxTranscriptLength = MAX_LENGTH - summarySection.length - separator.length - footer.length - '```text\n\n```'.length;
+
+  let codeBlock = buildCombinedCodeBlock(comments, maxTranscriptLength);
+
+  // Adjust if actual code block fences are longer than assumed
+  while (
+    summarySection.length + separator.length + codeBlock.length + footer.length > MAX_LENGTH &&
+    maxTranscriptLength > 0
+  ) {
+    const excess = summarySection.length + separator.length + codeBlock.length + footer.length - MAX_LENGTH;
+    maxTranscriptLength = Math.max(0, maxTranscriptLength - excess);
+    codeBlock = buildCombinedCodeBlock(comments, maxTranscriptLength);
   }
 
+  const body = summarySection + separator + codeBlock;
   return body + footer;
 }
 

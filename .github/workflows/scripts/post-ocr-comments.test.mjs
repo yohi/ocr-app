@@ -596,3 +596,25 @@ test('uses an even longer fence for long backtick runs in the body', async () =>
     '`````\n````\ncode\n````\n`````\n\n---\n*Posted by OpenCodeReview*',
   );
 });
+
+test('truncates summary comment body to stay within 65536 characters while preserving closing fence and footer', async () => {
+  // Given
+  const longBody = 'A'.repeat(1000);
+  const comments = Array.from({ length: 70 }, () => validComment(longBody));
+  const result = { comments, summary: {} };
+
+  // When
+  const { exitCode, requests } = await runWithResult(
+    result,
+    reviewSetup([{ data: {}, status: 201 }]),
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  const summaryRequest = requests[requests.length - 1];
+  const body = summaryRequest.body.body;
+
+  assert.ok(body.length <= 65536, `Body length ${body.length} exceeds 65536`);
+  assert.match(body, /\n\n---\n\*Posted by OpenCodeReview\*$/);
+  assert.match(body, /\.{3}（残りは省略）\n```+\n\n---\n\*Posted by OpenCodeReview\*$/);
+});
