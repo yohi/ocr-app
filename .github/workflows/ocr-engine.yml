@@ -69,6 +69,13 @@ jobs:
           ocr config set llm.use_anthropic "${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}"
           ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
 
+      - name: Test OCR LLM connection
+        continue-on-error: true
+        run: |
+          echo "Testing LLM connection..."
+          ocr llm test || echo "LLM test failed with exit code: ${PIPESTATUS[0]}"
+
+
       - name: Preview OCR targets
         continue-on-error: true
         env:
