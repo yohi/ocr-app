@@ -303,7 +303,7 @@ async function addReaction(
       console.error("Failed to add reaction:", res.status, await res.text());
     }
   } catch (error: unknown) {
-    console.error("Failed to add reaction:", error instanceof Error ? error.message : String(error));
+    console.error("Failed to add reaction:", error instanceof Error ? error.message : error);
   } finally {
     clearTimeout(reactionTimeout);
   }
