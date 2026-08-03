@@ -242,7 +242,8 @@ GitHub Actions で自動化しています。
    Worker 編集に必要な権限を付与します。
 2. 本リポジトリの **Settings > Secrets and variables > Actions** に登録します。
    - **Secrets** タブ: `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
-   - **Variables** タブ: `GH_APP_ID`（Secret と同じ値）/ `GH_TARGET_DISPATCH_REPO`（任意）
+   - **Variables** タブ: `GH_APP_ID`（App ID）/ `GH_TARGET_DISPATCH_REPO`（任意）
+     > ※ 既存環境で `GH_APP_ID` を Secret に登録していた場合は、Secret と同じ値を Variable に移行登録してください。
 3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
    「Run workflow」を押して手動デプロイします。
    デプロイ時に以下が自動設定されます。
@@ -270,7 +271,7 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
    - Variables: `OCR_LLM_URL`, `OCR_LLM_MODEL`
 3. **Anthropic API 使用時**: Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
 4. **Cloudflare AI Gateway など独自認証ヘッダー使用時**: Variables に `OCR_LLM_AUTH_HEADER_NAME=cf-aig-authorization` を設定します。
-4. Worker から dispatch されると、以下の処理が実行されます。
+5. Worker から dispatch されると、以下の処理が実行されます。
    - GitHub App token の発行
    - 対象リポジトリ・コミットの checkout
    - `@alibaba-group/open-code-review` のインストールと設定
@@ -303,14 +304,16 @@ LLM を設定します。
 
 | 名前 | 種別 | 説明 |
 | --- | --- | --- |
-| `OCR_LLM_AUTH_TOKEN` | **Secret** | API キーまたは認証トークン（機密情報） |
-| `OCR_LLM_URL` | **Variable** / Secret | LLM API のエンドポイント URL |
-| `OCR_LLM_MODEL` | **Variable** / Secret | 使用するモデル名（例: `dynamic/glm-5.2`） |
+| `OCR_LLM_AUTH_TOKEN` | **Secret** | API キーまたは認証トークン（機密情報。`secrets.OCR_LLM_AUTH_TOKEN` のみから読み込み） |
+| `OCR_LLM_URL` | **Variable** | LLM API のエンドポイント URL（Actions Variable に設定） |
+| `OCR_LLM_MODEL` | **Variable** | 使用するモデル名（例: `dynamic/glm-5.2`、Actions Variable に設定） |
 | `OCR_LLM_USE_ANTHROPIC` | **Variable** | Anthropic API 使用時は `true`、それ以外は `false` |
 | `OCR_LLM_AUTH_HEADER_NAME` | **Variable** | （任意）独自認証ヘッダー名（例: `cf-aig-authorization`） |
-| `OCR_LLM_EXTRA_HEADERS` | **Variable** | （任意）その他追加する HTTP ヘッダー（形式: `Key=Value`） |
+| `OCR_LLM_EXTRA_HEADERS` | **Variable** | （任意）追加 HTTP ヘッダー（カンマ区切りの `Key=Value` 形式。値中の `=` を保持し引用符内のカンマを許容） |
 
-> **Note**: `OCR_LLM_URL` や `OCR_LLM_MODEL` などの非秘匿情報は **Variables**（`vars.`）での設定を推奨します（互換性のため `secrets.` からの読み込みにも対応しています）。認証トークン（`OCR_LLM_AUTH_TOKEN`）のみ **Secrets** に登録してください。
+> **Note**: `OCR_LLM_URL` や `OCR_LLM_MODEL` などの非秘匿情報は **Variables**（`vars.`）での設定を基本とします。既存環境との後方互換性のため **Secrets**（`secrets.`）からのフォールバック読み込みもサポートされていますが、新規設定時は **Variables** をご使用ください。一方、認証トークン（`OCR_LLM_AUTH_TOKEN`）は機密情報のため **Secrets** にのみ登録してください。
+>
+> `OCR_LLM_AUTH_HEADER_NAME`（認証ヘッダー）と `OCR_LLM_EXTRA_HEADERS`（追加ヘッダー）を両方設定した場合は、ワークフロー内で両者がカンマ区切りでマージされ、`ocr config set llm.extra_headers` が一度だけ実行されて既存のヘッダー設定が単一の文字列として更新されます。
 
 #### 設定例：Anthropic
 
