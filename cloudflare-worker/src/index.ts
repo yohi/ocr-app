@@ -165,6 +165,11 @@ readonly body: string;
 export function isIssueCommentPayload(payload: unknown): payload is IssueCommentPayload {
   if (!isRecord(payload) || typeof payload.action !== "string") return false;
   if (!isRecord(payload.issue) || typeof payload.issue.number !== "number") return false;
+  if (payload.issue.pull_request !== undefined) {
+    if (!isRecord(payload.issue.pull_request) || typeof payload.issue.pull_request.url !== "string") {
+      return false;
+    }
+  }
   if (!isRecord(payload.comment) || typeof payload.comment.id !== "number" || typeof payload.comment.body !== "string") return false;
   if (!isRecord(payload.repository) || !isRecord(payload.repository.owner)) return false;
   if (
@@ -181,7 +186,8 @@ export function isIssueCommentPayload(payload: unknown): payload is IssueComment
 
 export function isMentioningReviewer(appSlug: string, body: string): boolean {
   const escapedSlug = appSlug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review`, "i");
+  // `review` の直後に単語文字またはハイフンが続く場合は除外（例: reviewboard, review-x）
+  const mentionPattern = new RegExp(`@${escapedSlug}(?:\\[bot\\])?\\s+review(?![\\w-])`, "i");
   return mentionPattern.test(body);
 }
 
@@ -226,6 +232,56 @@ async function hasValidWebhookSignature(
   return timingSafeEqual(expectedSignature, receivedSignature);
 }
 
+async function createCheckRun(
+  env: Env,
+  token: string,
+  repoOwner: string,
+  repoName: string,
+  headSha: string,
+): Promise<number | null> {
+  const abortController = new AbortController();
+  // check run 作成は進捗表示用途なので、dispatch より短時間で打ち切る
+  const timeout = setTimeout(() => abortController.abort(), 5_000);
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${repoOwner}/${repoName}/check-runs`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "Cloudflare-Worker-OCR-App",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: env.CHECK_RUN_NAME || "OpenCodeReview",
+          head_sha: headSha,
+          status: "queued",
+          details_url: env.CHECK_RUN_DETAILS_URL || `https://github.com/${repoOwner}/${repoName}/actions`,
+        }),
+        signal: abortController.signal,
+      },
+    );
+
+    if (!res.ok) {
+      console.error("Failed to create check run:", res.status, await res.text());
+      return null;
+    }
+
+    const data: unknown = await res.json();
+    if (isRecord(data) && typeof data.id === "number") {
+      return data.id;
+    }
+    console.error("Invalid check run response:", JSON.stringify(data));
+    return null;
+  } catch (error: unknown) {
+    console.error("Error creating check run:", error instanceof Error ? error.message : error);
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sendRepositoryDispatch(
   env: Env,
   token: string,
@@ -235,6 +291,7 @@ async function sendRepositoryDispatch(
     commit_sha: string;
     base_ref: string;
     installation_id: number;
+    check_run_id: number | null;
   },
 ): Promise<Response | null> {
   const dispatchRepo = env.TARGET_DISPATCH_REPO || "yohi/ocr-app";
@@ -321,6 +378,8 @@ export interface Env {
   WEBHOOK_SECRET: string;
   TARGET_DISPATCH_REPO?: string;
   GITHUB_APP_SLUG: string;
+  CHECK_RUN_NAME?: string;
+  CHECK_RUN_DETAILS_URL?: string;
 }
 
 export default {
@@ -381,12 +440,23 @@ export default {
           const repoName = payload.repository.name;
           const prNumber = payload.number;
           const token = await getInstallationToken(env, payload.installation.id);
+          const checkRunId = await createCheckRun(
+            env,
+            token,
+            repoOwner,
+            repoName,
+            payload.pull_request.head.sha,
+          );
+          if (checkRunId === null) {
+            console.warn("Proceeding without a progress check run because createCheckRun returned null");
+          }
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
             base_ref: payload.pull_request.base.ref,
             installation_id: payload.installation.id,
+            check_run_id: checkRunId,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;
@@ -436,11 +506,19 @@ export default {
             });
           }
 
-          const pullRequestPayload: unknown = await pullRequestResponse.json();
+          let pullRequestPayload: unknown;
+          try {
+            pullRequestPayload = await pullRequestResponse.json();
+          } catch (error: unknown) {
+            console.error("Error parsing pull request response:", error instanceof Error ? error.message : error);
+            return new Response("Invalid pull request response", { status: 502 });
+          }
+
           if (
             !isRecord(pullRequestPayload) ||
             !isRecord(pullRequestPayload.head) ||
             typeof pullRequestPayload.head.sha !== "string" ||
+            pullRequestPayload.head.sha.trim().length === 0 ||
             !isRecord(pullRequestPayload.base) ||
             typeof pullRequestPayload.base.ref !== "string"
           ) {
@@ -453,6 +531,7 @@ export default {
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,
             installation_id: payload.installation.id,
+            check_run_id: null,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;

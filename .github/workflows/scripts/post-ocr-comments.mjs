@@ -54,10 +54,6 @@ function readResult(resultPath) {
     throw new CliError('Invalid result format: expected an object');
   }
 
-  if (!Array.isArray(result.comments)) {
-    throw new CliError('Invalid result format: "comments" property must be an array');
-  }
-
   return result;
 }
 
@@ -101,6 +97,110 @@ function getValidComments(comments) {
     validComments.push(normalized);
   }
   return validComments;
+}
+
+/**
+ * Wrap a review comment body in a Markdown code block.
+ *
+ * Uses a fence longer than any backtick run inside the body so the
+ * inner content (which may itself contain triple-backtick fenced code)
+ * is never terminated prematurely. Returns an empty string for an
+ * empty body.
+ */
+function wrapInCodeBlock(body, language = '') {
+  if (!body) {
+    return '';
+  }
+  const backtickRuns = body.match(/`+/g) || [];
+  const longestRun = backtickRuns.reduce((max, run) => Math.max(max, run.length), 0);
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${body}\n${fence}`;
+}
+
+function buildSummarySection(comments, ocrSummary) {
+  const countsByPath = new Map();
+  for (const comment of comments) {
+    countsByPath.set(comment.path, (countsByPath.get(comment.path) || 0) + 1);
+  }
+  const elapsed = ocrSummary && typeof ocrSummary.elapsed === 'string'
+    ? ` / 所要時間: ${ocrSummary.elapsed}`
+    : '';
+  const rows = [...countsByPath]
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(([filePath, count]) => `| \`${filePath}\` | ${count} |`);
+
+  return [
+    '## 📋 OpenCodeReview Summary',
+    '',
+    `${comments.length} 件のコメント / ${countsByPath.size} ファイル${elapsed}`,
+    '',
+    '| ファイル | コメント数 |',
+    '| --- | --- |',
+    ...rows,
+  ].join('\n');
+}
+
+function buildCombinedCodeBlock(comments, maxTranscriptLength) {
+  let transcript = comments
+    .map(({ body, line, path }) => `[${path}:${line}]\n${body}`)
+    .join('\n\n');
+
+  if (typeof maxTranscriptLength === 'number' && transcript.length > maxTranscriptLength) {
+    const truncatedNotice = '...（残りは省略）';
+    const truncateIndex = Math.max(0, maxTranscriptLength - truncatedNotice.length);
+    transcript = transcript.substring(0, truncateIndex) + truncatedNotice;
+  }
+
+  return wrapInCodeBlock(transcript, 'text');
+}
+
+function buildSummaryBody(comments, ocrSummary) {
+  const MAX_LENGTH = 65536;
+  const footer = '\n\n---\n*Posted by OpenCodeReview*';
+  const summarySection = buildSummarySection(comments, ocrSummary);
+  const separator = '\n\n';
+
+  // Calculate initial max transcript length assuming minimal fence (```)
+  let maxTranscriptLength = MAX_LENGTH - summarySection.length - separator.length - footer.length - '```text\n\n```'.length;
+
+  let codeBlock = buildCombinedCodeBlock(comments, maxTranscriptLength);
+
+  // Adjust if actual code block fences are longer than assumed
+  while (
+    summarySection.length + separator.length + codeBlock.length + footer.length > MAX_LENGTH &&
+    maxTranscriptLength > 0
+  ) {
+    const excess = summarySection.length + separator.length + codeBlock.length + footer.length - MAX_LENGTH;
+    maxTranscriptLength = Math.max(0, maxTranscriptLength - excess);
+    codeBlock = buildCombinedCodeBlock(comments, maxTranscriptLength);
+  }
+
+  const body = summarySection + separator + codeBlock;
+  return body + footer;
+}
+
+async function postSkipComment({ githubApi, prNumber, message }) {
+  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
+    body: message,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to post skip comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log('Posted skip comment to PR');
+  return 0;
+}
+
+async function postSummaryComment({ comments, githubApi, ocrSummary, prNumber }) {
+  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
+    body: buildSummaryBody(comments, ocrSummary),
+  });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to post Summary comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log(`Posted Summary comment for ${comments.length} review comments`);
+  return 0;
 }
 
 function createGithubApi({ repo, token }) {
@@ -181,7 +281,7 @@ async function postReviewComments({ comments, githubApi, prNumber }) {
         path: comment.path,
         line: position.line,
         side: position.side,
-        body: `${comment.body}\n\n---\n*Posted by OpenCodeReview*`,
+        body: `${wrapInCodeBlock(comment.body)}\n\n---\n*Posted by OpenCodeReview*`,
       });
     }
   }
@@ -264,9 +364,34 @@ function findDiffPosition(comment, filesMap) {
 export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN } = {}) {
   const config = createConfig(args, token);
   const result = readResult(config.resultPath);
-  const comments = getValidComments(result.comments);
   const githubApi = createGithubApi(config);
-  return postReviewComments({ comments, githubApi, prNumber: config.prNumber });
+
+  if (result.status === 'skipped') {
+    const skipMessage = result.message
+      ? `\u23ED\uFE0F OpenCodeReview skipped: ${result.message}`
+      : '\u23ED\uFE0F OpenCodeReview skipped: No supported files changed.';
+    return postSkipComment({ githubApi, prNumber: config.prNumber, message: skipMessage });
+  }
+
+  if (!Array.isArray(result.comments)) {
+    throw new CliError('Invalid result format: "comments" property must be an array');
+  }
+
+  const comments = getValidComments(result.comments);
+  if (comments.length === 0) {
+    return 0;
+  }
+
+  const reviewExitCode = await postReviewComments({ comments, githubApi, prNumber: config.prNumber });
+  if (reviewExitCode !== 0) {
+    return reviewExitCode;
+  }
+  return postSummaryComment({
+    comments,
+    githubApi,
+    ocrSummary: result.summary,
+    prNumber: config.prNumber,
+  });
 }
 
 const executedDirectly = process.argv[1] !== undefined &&

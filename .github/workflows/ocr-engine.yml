@@ -39,7 +39,21 @@ jobs:
           ref: ${{ github.event.client_payload.commit_sha }}
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
-
+          path: target-repo
+      - name: Mark Check Run in_progress
+        if: github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+        run: |
+          REPO="${TARGET_REPO}"
+          CHECK_RUN_ID="${CHECK_RUN_ID}"
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
+            -d '{"status":"in_progress"}'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -55,28 +69,47 @@ jobs:
           ocr config set llm.use_anthropic "${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}"
           ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
 
-      - name: Run OCR review
+      - name: Test OCR LLM connection
+        continue-on-error: true
+        run: |
+          echo "Testing LLM connection..."
+          ocr llm test || echo "LLM test failed with exit code: ${PIPESTATUS[0]}"
+
+
+      - name: Preview OCR targets
+        continue-on-error: true
+        env:
+          BASE_REF: ${{ github.event.client_payload.base_ref }}
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
           ocr review \
-            --repo . \
-            --from "origin/${{ github.event.client_payload.base_ref }}" \
-            --to "${{ github.event.client_payload.commit_sha }}" \
-            --background "PR #${{ github.event.client_payload.pr_number }}" \
+            --repo target-repo \
+            --from "origin/${BASE_REF}" \
+            --to "${COMMIT_SHA}" \
+            --preview \
+            --audience agent
+
+      - name: Run OCR review
+        env:
+          BASE_REF: ${{ github.event.client_payload.base_ref }}
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+        run: |
+          ocr review \
+            --repo target-repo \
+            --from "origin/${BASE_REF}" \
+            --to "${COMMIT_SHA}" \
+            --background "PR #${PR_NUMBER}" \
             --format json \
             --audience agent \
             > /tmp/ocr-result.json 2> /tmp/ocr-stderr.log
-
-      - name: Checkout ocr-app scripts
-        uses: actions/checkout@v4
-        with:
-          path: .ocr-app-tools
 
       - name: Post review comments
         if: always()
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          node .ocr-app-tools/.github/workflows/scripts/post-ocr-comments.mjs \
+          node .github/workflows/scripts/post-ocr-comments.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
             --pr "${{ github.event.client_payload.pr_number }}" \
             --result "/tmp/ocr-result.json"
@@ -90,3 +123,18 @@ jobs:
             /tmp/ocr-result.json
             /tmp/ocr-stderr.log
           if-no-files-found: ignore
+      - name: Update Check Run completed
+        if: always() && github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+        run: |
+          REPO="${TARGET_REPO}"
+          CHECK_RUN_ID="${CHECK_RUN_ID}"
+          CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
+            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
