@@ -506,7 +506,8 @@ export default {
           let pullRequestPayload: unknown;
           try {
             pullRequestPayload = await pullRequestResponse.json();
-          } catch {
+          } catch (error: unknown) {
+            console.error("Error parsing pull request response:", error instanceof Error ? error.message : error);
             return new Response("Invalid pull request response", { status: 502 });
           }
 
