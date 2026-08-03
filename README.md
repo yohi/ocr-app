@@ -359,3 +359,4 @@ LLM を設定します。
 
 [setup-doc]:
   https://github.com/yohi/.github/blob/master/docs/OPEN_CODE_REVIEW_SETUP.md
+# Test PR for CI and OCR review
