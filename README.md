@@ -342,15 +342,15 @@ LLM を設定します。
   `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_MODEL` を
   設定していれば、OCR はそれらを自動的に利用できます。
   ただし、これらは **GitHub Actions では自動的に利用されません**。
-  Actions では `OCR_LLM_URL` / `OCR_LLM_AUTH_TOKEN` / `OCR_LLM_MODEL` を Secrets として登録し、
+  Actions では `OCR_LLM_URL` / `OCR_LLM_MODEL` を Variables、`OCR_LLM_AUTH_TOKEN` を Secret として登録し、
   `ocr-engine.yml` 内で以下のように `ocr config set` へ明示的にマッピングしてください。
 
   ```yaml
   - name: Configure OCR
     run: |
-      ocr config set llm.url "${{ secrets.OCR_LLM_URL }}"
+      ocr config set llm.url "${{ vars.OCR_LLM_URL }}"
       ocr config set llm.auth_token "${{ secrets.OCR_LLM_AUTH_TOKEN }}"
-      ocr config set llm.model "${{ secrets.OCR_LLM_MODEL }}"
+      ocr config set llm.model "${{ vars.OCR_LLM_MODEL }}"
   ```
 
 ## セットアップ詳細
