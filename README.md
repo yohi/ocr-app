@@ -202,10 +202,9 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 | 登録先 | 名前 | 説明 |
 | --- | --- | --- |
 | Actions (Secret) | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
-| Actions (Secret) | `GH_APP_ID` | GitHub App の ID（ocr-engine.yml 用） |
-| Actions (Secret) | `GH_APP_PRIVATE_KEY` | Private key の内容 |
+| Actions (Secret) | `GH_APP_PRIVATE_KEY` | GitHub App の秘密鍵 (PEM 形式) |
 | Actions (Secret) | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
-| Actions (Variable) | `GH_APP_ID` | GitHub App の ID（Worker 用・Secret と同じ値） |
+| Actions (Variable) | `GH_APP_ID` | GitHub App の ID（`ocr-engine.yml` および Worker デプロイで使用） |
 | Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
 | Actions (Variable) | `GH_APP_SLUG` | GitHub App の slug（例: `opencodereview-app`） |
 | Actions (Variable) | `GH_CHECK_RUN_NAME` | check run 名（任意・未設定時は `OpenCodeReview`） |
@@ -259,13 +258,13 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `repository_dispatch`（`open_code_review_trigger`） |
-| 必要な Secrets | `GH_APP_ID`, `GH_APP_PRIVATE_KEY`, `OCR_LLM_AUTH_TOKEN` |
-| 設定を推奨する Variables | `OCR_LLM_URL`, `OCR_LLM_MODEL`, `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
+| 必要な Secrets | `GH_APP_PRIVATE_KEY`, `OCR_LLM_AUTH_TOKEN` |
+| 設定を推奨する Variables | `GH_APP_ID`, `OCR_LLM_URL`, `OCR_LLM_MODEL`, `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
 | 任意の Variables | `OCR_LLM_AUTH_HEADER_NAME`, `OCR_LLM_EXTRA_HEADERS` |
 
 1. **GitHub App の設定**:
-   - `GH_APP_ID`: App の ID
-   - `GH_APP_PRIVATE_KEY`: App の秘密鍵（PEM 形式）
+   - `GH_APP_ID`: App の ID（Variables）
+   - `GH_APP_PRIVATE_KEY`: App の秘密鍵（PEM 形式・Secret）
 2. **LLM 接続の設定**:
    - Secrets: `OCR_LLM_AUTH_TOKEN`
    - Variables: `OCR_LLM_URL`, `OCR_LLM_MODEL`
