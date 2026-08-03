@@ -259,14 +259,18 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `repository_dispatch`（`open_code_review_trigger`） |
-| 必要な Secrets | `GH_APP_ID`, `GH_APP_PRIVATE_KEY`, `OCR_LLM_URL`, `OCR_LLM_AUTH_TOKEN`, `OCR_LLM_MODEL` |
-| 任意の Variables | `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
-| 必要な Permissions | `contents: read`, `pull-requests: write`, `issues: write` |
+| 必要な Secrets | `GH_APP_ID`, `GH_APP_PRIVATE_KEY`, `OCR_LLM_AUTH_TOKEN` |
+| 設定を推奨する Variables | `OCR_LLM_URL`, `OCR_LLM_MODEL`, `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
+| 任意の Variables | `OCR_LLM_AUTH_HEADER_NAME`, `OCR_LLM_EXTRA_HEADERS` |
 
-1. [GitHub App の作成と設定](#github-app-の作成と設定) に従って
-   App を作成し、ID と秘密鍵を Secrets に登録します。
-2. OCR で使用する LLM の URL、認証トークン、モデル名を Secrets に登録します。
-3. Anthropic API を使用する場合は Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
+1. **GitHub App の設定**:
+   - `GH_APP_ID`: App の ID
+   - `GH_APP_PRIVATE_KEY`: App の秘密鍵（PEM 形式）
+2. **LLM 接続の設定**:
+   - Secrets: `OCR_LLM_AUTH_TOKEN`
+   - Variables: `OCR_LLM_URL`, `OCR_LLM_MODEL`
+3. **Anthropic API 使用時**: Variables に `OCR_LLM_USE_ANTHROPIC=true` を設定します。
+4. **Cloudflare AI Gateway など独自認証ヘッダー使用時**: Variables に `OCR_LLM_AUTH_HEADER_NAME=cf-aig-authorization` を設定します。
 4. Worker から dispatch されると、以下の処理が実行されます。
    - GitHub App token の発行
    - 対象リポジトリ・コミットの checkout
@@ -300,10 +304,14 @@ LLM を設定します。
 
 | 名前 | 種別 | 説明 |
 | --- | --- | --- |
-| `OCR_LLM_URL` | Secret | LLM API のエンドポイント URL |
-| `OCR_LLM_AUTH_TOKEN` | Secret | API キーまたは認証トークン |
-| `OCR_LLM_MODEL` | Secret | 使用するモデル名 |
-| `OCR_LLM_USE_ANTHROPIC` | Variable | Anthropic API 使用時は `true`、それ以外は `false` |
+| `OCR_LLM_AUTH_TOKEN` | **Secret** | API キーまたは認証トークン（機密情報） |
+| `OCR_LLM_URL` | **Variable** / Secret | LLM API のエンドポイント URL |
+| `OCR_LLM_MODEL` | **Variable** / Secret | 使用するモデル名（例: `dynamic/glm-5.2`） |
+| `OCR_LLM_USE_ANTHROPIC` | **Variable** | Anthropic API 使用時は `true`、それ以外は `false` |
+| `OCR_LLM_AUTH_HEADER_NAME` | **Variable** | （任意）独自認証ヘッダー名（例: `cf-aig-authorization`） |
+| `OCR_LLM_EXTRA_HEADERS` | **Variable** | （任意）その他追加する HTTP ヘッダー（形式: `Key=Value`） |
+
+> **Note**: `OCR_LLM_URL` や `OCR_LLM_MODEL` などの非秘匿情報は **Variables**（`vars.`）での設定を推奨します（互換性のため `secrets.` からの読み込みにも対応しています）。認証トークン（`OCR_LLM_AUTH_TOKEN`）のみ **Secrets** に登録してください。
 
 #### 設定例：Anthropic
 
