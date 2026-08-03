@@ -447,6 +447,9 @@ export default {
             repoName,
             payload.pull_request.head.sha,
           );
+          if (checkRunId === null) {
+            console.warn("Proceeding without a progress check run because createCheckRun returned null");
+          }
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
