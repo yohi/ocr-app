@@ -20,11 +20,16 @@ jobs:
         run: |
           echo "owner=${TARGET_REPO%%/*}" >> "$GITHUB_OUTPUT"
           echo "repo=${TARGET_REPO##*/}" >> "$GITHUB_OUTPUT"
+      - name: Checkout self repository (for scripts)
+        uses: actions/checkout@v4
+        with:
+          path: self-repo
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ vars.GH_APP_ID || secrets.GH_APP_ID }}
+          app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ steps.parse-target.outputs.owner }}
           repositories: ${{ steps.parse-target.outputs.repo }}
@@ -114,11 +119,6 @@ jobs:
             --to "${COMMIT_SHA}" \
             --preview \
             --audience agent
-
-      - name: Checkout self repository (for scripts)
-        uses: actions/checkout@v4
-        with:
-          path: self-repo
 
       - name: Run OCR review
         env:
