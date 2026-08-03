@@ -11,6 +11,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Build vars list
+        id: build-vars
+        run: |
+          list="GITHUB_APP_ID"
+          [ -n "${{ vars.GH_APP_SLUG }}" ] && list="$list"$'\n'"GITHUB_APP_SLUG"
+          [ -n "${{ vars.GH_TARGET_DISPATCH_REPO }}" ] && list="$list"$'\n'"TARGET_DISPATCH_REPO"
+          [ -n "${{ vars.GH_CHECK_RUN_NAME }}" ] && list="$list"$'\n'"CHECK_RUN_NAME"
+          [ -n "${{ vars.GH_CHECK_RUN_DETAILS_URL }}" ] && list="$list"$'\n'"CHECK_RUN_DETAILS_URL"
+          {
+            echo "vars<<EOF"
+            echo "$list"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloudflare Workers
         uses: cloudflare/wrangler-action@v3
         with:
@@ -19,17 +33,12 @@ jobs:
           secrets: |
             GITHUB_APP_PRIVATE_KEY
             WEBHOOK_SECRET
-          vars: |
-            GITHUB_APP_ID
-            TARGET_DISPATCH_REPO
-            GITHUB_APP_SLUG
-            CHECK_RUN_NAME
-            CHECK_RUN_DETAILS_URL
+          vars: ${{ steps.build-vars.outputs.vars }}
         env:
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           GITHUB_APP_ID: ${{ vars.GH_APP_ID }}
-          TARGET_DISPATCH_REPO: ${{ vars.GH_TARGET_DISPATCH_REPO }}
           GITHUB_APP_SLUG: ${{ vars.GH_APP_SLUG }}
+          TARGET_DISPATCH_REPO: ${{ vars.GH_TARGET_DISPATCH_REPO }}
           CHECK_RUN_NAME: ${{ vars.GH_CHECK_RUN_NAME }}
           CHECK_RUN_DETAILS_URL: ${{ vars.GH_CHECK_RUN_DETAILS_URL }}
