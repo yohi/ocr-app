@@ -20,11 +20,16 @@ jobs:
         run: |
           echo "owner=${TARGET_REPO%%/*}" >> "$GITHUB_OUTPUT"
           echo "repo=${TARGET_REPO##*/}" >> "$GITHUB_OUTPUT"
+      - name: Checkout self repository (for scripts)
+        uses: actions/checkout@v4
+        with:
+          path: self-repo
+
       - name: Generate GitHub App token
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.GH_APP_ID }}
+          app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ steps.parse-target.outputs.owner }}
           repositories: ${{ steps.parse-target.outputs.repo }}
@@ -63,11 +68,36 @@ jobs:
         run: npm install -g @alibaba-group/open-code-review@latest
 
       - name: Configure OCR
+        env:
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
+          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
+          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
         run: |
-          ocr config set llm.url "${{ secrets.OCR_LLM_URL }}"
-          ocr config set llm.auth_token "${{ secrets.OCR_LLM_AUTH_TOKEN }}"
-          ocr config set llm.model "${{ secrets.OCR_LLM_MODEL }}"
-          ocr config set llm.use_anthropic "${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}"
+          ocr config set llm.url "${OCR_LLM_URL}"
+          ocr config set llm.model "${OCR_LLM_MODEL}"
+          ocr config set llm.use_anthropic "${OCR_LLM_USE_ANTHROPIC}"
+          
+          EXTRA_HEADERS=""
+          if [ -n "${OCR_LLM_AUTH_HEADER_NAME}" ]; then
+            EXTRA_HEADERS="${OCR_LLM_AUTH_HEADER_NAME}=Bearer ${OCR_LLM_AUTH_TOKEN}"
+          else
+            ocr config set llm.auth_token "${OCR_LLM_AUTH_TOKEN}"
+          fi
+
+          if [ -n "${OCR_LLM_EXTRA_HEADERS}" ]; then
+            if [ -n "${EXTRA_HEADERS}" ]; then
+              EXTRA_HEADERS="${EXTRA_HEADERS},${OCR_LLM_EXTRA_HEADERS}"
+            else
+              EXTRA_HEADERS="${OCR_LLM_EXTRA_HEADERS}"
+            fi
+          fi
+
+          if [ -n "${EXTRA_HEADERS}" ]; then
+            ocr config set llm.extra_headers "${EXTRA_HEADERS}"
+          fi
           ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
 
       - name: Test OCR LLM connection
@@ -89,11 +119,6 @@ jobs:
             --to "${COMMIT_SHA}" \
             --preview \
             --audience agent
-
-      - name: Checkout self repository (for scripts)
-        uses: actions/checkout@v4
-        with:
-          path: self-repo
 
       - name: Run OCR review
         env:
