@@ -5,4 +5,12 @@ compatibility_flags = ["nodejs_compat"]
 
 # 環境変数・Secrets は deploy-cloudflare-worker.yml が自動設定します（手動登録・編集は不要）。
 # - Secrets: GITHUB_APP_PRIVATE_KEY, WEBHOOK_SECRET（Actions の Secrets から）
-# - Vars:    GITHUB_APP_ID, TARGET_DISPATCH_REPO, GITHUB_APP_SLUG（Actions の Repository Variables から）
+# - Vars:    GITHUB_APP_ID, TARGET_DISPATCH_REPO, GITHUB_APP_SLUG, CHECK_RUN_NAME, CHECK_RUN_DETAILS_URL
+#             （Actions の Repository Variables から。未設定時は下記のデフォルト値が使用されます）
+
+[vars]
+GITHUB_APP_ID = ""
+TARGET_DISPATCH_REPO = "yohi/ocr-app"
+GITHUB_APP_SLUG = ""
+CHECK_RUN_NAME = "OpenCodeReview"
+CHECK_RUN_DETAILS_URL = ""
