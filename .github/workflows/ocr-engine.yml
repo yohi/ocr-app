@@ -78,13 +78,12 @@ jobs:
         run: |
           ocr config set llm.url "${OCR_LLM_URL}"
           ocr config set llm.model "${OCR_LLM_MODEL}"
+          ocr config set llm.auth_token "${OCR_LLM_AUTH_TOKEN}"
           ocr config set llm.use_anthropic "${OCR_LLM_USE_ANTHROPIC}"
           
           EXTRA_HEADERS=""
           if [ -n "${OCR_LLM_AUTH_HEADER_NAME}" ]; then
             EXTRA_HEADERS="${OCR_LLM_AUTH_HEADER_NAME}=Bearer ${OCR_LLM_AUTH_TOKEN}"
-          else
-            ocr config set llm.auth_token "${OCR_LLM_AUTH_TOKEN}"
           fi
 
           if [ -n "${OCR_LLM_EXTRA_HEADERS}" ]; then
