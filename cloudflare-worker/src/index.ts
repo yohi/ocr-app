@@ -282,6 +282,21 @@ async function createCheckRun(
   }
 }
 
+
+async function createCheckRunWithWarn(
+  env: Env,
+  token: string,
+  repoOwner: string,
+  repoName: string,
+  headSha: string,
+): Promise<number | null> {
+  const checkRunId = await createCheckRun(env, token, repoOwner, repoName, headSha);
+  if (checkRunId === null) {
+    console.warn("Proceeding without a progress check run because createCheckRun returned null");
+  }
+  return checkRunId;
+}
+
 async function sendRepositoryDispatch(
   env: Env,
   token: string,
@@ -440,16 +455,13 @@ export default {
           const repoName = payload.repository.name;
           const prNumber = payload.number;
           const token = await getInstallationToken(env, payload.installation.id);
-          const checkRunId = await createCheckRun(
+          const checkRunId = await createCheckRunWithWarn(
             env,
             token,
             repoOwner,
             repoName,
             payload.pull_request.head.sha,
           );
-          if (checkRunId === null) {
-            console.warn("Proceeding without a progress check run because createCheckRun returned null");
-          }
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
@@ -525,13 +537,21 @@ export default {
             return new Response("Invalid pull request response", { status: 502 });
           }
 
+          const checkRunId = await createCheckRunWithWarn(
+            env,
+            token,
+            repoOwner,
+            repoName,
+            pullRequestPayload.head.sha,
+          );
+
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,
             installation_id: payload.installation.id,
-            check_run_id: null,
+            check_run_id: checkRunId,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;

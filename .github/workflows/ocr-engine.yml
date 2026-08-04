@@ -55,6 +55,7 @@ jobs:
         run: |
           REPO="${TARGET_REPO}"
           CHECK_RUN_ID="${CHECK_RUN_ID}"
+          echo "Marking check run ${CHECK_RUN_ID} in_progress for ${REPO}"
           curl -sS -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -182,6 +183,7 @@ jobs:
           REPO="${TARGET_REPO}"
           CHECK_RUN_ID="${CHECK_RUN_ID}"
           CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
+          echo "Marking check run ${CHECK_RUN_ID} completed (${CONCLUSION}) for ${REPO}"
           curl -sS -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
