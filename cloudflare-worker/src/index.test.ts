@@ -144,7 +144,7 @@ describe("issue_comment mention flow", () => {
     vi.restoreAllMocks();
   });
 
-  it("adds reaction, creates check run before fetching pull request and dispatches", async () => {
+  it("adds reaction, fetches pull request, creates check run, and dispatches", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
       .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" }, base: { ref: "main" } }) }) // PR
@@ -162,6 +162,9 @@ describe("issue_comment mention flow", () => {
     expect((reactionCall[1] as RequestInit | undefined)?.method).toBe("POST");
     expect((reactionCall[1] as RequestInit | undefined)?.body).toBe(JSON.stringify({ content: "eyes" }));
     expect(prCall[0]).toBe("https://api.github.com/repos/owner/repo/pulls/1");
+    const checkRunBody = JSON.parse((checkRunCall[1] as RequestInit | undefined)?.body as string);
+    expect(checkRunBody.status).toBe("queued");
+    expect(checkRunBody.head_sha).toBe("abc123");
     expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
     expect((checkRunCall[1] as RequestInit | undefined)?.method).toBe("POST");
     expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
@@ -190,6 +193,30 @@ describe("issue_comment mention flow", () => {
     expect(dispatchCall[0]).toContain("/dispatches");
     const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
     expect(dispatchBody.client_payload.check_run_id).toBe(98765);
+  });
+
+  it("dispatches successfully when check run creation returns null", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" }, base: { ref: "main" } }) }) // PR
+      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "Internal Server Error" }) // create check run fails
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
+
+    const body = JSON.stringify(basePayload);
+    const request = createIssueCommentRequest(basePayload, await calculateSignature(env.WEBHOOK_SECRET, body));
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    const [, , checkRunCall, dispatchCall] = fetchMock.mock.calls;
+    expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
+    expect((checkRunCall[1] as RequestInit | undefined)?.method).toBe("POST");
+    expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
+    const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
+    expect(dispatchBody.event_type).toBe("open_code_review_trigger");
+    expect(dispatchBody.client_payload.check_run_id).toBeNull();
+    expect(dispatchBody.client_payload.base_ref).toBe("main");
+    expect(dispatchBody.client_payload.commit_sha).toBe("abc123");
   });
 
   it("returns 502 when pull request head.sha is empty", async () => {
