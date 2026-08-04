@@ -99,10 +99,12 @@ sequenceDiagram
     CW->>CW: コメント本文から mention を検出
     CW->>GH: GitHub App token 発行
     CW->>GH: GET /repos/{owner}/{repo}/pulls/{number}
+    CW->>GH: POST /repos/{owner}/{repo}/check-runs
     CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
     CR->>GH: GitHub App token 発行
     CR->>TR: 対象リポジトリ・コミットを checkout
     CR->>CR: npm install & ocr review 実行
+    CR->>GH: PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}
     CR->>TR: レビューコメントを PR に投稿
 ```
 
@@ -114,11 +116,17 @@ sequenceDiagram
    - `issue_comment` イベントのうち `created` のみを処理します。
    - `issue.pull_request` の存在を確認し、PR コメントのみを対象とします。
    - コメント本文から `@<GITHUB_APP_SLUG>(?:\[bot\])?\s+review` のパターンを検出します。
-3. **PR 詳細の取得**
+3. **PR 詳細の取得と Check run の作成**
    - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
      最新の `head.sha` と `base.ref` を取得します。
+   - 取得した `head.sha` を使って `POST /repos/{owner}/{repo}/check-runs` で
+     queued 状態の check run を作成します。
+     check run 名は `CHECK_RUN_NAME`（未設定時は `OpenCodeReview`）です。
    - 取得した `base.ref` は `base_ref` として `repository_dispatch` の payload に含まれます。
+   - 作成した check run の ID は `check_run_id` として payload に含まれ、
+     `ocr-engine.yml` により in_progress → completed に更新されます。
 4. **`repository_dispatch` の送信**
+   - `check_run_id` も含めて `open_code_review_trigger` タイプの dispatch を送信します。
    - 以降のフローは「GitHub Apps 経由の実行フロー」の Step 3 以降と同じです。
 
 ## GitHub App の作成と設定

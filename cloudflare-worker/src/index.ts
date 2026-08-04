@@ -525,13 +525,24 @@ export default {
             return new Response("Invalid pull request response", { status: 502 });
           }
 
+          const checkRunId = await createCheckRun(
+            env,
+            token,
+            repoOwner,
+            repoName,
+            pullRequestPayload.head.sha,
+          );
+          if (checkRunId === null) {
+            console.warn("Proceeding without a progress check run because createCheckRun returned null");
+          }
+
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,
             installation_id: payload.installation.id,
-            check_run_id: null,
+            check_run_id: checkRunId,
           });
           if (dispatchResponse !== null) {
             return dispatchResponse;
