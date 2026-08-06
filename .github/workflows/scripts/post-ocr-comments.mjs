@@ -191,6 +191,19 @@ async function postSkipComment({ githubApi, prNumber, message }) {
   return 0;
 }
 
+async function postFailureComment({ githubApi, prNumber, message }) {
+  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
+    body: message,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to post failure comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log('Posted failure comment to PR');
+  return 0;
+}
+
+
 async function postSummaryComment({ comments, githubApi, ocrSummary, prNumber }) {
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: buildSummaryBody(comments, ocrSummary),
@@ -371,6 +384,13 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       ? `\u23ED\uFE0F OpenCodeReview skipped: ${result.message}`
       : '\u23ED\uFE0F OpenCodeReview skipped: No supported files changed.';
     return postSkipComment({ githubApi, prNumber: config.prNumber, message: skipMessage });
+  }
+
+  if (result.status === 'failed') {
+    const failureMessage = result.message || 'OpenCodeReview failed to complete the review.';
+    const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n` +
+      `If this persists, please check your LLM configuration and API key.`;
+    return postFailureComment({ githubApi, prNumber: config.prNumber, message: commentBody });
   }
 
   if (!Array.isArray(result.comments)) {

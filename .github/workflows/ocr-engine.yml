@@ -98,7 +98,9 @@ jobs:
           if [ -n "${EXTRA_HEADERS}" ]; then
             ocr config set llm.extra_headers "${EXTRA_HEADERS}"
           fi
-          ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
+          # Note: Anthropic-specific parameter; disabled for non-Anthropic providers
+          # ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
+
 
       - name: Test OCR LLM connection
         continue-on-error: true
