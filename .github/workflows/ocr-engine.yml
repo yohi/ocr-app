@@ -135,6 +135,7 @@ jobs:
             --audience agent
 
       - name: Run OCR review
+        continue-on-error: true
         env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
@@ -154,6 +155,8 @@ jobs:
             --background "PR #${PR_NUMBER}" \
             --format json \
             --audience agent \
+            --max-tools 50 \
+            --concurrency 1 \
             > /tmp/ocr-result.json 2> >(tee /tmp/ocr-stderr.log >&2)
 
       - name: Post review comments
