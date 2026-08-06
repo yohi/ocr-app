@@ -633,6 +633,7 @@ test('posts a failure comment when OCR status is failed with a message', async (
   assert.equal(requests[0].method, 'POST');
   assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
   assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: LLM connection timeout.'));
+  assert.ok(requests[0].body.body.includes('If this persists, please check your LLM configuration and API key.'));
 });
 
 test('posts a default failure comment when OCR status is failed without a message', async () => {
@@ -647,6 +648,7 @@ test('posts a default failure comment when OCR status is failed without a messag
   assert.equal(exitCode, 0);
   assert.equal(requests.length, 1);
   assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: OpenCodeReview failed to complete the review.'));
+  assert.ok(requests[0].body.body.includes('If this persists, please check your LLM configuration and API key.'));
 });
 
 test('returns one when posting failure comment fails', async () => {
