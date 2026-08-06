@@ -1,5 +1,7 @@
 # OpenCodeReview GitHub App Backend (ocr-app)
 
+<!-- Test: verify check run details_url -->
+
 このリポジトリは、Alibaba 製 AI コードレビューツール **OpenCodeReview (OCR)** を
 GitHub App (Zero-YAML 構成) として提供するための専用バックエンドリポジトリです。
 
