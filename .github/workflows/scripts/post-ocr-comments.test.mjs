@@ -618,3 +618,46 @@ test('truncates summary comment body to stay within 65536 characters while prese
   assert.match(body, /\n\n---\n\*Posted by OpenCodeReview\*$/);
   assert.match(body, /\.{3}（残りは省略）\n```+\n\n---\n\*Posted by OpenCodeReview\*$/);
 });
+
+test('posts a failure comment when OCR status is failed with a message', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'failed', message: 'LLM connection timeout.', comments: null },
+    [{ data: { id: 1 }, status: 201 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+  assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: LLM connection timeout.'));
+});
+
+test('posts a default failure comment when OCR status is failed without a message', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'failed', comments: null },
+    [{ data: { id: 1 }, status: 201 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: OpenCodeReview failed to complete the review.'));
+});
+
+test('returns one when posting failure comment fails', async () => {
+  // Given
+  // When
+  const { exitCode, requests } = await runWithResult(
+    { status: 'failed', message: 'Error', comments: null },
+    [{ data: { message: 'Forbidden' }, status: 403 }],
+  );
+
+  // Then
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+});
