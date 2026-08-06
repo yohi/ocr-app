@@ -52,15 +52,17 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           REPO="${TARGET_REPO}"
           CHECK_RUN_ID="${CHECK_RUN_ID}"
+          DETAILS_URL="${WORKFLOW_RUN_URL}"
           echo "Marking check run ${CHECK_RUN_ID} in_progress for ${REPO}"
           curl -sS -X PATCH \
             -H "Authorization: token $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
-            -d '{"status":"in_progress"}'
+            -d "{\"status\":\"in_progress\",\"details_url\":\"${DETAILS_URL}\"}"
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
