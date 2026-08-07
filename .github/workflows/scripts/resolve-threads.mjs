@@ -17,7 +17,7 @@
  */
 
 import fs from 'node:fs';
-import { resolve, join } from 'node:path';
+import { resolve, join, relative, isAbsolute } from 'node:path';
 import https from 'node:https';
 import { pathToFileURL } from 'node:url';
 
@@ -67,7 +67,7 @@ export function parseLlmResponse(rawText) {
   try {
     const data = JSON.parse(cleaned);
     return {
-      resolved: Boolean(data.resolved),
+      resolved: data.resolved === true,
       reason: typeof data.reason === 'string' ? data.reason : '',
     };
   } catch (error) {
@@ -147,14 +147,23 @@ export function buildResolveMutation(threadId) {
 }
 
 export function extractCodeContext(targetDir, filePath) {
-  const fullPath = join(targetDir, filePath);
-  if (!fs.existsSync(fullPath)) {
-    return null;
-  }
   try {
-    return fs.readFileSync(fullPath, 'utf-8');
+    const resolvedTarget = fs.realpathSync(targetDir);
+    const fullPath = join(targetDir, filePath);
+    const resolvedPath = fs.realpathSync(fullPath);
+
+    const rel = relative(resolvedTarget, resolvedPath);
+    if (rel.startsWith('..') || isAbsolute(rel)) {
+      return null;
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (!stat.isFile()) {
+      return null;
+    }
+
+    return fs.readFileSync(resolvedPath, 'utf-8');
   } catch (error) {
-    console.warn(`Failed to read file ${filePath}: ${error.message}`);
     return null;
   }
 }
@@ -242,9 +251,15 @@ export async function callLlmEvaluation({ prompt, llmConfig }) {
     'Content-Type': 'application/json',
   };
 
+  if (isAnthropic) {
+    headers['anthropic-version'] = '2023-06-01';
+  }
+
   if (llmConfig.authToken) {
     if (llmConfig.authHeaderName) {
       headers[llmConfig.authHeaderName] = `Bearer ${llmConfig.authToken}`;
+    } else if (isAnthropic) {
+      headers['x-api-key'] = llmConfig.authToken;
     } else {
       headers['Authorization'] = `Bearer ${llmConfig.authToken}`;
     }
@@ -277,6 +292,7 @@ export async function callLlmEvaluation({ prompt, llmConfig }) {
       method: 'POST',
       headers,
       body: JSON.stringify(bodyData),
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -350,8 +366,16 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       const replyBody = `✅ HEADで解決が確認されたため、スレッドを解決済みにしました。\n理由: ${evaluation.reason}\n\n---\n*Auto-resolved by OpenCodeReview*`;
 
       try {
-        await executeGraphQLQuery(config.token, buildReplyMutation(thread.id, replyBody));
-        await executeGraphQLQuery(config.token, buildResolveMutation(thread.id));
+        const replyResult = await executeGraphQLQuery(config.token, buildReplyMutation(thread.id, replyBody));
+        if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
+          throw new Error(`Reply mutation failed: ${JSON.stringify(replyResult.errors || replyResult)}`);
+        }
+
+        const resolveResult = await executeGraphQLQuery(config.token, buildResolveMutation(thread.id));
+        if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
+          throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
+        }
+
         resolvedCount++;
       } catch (err) {
         console.error(`Failed to resolve thread ${thread.id}: ${err.message}`);

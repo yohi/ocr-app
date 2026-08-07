@@ -55,3 +55,18 @@ test('extractCodeContext loads file snippet correctly', () => {
   const snippet = extractCodeContext('.', 'README.md');
   assert.ok(typeof snippet === 'string');
 });
+
+test('parseLlmResponse returns resolved: false for non-boolean resolved property like "false" or "true"', () => {
+  const inputFalse = '{"resolved": "false", "reason": "Not fixed"}';
+  const resultFalse = parseLlmResponse(inputFalse);
+  assert.equal(resultFalse.resolved, false);
+
+  const inputTrueString = '{"resolved": "true", "reason": "Fixed"}';
+  const resultTrueString = parseLlmResponse(inputTrueString);
+  assert.equal(resultTrueString.resolved, false);
+});
+
+test('extractCodeContext prevents path traversal outside target directory', () => {
+  const snippet = extractCodeContext('.', '../README.md');
+  assert.equal(snippet, null);
+});
