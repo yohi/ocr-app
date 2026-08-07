@@ -78,6 +78,7 @@ jobs:
           OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
           OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
           OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
+          OCR_LLM_EXTRA_BODY: ${{ vars.OCR_LLM_EXTRA_BODY || secrets.OCR_LLM_EXTRA_BODY }}
         run: |
           ocr config set llm.url "${OCR_LLM_URL}"
           ocr config set llm.model "${OCR_LLM_MODEL}"
@@ -100,8 +101,10 @@ jobs:
           if [ -n "${EXTRA_HEADERS}" ]; then
             ocr config set llm.extra_headers "${EXTRA_HEADERS}"
           fi
-          # Note: Anthropic-specific parameter; disabled for non-Anthropic providers
-          # ocr config set llm.extra_body '{"thinking": {"type": "disabled"}}'
+
+          if [ -n "${OCR_LLM_EXTRA_BODY}" ]; then
+            ocr config set llm.extra_body "${OCR_LLM_EXTRA_BODY}"
+          fi
 
 
       - name: Test OCR LLM connection
@@ -137,7 +140,6 @@ jobs:
             --audience agent
 
       - name: Run OCR review
-        continue-on-error: true
         env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
@@ -148,6 +150,7 @@ jobs:
           OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
           OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
           OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
+          OCR_MAX_TOOLS: ${{ vars.OCR_MAX_TOOLS || '15' }}
         run: |
           set -o pipefail
           ocr review \
@@ -157,7 +160,7 @@ jobs:
             --background "PR #${PR_NUMBER}" \
             --format json \
             --audience agent \
-            --max-tools 50 \
+            --max-tools "${OCR_MAX_TOOLS}" \
             --concurrency 1 \
             > /tmp/ocr-result.json 2> >(tee /tmp/ocr-stderr.log >&2)
 

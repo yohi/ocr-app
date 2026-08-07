@@ -390,7 +390,11 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     const failureMessage = result.message || 'OpenCodeReview failed to complete the review.';
     const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n` +
       `If this persists, please check your LLM configuration and API key.`;
-    return postFailureComment({ githubApi, prNumber: config.prNumber, message: commentBody });
+    const exitCode = await postFailureComment({ githubApi, prNumber: config.prNumber, message: commentBody });
+    if (exitCode !== 0) {
+      return exitCode;
+    }
+    return 1;
   }
 
   if (!Array.isArray(result.comments)) {

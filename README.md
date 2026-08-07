@@ -269,7 +269,7 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 | トリガー | `repository_dispatch`（`open_code_review_trigger`） |
 | 必要な Secrets | `GH_APP_PRIVATE_KEY`, `OCR_LLM_AUTH_TOKEN` |
 | 設定を推奨する Variables | `GH_APP_ID`, `OCR_LLM_URL`, `OCR_LLM_MODEL`, `OCR_LLM_USE_ANTHROPIC`（未設定時は `false`） |
-| 任意の Variables | `OCR_LLM_AUTH_HEADER_NAME`, `OCR_LLM_EXTRA_HEADERS` |
+| 任意の Variables | `OCR_LLM_AUTH_HEADER_NAME`, `OCR_LLM_EXTRA_HEADERS`, `OCR_LLM_EXTRA_BODY`, `OCR_MAX_TOOLS`（未設定時は `15`） |
 
 1. **GitHub App の設定**:
    - `GH_APP_ID`: App の ID（Variables）
