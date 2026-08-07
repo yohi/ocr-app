@@ -164,6 +164,23 @@ jobs:
             --concurrency 1 \
             > /tmp/ocr-result.json 2> >(tee /tmp/ocr-stderr.log >&2)
 
+      - name: Resolve fixed review threads
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
+          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
+          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
+        run: |
+          node self-repo/.github/workflows/scripts/resolve-threads.mjs \
+            --repo "${{ github.event.client_payload.target_repo }}" \
+            --pr "${{ github.event.client_payload.pr_number }}" \
+            --target-dir "target-repo"
+
       - name: Post review comments
         if: always()
         env:
