@@ -11,7 +11,7 @@ import {
 } from './resolve-threads.mjs';
 
 test('createConfig parses CLI args and token correctly', () => {
-  const args = ['--repo', 'owner/repo', '--pr', '123', '--target-dir', 'target-repo'];
+  const args = ['--repo', 'owner/repo', '--pr', '123', '--target-dir', 'target-repo', '--auto-resolve'];
   const config = createConfig(args, 'test-token');
   assert.equal(config.repo, 'owner/repo');
   assert.equal(config.owner, 'owner');
@@ -19,6 +19,7 @@ test('createConfig parses CLI args and token correctly', () => {
   assert.equal(config.prNumber, 123);
   assert.equal(config.targetDir, 'target-repo');
   assert.equal(config.token, 'test-token');
+  assert.equal(config.autoResolve, true);
 });
 
 test('parseLlmResponse parses valid JSON with resolved boolean', () => {

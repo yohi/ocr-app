@@ -32,9 +32,10 @@ export function createConfig(args, token) {
   const repo = getArg(args, 'repo');
   const prRaw = getArg(args, 'pr');
   const targetDir = getArg(args, 'target-dir') || '.';
+  const autoResolve = args.includes('--auto-resolve');
 
   if (!repo || !prRaw) {
-    throw new CliError('Usage: node resolve-threads.mjs --repo owner/repo --pr <num> [--target-dir <path>]');
+    throw new CliError('Usage: node resolve-threads.mjs --repo owner/repo --pr <num> [--target-dir <path>] [--auto-resolve]');
   }
 
   const prNumber = parseInt(prRaw, 10);
@@ -51,7 +52,7 @@ export function createConfig(args, token) {
     throw new CliError('Repo must be in format owner/name');
   }
 
-  return { owner, name, repo, prNumber, targetDir, token };
+  return { owner, name, repo, prNumber, targetDir, token, autoResolve };
 }
 
 export function parseLlmResponse(rawText) {
@@ -369,7 +370,9 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     if (evaluation.resolved) {
       console.log(`Thread ${thread.id} (${thread.path}:${thread.line}) evaluated as RESOLVED: ${evaluation.reason}`);
 
-      const replyBody = `✅ HEADで解決が確認されたため、スレッドを解決済みにしました。\n理由: ${evaluation.reason}\n\n---\n*Auto-resolved by OpenCodeReview*`;
+      const replyBody = config.autoResolve
+        ? `✅ HEADで修正が確認されたため、スレッドを解決済みに変更しました。\n理由: ${evaluation.reason}\n\n---\n*Auto-resolved by OpenCodeReview*`
+        : `💡 HEADでの修正をLLMが確認しました。\n理由: ${evaluation.reason}\n\n※ スレッドの自動解決（resolveReviewThread）には明示的な --auto-resolve オプションまたはメンテナーの承認が必要です。\n\n---\n*Evaluated by OpenCodeReview*`;
 
       try {
         const replyResult = await executeGraphQLQuery(config.token, buildReplyMutation(thread.id, replyBody));
@@ -377,14 +380,16 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
           throw new Error(`Reply mutation failed: ${JSON.stringify(replyResult.errors || replyResult)}`);
         }
 
-        const resolveResult = await executeGraphQLQuery(config.token, buildResolveMutation(thread.id));
-        if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
-          throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
+        // Only invoke resolveReviewThread mutation when explicit --auto-resolve option is enabled
+        if (config.autoResolve) {
+          const resolveResult = await executeGraphQLQuery(config.token, buildResolveMutation(thread.id));
+          if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
+            throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
+          }
+          resolvedCount++;
         }
-
-        resolvedCount++;
       } catch (err) {
-        console.error(`Failed to resolve thread ${thread.id}: ${err.message}`);
+        console.error(`Failed to process thread ${thread.id}: ${err.message}`);
       }
     }
   }
