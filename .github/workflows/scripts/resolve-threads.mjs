@@ -10,6 +10,7 @@
  *   GITHUB_TOKEN - GitHub API token (required)
  *   OCR_LLM_URL - LLM endpoint URL
  *   OCR_LLM_MODEL - LLM model identifier
+ *   RESOLVE_LLM_MODEL - LLM model identifier specifically for resolve evaluation (optional, falls back to OCR_LLM_MODEL)
  *   OCR_LLM_AUTH_TOKEN - Auth token for LLM API
  *   OCR_LLM_EXTRA_HEADERS - Custom extra headers (key1=val1,key2=val2)
  *   OCR_LLM_AUTH_HEADER_NAME - Custom auth header name (e.g. x-api-key)
@@ -349,7 +350,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
 
   const llmConfig = {
     url: env.OCR_LLM_URL,
-    model: env.OCR_LLM_MODEL,
+    model: env.RESOLVE_LLM_MODEL || env.OCR_LLM_MODEL,
     authToken: env.OCR_LLM_AUTH_TOKEN,
     extraHeaders: env.OCR_LLM_EXTRA_HEADERS,
     authHeaderName: env.OCR_LLM_AUTH_HEADER_NAME,
