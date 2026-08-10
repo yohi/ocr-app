@@ -160,11 +160,15 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
           proxyRes.on('data', (chunk) => errBody += chunk);
           proxyRes.on('end', () => {
             console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]:`, errBody);
+            if (!res.headersSent) {
+              res.writeHead(proxyRes.statusCode, proxyRes.headers);
+              res.end(errBody);
+            }
           });
+        } else {
+          res.writeHead(proxyRes.statusCode, proxyRes.headers);
+          proxyRes.pipe(res, { end: true });
         }
-
-        res.writeHead(proxyRes.statusCode, proxyRes.headers);
-        proxyRes.pipe(res, { end: true });
       });
 
       proxyReq.on('error', (error) => {
