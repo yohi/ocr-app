@@ -45,6 +45,17 @@ test('transformPayload converts role: "tool" and role: "function" to role: "user
   assert.equal(output.messages[4].role, 'user');
 });
 
+test('transformPayload caps max_completion_tokens to 32768 when greater than 32768', () => {
+  const input = {
+    model: 'llama-3.3-70b-versatile',
+    max_completion_tokens: 65536,
+    messages: [{ role: 'user', content: 'test' }],
+  };
+
+  const output = transformPayload(input);
+  assert.equal(output.max_completion_tokens, 32768);
+});
+
 test('createProxyServer intercepts and transforms request body before forwarding upstream', async () => {
   let receivedUpstreamBody = null;
 

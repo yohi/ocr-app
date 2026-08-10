@@ -74,10 +74,16 @@ export function transformPayload(payload) {
     return msg;
   });
 
-  return {
+  const cleanedPayload = {
     ...payload,
     messages: transformedMessages,
   };
+
+  if (typeof cleanedPayload.max_completion_tokens === 'number' && cleanedPayload.max_completion_tokens > 32768) {
+    cleanedPayload.max_completion_tokens = 32768;
+  }
+
+  return cleanedPayload;
 }
 
 /**
