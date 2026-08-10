@@ -79,7 +79,7 @@ jobs:
           REAL_OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
           LLM_PROXY_PORT: '8080'
         run: |
-          NODE_UNBUFFERED=1 node self-repo/.github/workflows/scripts/llm-proxy.mjs 2>&1 &
+          NODE_UNBUFFERED=1 node self-repo/.github/workflows/scripts/llm-proxy.mjs > /tmp/llm-proxy.log 2>&1 &
           sleep 1
 
       - name: Configure OCR
@@ -214,6 +214,7 @@ jobs:
           path: |
             /tmp/ocr-result.json
             /tmp/ocr-stderr.log
+            /tmp/llm-proxy.log
           if-no-files-found: ignore
       - name: Update Check Run completed
         if: always() && github.event.client_payload.check_run_id != null
