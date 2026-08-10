@@ -159,7 +159,7 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
           let errBody = '';
           proxyRes.on('data', (chunk) => errBody += chunk);
           proxyRes.on('end', () => {
-            console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]:`, errBody);
+            console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]: ${errBody}`);
             if (!res.headersSent) {
               res.writeHead(proxyRes.statusCode, proxyRes.headers);
               res.end(errBody);
