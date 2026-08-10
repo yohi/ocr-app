@@ -248,13 +248,17 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
 }
 
 export async function callLlmEvaluation({ prompt, llmConfig }) {
-  const url = llmConfig.url;
+  let url = llmConfig.url;
   if (!url) {
     console.warn('OCR_LLM_URL is not set. Skipping LLM evaluation.');
     return { resolved: false, reason: 'LLM URL not configured' };
   }
 
+  // Anthropic APIでない場合、URLの末尾スラッシュを除去した上で /chat/completions を自動付与
   const isAnthropic = llmConfig.useAnthropic === 'true';
+  if (!isAnthropic && !url.includes('/chat/completions')) {
+    url = url.replace(/\/+$/, '') + '/chat/completions';
+  }
   const headers = {
     'Content-Type': 'application/json',
   };
