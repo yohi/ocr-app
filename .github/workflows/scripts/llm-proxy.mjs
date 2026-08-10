@@ -79,8 +79,9 @@ export function transformPayload(payload) {
     messages: transformedMessages,
   };
 
-  if (typeof cleanedPayload.max_completion_tokens === 'number' && cleanedPayload.max_completion_tokens > 32768) {
-    cleanedPayload.max_completion_tokens = 32768;
+  const envMaxTokens = process.env.MAX_COMPLETION_TOKENS ? parseInt(process.env.MAX_COMPLETION_TOKENS, 10) : null;
+  if (envMaxTokens && !isNaN(envMaxTokens) && typeof cleanedPayload.max_completion_tokens === 'number' && cleanedPayload.max_completion_tokens > envMaxTokens) {
+    cleanedPayload.max_completion_tokens = envMaxTokens;
   }
 
   return cleanedPayload;

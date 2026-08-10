@@ -78,6 +78,7 @@ jobs:
         env:
           REAL_OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
           LLM_PROXY_PORT: '8080'
+          MAX_COMPLETION_TOKENS: ${{ vars.MAX_COMPLETION_TOKENS || secrets.MAX_COMPLETION_TOKENS || '32768' }}
         run: |
           NODE_UNBUFFERED=1 node self-repo/.github/workflows/scripts/llm-proxy.mjs > /tmp/llm-proxy.log 2>&1 &
           sleep 1
