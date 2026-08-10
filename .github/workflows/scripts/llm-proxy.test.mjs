@@ -113,3 +113,90 @@ test('createProxyServer intercepts and transforms request body before forwarding
   assert.equal(receivedUpstreamBody.messages[1].role, 'user');
   assert.ok(receivedUpstreamBody.messages[1].content.includes('file content'));
 });
+
+test('createProxyServer correctly appends /chat/completions if targetUrl is a base URL', async () => {
+  let requestedPath = null;
+
+  const mockUpstream = http.createServer((req, res) => {
+    requestedPath = req.url;
+    const resPayload = JSON.stringify({ status: 'ok' });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(resPayload),
+    });
+    res.end(resPayload);
+  });
+
+  await new Promise((resolve) => mockUpstream.listen(0, '127.0.0.1', resolve));
+  activeServers.push(mockUpstream);
+  const upstreamPort = mockUpstream.address().port;
+  // Base URL without /chat/completions
+  const upstreamBaseUrl = `http://127.0.0.1:${upstreamPort}/openai/v1`;
+
+  const proxyServer = await createProxyServer({ targetUrl: upstreamBaseUrl, port: 0 });
+  activeServers.push(proxyServer);
+  const proxyPort = proxyServer.address().port;
+
+  await new Promise((resolve, reject) => {
+    const req = http.request(
+      `http://127.0.0.1:${proxyPort}/chat/completions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      (res) => {
+        let resBody = '';
+        res.on('data', (chunk) => resBody += chunk);
+        res.on('end', () => resolve());
+      }
+    );
+    req.on('error', reject);
+    req.write(JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }));
+    req.end();
+  });
+
+  assert.equal(requestedPath, '/openai/v1/chat/completions');
+});
+
+test('createProxyServer preserves query params and normalizes existing /chat/completions/ suffix without duplicating it', async () => {
+  let requestedPath = '';
+
+  const mockUpstream = http.createServer((req, res) => {
+    requestedPath = req.url;
+    const resPayload = JSON.stringify({ status: 'ok' });
+    res.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(resPayload),
+    });
+    res.end(resPayload);
+  });
+
+  await new Promise((resolve) => mockUpstream.listen(0, '127.0.0.1', resolve));
+  activeServers.push(mockUpstream);
+  const upstreamPort = mockUpstream.address().port;
+  const upstreamBaseUrl = `http://127.0.0.1:${upstreamPort}/openai/v1/chat/completions/?trace=1`;
+
+  const proxyServer = await createProxyServer({ targetUrl: upstreamBaseUrl, port: 0 });
+  activeServers.push(proxyServer);
+  const proxyPort = proxyServer.address().port;
+
+  await new Promise((resolve, reject) => {
+    const req = http.request(
+      `http://127.0.0.1:${proxyPort}/chat/completions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      (res) => {
+        let resBody = '';
+        res.on('data', (chunk) => resBody += chunk);
+        res.on('end', () => resolve());
+      }
+    );
+    req.on('error', reject);
+    req.write(JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }));
+    req.end();
+  });
+
+  assert.equal(requestedPath, '/openai/v1/chat/completions?trace=1');
+});
