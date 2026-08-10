@@ -126,7 +126,19 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
         headers,
       };
 
+      console.log(`[LLM Proxy] ${req.method} ${req.url} -> forwarding to ${options.hostname}:${options.port}${options.path}`);
+
       const proxyReq = transport.request(options, (proxyRes) => {
+        console.log(`[LLM Proxy] Upstream response status: ${proxyRes.statusCode}`);
+
+        if (proxyRes.statusCode < 200 || proxyRes.statusCode >= 300) {
+          let errBody = '';
+          proxyRes.on('data', (chunk) => errBody += chunk);
+          proxyRes.on('end', () => {
+            console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]:`, errBody);
+          });
+        }
+
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         proxyRes.pipe(res, { end: true });
       });
