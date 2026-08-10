@@ -94,6 +94,7 @@ jobs:
         run: |
           # TrueFoundry の GCP ロール変換バグを回避するため、ローカル中継プロキシ経由（http://127.0.0.1:8080）で送信します
           ocr config set llm.url "http://127.0.0.1:8080"
+          ocr config set llm.protocol "openai"
           ocr config set llm.model "${OCR_LLM_MODEL}"
           ocr config set llm.auth_token "${OCR_LLM_AUTH_TOKEN}"
           ocr config set llm.use_anthropic "${OCR_LLM_USE_ANTHROPIC}"
