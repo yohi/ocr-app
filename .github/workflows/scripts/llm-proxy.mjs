@@ -44,18 +44,31 @@ export function transformPayload(payload) {
   const transformedMessages = payload.messages.map((msg) => {
     if (!msg || typeof msg !== 'object') return msg;
 
-    // role: "tool" または role: "function" の場合に role: "user" へ置換
+    // role: "tool" または role: "function" の場合に role: "user" へ置換し、tool_call_idを除去
     if (msg.role === 'tool' || msg.role === 'function') {
       const toolCallIdHeader = msg.tool_call_id ? `[Tool Call ID: ${msg.tool_call_id}]\n` : '';
       const contentStr = typeof msg.content === 'string'
         ? msg.content
         : JSON.stringify(msg.content);
 
-      return {
+      const cleanedMsg = { ...msg, role: 'user', content: `[Tool Execution Result]\n${toolCallIdHeader}${contentStr}` };
+      delete cleanedMsg.tool_call_id;
+      return cleanedMsg;
+    }
+
+    // assistant メッセージで content が空かつ tool_calls が存在する場合、あるいは tool_calls が残っている場合は文字列化
+    if (msg.role === 'assistant' && Array.isArray(msg.tool_calls)) {
+      const toolCallsSummary = msg.tool_calls
+        .map((tc) => `Tool: ${tc.function?.name || 'unknown'}, Args: ${tc.function?.arguments || '{}'}`)
+        .join('\n');
+
+      const existingContent = msg.content ? `${msg.content}\n` : '';
+      const cleanedMsg = {
         ...msg,
-        role: 'user',
-        content: `[Tool Execution Result]\n${toolCallIdHeader}${contentStr}`,
+        content: `${existingContent}[Called Tools]\n${toolCallsSummary}`,
       };
+      delete cleanedMsg.tool_calls;
+      return cleanedMsg;
     }
 
     return msg;
