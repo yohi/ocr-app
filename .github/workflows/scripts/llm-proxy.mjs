@@ -124,10 +124,21 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
       }
       headers['content-length'] = String(Buffer.byteLength(forwardedBody));
 
-      // 転送先パスの組み立て（パスが /chat/completions で終わっていない場合は補完）
-      let targetPath = parsedTarget.pathname.replace(/\/+$/, '');
-      if (!targetPath.endsWith('/chat/completions')) {
-        targetPath += '/chat/completions';
+      // 転送先パスの組み立て
+      let targetBase = parsedTarget.pathname.replace(/\/+$/, '');
+      const reqPath = req.url.split('?')[0];
+      let targetPath;
+
+      if (reqPath && reqPath !== '/') {
+        if (targetBase.endsWith(reqPath)) {
+          targetPath = targetBase;
+        } else if (reqPath.startsWith('/chat/completions') && targetBase.endsWith('/chat/completions')) {
+          targetPath = targetBase;
+        } else {
+          targetPath = targetBase + reqPath;
+        }
+      } else {
+        targetPath = targetBase.endsWith('/chat/completions') ? targetBase : targetBase + '/chat/completions';
       }
 
       // 上流（TrueFoundry / Groq 等）へのリクエスト設定
