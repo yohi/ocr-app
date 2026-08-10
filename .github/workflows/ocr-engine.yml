@@ -79,7 +79,7 @@ jobs:
           REAL_OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
           LLM_PROXY_PORT: '8080'
         run: |
-          node self-repo/.github/workflows/scripts/llm-proxy.mjs &
+          NODE_UNBUFFERED=1 node self-repo/.github/workflows/scripts/llm-proxy.mjs 2>&1 &
           sleep 1
 
       - name: Configure OCR
