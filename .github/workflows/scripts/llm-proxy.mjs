@@ -112,9 +112,9 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
       headers['content-length'] = String(Buffer.byteLength(forwardedBody));
 
       // 転送先パスの組み立て（パスが /chat/completions で終わっていない場合は補完）
-      let targetPath = parsedTarget.pathname;
+      let targetPath = parsedTarget.pathname.replace(/\/+$/, '');
       if (!targetPath.endsWith('/chat/completions')) {
-        targetPath = targetPath.replace(/\/+$/, '') + '/chat/completions';
+        targetPath += '/chat/completions';
       }
 
       // 上流（TrueFoundry / Groq 等）へのリクエスト設定
