@@ -65,7 +65,7 @@ sequenceDiagram
     Dev->>GH: Pull Request 作成 / コミット追加
     GH->>CF: Webhook イベント受信
     CF->>GH: Check Run 作成 (queued/in_progress)
-    CF->>GHA: `repository_dispatch` (event: ocr_request, payload: commit_sha, check_run_id...)
+    CF->>GHA: `repository_dispatch` (event: open_code_review_trigger, payload: commit_sha, check_run_id...)
     GHA->>GHA: PRメタデータ取得 & Fork判定 (head == base)
     alt 外部フォーク PR
         GHA->>GH: Check Run を skipped (neutral) に更新して終了
@@ -95,7 +95,7 @@ sequenceDiagram
 ### 3.1 イベントトリガー・ディスパッチ要件
 | 項目ID | 機能名 | 説明 | 優先度 |
 | :--- | :--- | :--- | :--- |
-| **FR-01** | `repository_dispatch` 受信 | Cloudflare Worker からの `repository_dispatch` イベント（`event_type: ocr_request`）を受け取り、`client_payload`（`commit_sha`, `base_ref`, `check_run_id`, `pr_number` 等）を消費してワークフローを実行する | 必須 (P0) |
+| **FR-01** | `repository_dispatch` 受信 | Cloudflare Worker からの `repository_dispatch` イベント（`event_type: open_code_review_trigger`）を受け取り、`client_payload`（`commit_sha`, `base_ref`, `check_run_id`, `pr_number` 等）を消費してワークフローを実行する | 必須 (P0) |
 | **FR-02** | ラベル・権限ゲーティング | アップストリーム（Worker）で検証済みのラベルや実行権限を引き継ぎ、紐づく Check Run を更新する | 必須 (P0) |
 | **FR-03** | 外部フォークの安全なスキップ | PR の head リポジトリと base リポジトリを比較し、外部フォーク PR の場合は Secret 復元前に Check Run をスキップ（`neutral`）として終了する | 必須 (P0) |
 
@@ -176,7 +176,7 @@ name: OpenCodeReview Engine
 
 on:
   repository_dispatch:
-    types: [ocr_request]
+    types: [open_code_review_trigger]
 
 permissions:
   contents: read
