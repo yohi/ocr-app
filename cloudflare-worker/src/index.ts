@@ -97,9 +97,15 @@ type PullRequestWebhookPayload = {
   readonly pull_request: {
     readonly head: {
       readonly sha: string;
+      readonly repo?: {
+        readonly full_name?: string;
+      };
     };
     readonly base: {
       readonly ref: string;
+      readonly repo?: {
+        readonly full_name?: string;
+      };
     };
     readonly labels?: ReadonlyArray<{
       readonly name?: string;
@@ -339,6 +345,7 @@ async function sendRepositoryDispatch(
   token: string,
   clientPayload: {
     target_repo: string;
+    head_repo: string;
     pr_number: number;
     commit_sha: string;
     base_ref: string;
@@ -523,6 +530,7 @@ export default {
           );
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
+            head_repo: payload.pull_request.head.repo?.full_name || `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
             base_ref: payload.pull_request.base.ref,
@@ -606,6 +614,11 @@ export default {
 
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
+            head_repo:
+              isRecord(pullRequestPayload.head.repo) &&
+              typeof pullRequestPayload.head.repo.full_name === "string"
+                ? pullRequestPayload.head.repo.full_name
+                : `${repoOwner}/${repoName}`,
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,
