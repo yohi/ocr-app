@@ -24,6 +24,32 @@
 import http from 'node:http';
 import https from 'node:https';
 import { URL } from 'node:url';
+import zlib from 'node:zlib';
+
+/**
+ * レスポンスの Buffer を Content-Encoding に応じて解凍する
+ * @param {Buffer} buffer
+ * @param {string} [encoding]
+ * @returns {string} 解凍後のテキスト
+ */
+function decodeResponseBody(buffer, encoding) {
+  try {
+    if (!encoding) return buffer.toString('utf-8');
+    const enc = encoding.toLowerCase();
+    if (enc.includes('gzip')) {
+      return zlib.gunzipSync(buffer).toString('utf-8');
+    }
+    if (enc.includes('deflate')) {
+      return zlib.inflateSync(buffer).toString('utf-8');
+    }
+    if (enc.includes('br')) {
+      return zlib.brotliDecompressSync(buffer).toString('utf-8');
+    }
+    return buffer.toString('utf-8');
+  } catch (err) {
+    return `[Decode Failed: ${err.message}] ${buffer.toString('utf-8')}`;
+  }
+}
 
 /**
  * リクエストペイロード内の messages 配列を変換する関数。
@@ -121,15 +147,21 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
         }
       }
 
-      // 転送用ヘッダーの準備（host, content-length, transfer-encoding を除外して再設定）
+      // 転送用ヘッダーの準備（host, content-length, transfer-encoding, accept-encoding を調整）
       const headers = {};
       for (const [key, value] of Object.entries(req.headers)) {
         const lowerKey = key.toLowerCase();
-        if (lowerKey !== 'host' && lowerKey !== 'content-length' && lowerKey !== 'transfer-encoding') {
+        if (
+          lowerKey !== 'host' &&
+          lowerKey !== 'content-length' &&
+          lowerKey !== 'transfer-encoding' &&
+          lowerKey !== 'accept-encoding'
+        ) {
           headers[key] = value;
         }
       }
       headers['content-length'] = String(Buffer.byteLength(forwardedBody));
+      headers['accept-encoding'] = 'identity';
 
       // 転送先パスの組み立て
       let targetBase = parsedTarget.pathname.replace(/\/+$/, '');
@@ -163,13 +195,16 @@ export function createProxyServer({ targetUrl, port = 8080 }) {
         console.log(`[LLM Proxy] Upstream response status: ${proxyRes.statusCode}`);
 
         if (proxyRes.statusCode < 200 || proxyRes.statusCode >= 300) {
-          let errBody = '';
-          proxyRes.on('data', (chunk) => errBody += chunk);
+          const resChunks = [];
+          proxyRes.on('data', (chunk) => resChunks.push(chunk));
           proxyRes.on('end', () => {
-            console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]: ${errBody}`);
+            const rawBuffer = Buffer.concat(resChunks);
+            const contentEncoding = proxyRes.headers['content-encoding'];
+            const decodedBody = decodeResponseBody(rawBuffer, contentEncoding);
+            console.error(`[LLM Proxy Error Response Body (${proxyRes.statusCode})]: ${decodedBody}`);
             if (!res.headersSent) {
               res.writeHead(proxyRes.statusCode, proxyRes.headers);
-              res.end(errBody);
+              res.end(rawBuffer);
             }
           });
         } else {
