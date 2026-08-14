@@ -31,11 +31,13 @@ function installHttpsMock(outcomes) {
     request.end = () => {
       const outcome = outcomes.shift();
       assert.ok(outcome, 'received an unexpected GitHub API request');
-      requests.push({
-        body: requestBody ? JSON.parse(requestBody) : undefined,
-        method: options.method,
-        path: options.path,
-      });
+      if (!(options.method === 'GET' && options.path.includes('/comments?per_page='))) {
+        requests.push({
+          body: requestBody ? JSON.parse(requestBody) : undefined,
+          method: options.method,
+          path: options.path,
+        });
+      }
 
       queueMicrotask(() => {
         if (outcome.error) {
@@ -72,6 +74,7 @@ function reviewSetup(outcomes, summaryOutcome = { data: {}, status: 201 }) {
       status: 200,
     },
     ...outcomes,
+    { data: [], status: 200 },
     summaryOutcome,
   ];
 }
@@ -335,6 +338,7 @@ test('posts one Summary issue comment with generated counts and all valid findin
       status: 200,
     },
     { data: {}, status: 201 },
+    { data: [], status: 200 },
     { data: {}, status: 201 },
   ];
 
@@ -348,7 +352,7 @@ test('posts one Summary issue comment with generated counts and all valid findin
     method: 'POST',
     path: '/repos/owner/repo/issues/123/comments',
     body: {
-      body: '## 📋 OpenCodeReview Summary\n\n2 件のコメント / 2 ファイル / 所要時間: 1m2s\n\n| ファイル | コメント数 |\n| --- | --- |\n| `src/alpha.js` | 1 |\n| `src/beta.js` | 1 |\n\n```text\n[src/alpha.js:2]\nFirst finding\n\n[src/beta.js:4]\nSecond finding\n```\n\n---\n*Posted by OpenCodeReview*',
+      body: '## 📋 OpenCodeReview Summary\n<!-- antigravity-ocr-summary -->\n\n2 件のコメント / 2 ファイル / 所要時間: 1m2s\n\n| ファイル | コメント数 |\n| --- | --- |\n| `src/alpha.js` | 1 |\n| `src/beta.js` | 1 |\n\n```text\n[src/alpha.js:2]\nFirst finding\n\n[src/beta.js:4]\nSecond finding\n```\n\n---\n*Posted by OpenCodeReview*',
     },
   });
 });
@@ -371,6 +375,7 @@ test('sorts Summary file rows by UTF-16 code unit regardless of input order', as
       status: 200,
     },
     { data: {}, status: 201 },
+    { data: [], status: 200 },
     { data: {}, status: 201 },
   ];
 
@@ -391,6 +396,7 @@ test('posts a Summary when valid comments have no diff positions', async () => {
       data: [{ filename: 'src/example.js', patch: '@@ -1 +10 @@\n+updated line' }],
       status: 200,
     },
+    { data: [], status: 200 },
     { data: {}, status: 201 },
   ];
 
@@ -662,4 +668,52 @@ test('returns one when posting failure comment fails', async () => {
   // Then
   assert.equal(exitCode, 1);
   assert.equal(requests.length, 1);
+});
+
+test('updates an existing bot-owned marked Summary instead of creating a duplicate', async () => {
+  const result = { comments: [validComment('Updated finding')] };
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: {}, status: 201 },
+    {
+      data: [{
+        id: 42,
+        body: '<!-- antigravity-ocr-summary --> old summary',
+        user: { login: 'opencodereview-app' },
+      }],
+      status: 200,
+    },
+    { data: {}, status: 200 },
+  ];
+
+  const { exitCode, requests } = await runWithResult(result, outcomes);
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.at(-1).method, 'PATCH');
+  assert.equal(requests.at(-1).path, '/repos/owner/repo/issues/comments/42');
+});
+
+test('does not modify a user comment containing the Summary marker', async () => {
+  const result = { comments: [validComment('New finding')] };
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: {}, status: 201 },
+    {
+      data: [{
+        id: 43,
+        body: '<!-- antigravity-ocr-summary --> user copy',
+        user: { login: 'human-user' },
+      }],
+      status: 200,
+    },
+    { data: {}, status: 201 },
+  ];
+
+  const { exitCode, requests } = await runWithResult(result, outcomes);
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.equal(requests.at(-1).path, '/repos/owner/repo/issues/123/comments');
 });

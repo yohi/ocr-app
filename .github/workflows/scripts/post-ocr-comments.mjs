@@ -16,6 +16,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 class CliError extends Error {}
+export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
 
 function getArg(args, key) {
   const index = args.indexOf(`--${key}`);
@@ -131,6 +132,7 @@ function buildSummarySection(comments, ocrSummary) {
 
   return [
     '## 📋 OpenCodeReview Summary',
+    SUMMARY_MARKER,
     '',
     `${comments.length} 件のコメント / ${countsByPath.size} ファイル${elapsed}`,
     '',
@@ -204,15 +206,29 @@ async function postFailureComment({ githubApi, prNumber, message }) {
 }
 
 
-async function postSummaryComment({ comments, githubApi, ocrSummary, prNumber }) {
-  const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
-    body: buildSummaryBody(comments, ocrSummary),
-  });
-  if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to post Summary comment:', JSON.stringify(response.data));
+async function postSummaryComment({ botLogin, comments, githubApi, ocrSummary, prNumber }) {
+  const body = buildSummaryBody(comments, ocrSummary);
+const existing = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100`);
+  if (existing.status !== 200 || !Array.isArray(existing.data)) {
+    console.error('Failed to fetch existing Summary comments:', JSON.stringify(existing.data));
     return 1;
   }
-  console.log(`Posted Summary comment for ${comments.length} review comments`);
+
+  const normalizedBotLogin = botLogin.replace(/\[bot\]$/i, '').toLowerCase();
+  const matchingComment = existing.data.find(comment => {
+    const login = typeof comment?.user?.login === 'string'
+      ? comment.user.login.replace(/\[bot\]$/i, '').toLowerCase()
+      : '';
+    return comment?.body?.includes(SUMMARY_MARKER) && login === normalizedBotLogin;
+  });
+  const response = matchingComment
+    ? await githubApi('PATCH', `/issues/comments/${matchingComment.id}`, { body })
+    : await githubApi('POST', `/issues/${prNumber}/comments`, { body });
+  if (response.status < 200 || response.status >= 300) {
+    console.error('Failed to upsert Summary comment:', JSON.stringify(response.data));
+    return 1;
+  }
+  console.log(`${matchingComment ? 'Updated' : 'Posted'} Summary comment for ${comments.length} review comments`);
   return 0;
 }
 
@@ -374,7 +390,11 @@ function findDiffPosition(comment, filesMap) {
   return position;
 }
 
-export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN } = {}) {
+export async function run({
+  args = process.argv.slice(2),
+  token = process.env.GITHUB_TOKEN,
+  botLogin = process.env.GH_APP_SLUG || 'opencodereview-app',
+} = {}) {
   const config = createConfig(args, token);
   const result = readResult(config.resultPath);
   const githubApi = createGithubApi(config);
@@ -411,6 +431,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     return reviewExitCode;
   }
   return postSummaryComment({
+    botLogin,
     comments,
     githubApi,
     ocrSummary: result.summary,
