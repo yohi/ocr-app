@@ -1,7 +1,10 @@
 # OpenCode / AI agent runtime state
 .omo/
 .sisyphus/
+.omo/
+.sisyphus/
 .codegraph/
+.justice/
 
 # Node.js
 node_modules/
