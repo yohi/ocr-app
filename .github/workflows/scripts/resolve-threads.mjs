@@ -1,26 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * Auto-resolve fixed PR review threads at HEAD using LLM API.
+ * Auto-resolve fixed PR review threads at HEAD using the trusted Antigravity host.
  *
  * Usage:
  *   node resolve-threads.mjs --repo owner/repo --pr 123 [--target-dir <path>]
  *
  * Environment variables:
  *   GITHUB_TOKEN - GitHub API token (required)
- *   OCR_LLM_URL - LLM endpoint URL
- *   OCR_LLM_MODEL - LLM model identifier
- *   RESOLVE_LLM_MODEL - LLM model identifier specifically for resolve evaluation (optional, falls back to OCR_LLM_MODEL)
- *   OCR_LLM_AUTH_TOKEN - Auth token for LLM API
- *   OCR_LLM_EXTRA_HEADERS - Custom extra headers (key1=val1,key2=val2)
- *   OCR_LLM_AUTH_HEADER_NAME - Custom auth header name (e.g. x-api-key)
- *   OCR_LLM_USE_ANTHROPIC - Set to 'true' if using Anthropic Messages API
  */
 
 import fs from 'node:fs';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import https from 'node:https';
 import { pathToFileURL } from 'node:url';
+import { runThreadHost } from './antigravity-host.mjs';
 
 export class CliError extends Error {}
 
@@ -77,6 +71,24 @@ export function parseLlmResponse(rawText) {
   }
 }
 
+export function parseThreadHostResponse(rawText) {
+  if (!rawText || typeof rawText !== 'string') return { decision: 'keep', reason: '' };
+  try {
+    const data = JSON.parse(rawText.trim());
+    if (
+      data?.schema_version !== '1.0' ||
+      data?.mode !== 'thread' ||
+      !['resolve', 'keep'].includes(data.decision) ||
+      typeof data.reason !== 'string'
+    ) {
+      return { decision: 'keep', reason: '' };
+    }
+    return { decision: data.decision, reason: data.reason };
+  } catch {
+    return { decision: 'keep', reason: '' };
+  }
+}
+
 export function buildPrompt({ path: filePath, comments }, codeSnippet) {
   const conversation = comments.map(c => `@${c.author?.login || 'unknown'}: ${c.body}`).join('\n\n');
   return `You are a security-aware code review assistant. Your sole task is to verify whether the reported issue in the review thread has been resolved in the current file content at HEAD.
@@ -100,7 +112,9 @@ ${codeSnippet}
 
 Respond ONLY in JSON format matching this schema:
 {
-  "resolved": boolean,
+  "schema_version": "1.0",
+  "mode": "thread",
+  "decision": "resolve" | "keep",
   "reason": "Short concise explanation in Japanese"
 }`;
 }
@@ -259,87 +273,7 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
   return openThreads;
 }
 
-export async function callLlmEvaluation({ prompt, llmConfig }) {
-  let url = llmConfig.url;
-  if (!url) {
-    console.warn('OCR_LLM_URL is not set. Skipping LLM evaluation.');
-    return { resolved: false, reason: 'LLM URL not configured' };
-  }
-
-  // Anthropic APIでない場合、URLの末尾スラッシュを除去した上で /chat/completions を自動付与
-  const isAnthropic = llmConfig.useAnthropic === 'true';
-  if (!isAnthropic && !url.includes('/chat/completions')) {
-    url = url.replace(/\/+$/, '') + '/chat/completions';
-  }
-  const headers = {
-    'Content-Type': 'application/json',
-  };
-
-  if (isAnthropic) {
-    headers['anthropic-version'] = '2023-06-01';
-  }
-
-  if (llmConfig.authToken) {
-    if (llmConfig.authHeaderName) {
-      headers[llmConfig.authHeaderName] = `Bearer ${llmConfig.authToken}`;
-    } else if (isAnthropic) {
-      headers['x-api-key'] = llmConfig.authToken;
-    } else {
-      headers['Authorization'] = `Bearer ${llmConfig.authToken}`;
-    }
-  }
-
-  if (llmConfig.extraHeaders) {
-    const pairs = llmConfig.extraHeaders.split(',');
-    for (const pair of pairs) {
-      const [k, v] = pair.split('=');
-      if (k && v) headers[k.trim()] = v.trim();
-    }
-  }
-
-  let bodyData;
-  if (isAnthropic) {
-    bodyData = {
-      model: llmConfig.model,
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }],
-    };
-  } else {
-    bodyData = {
-      model: llmConfig.model,
-      messages: [{ role: 'user', content: prompt }],
-    };
-  }
-
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(bodyData),
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!res.ok) {
-      console.warn(`LLM request failed with status ${res.status}`);
-      return { resolved: false, reason: `LLM HTTP ${res.status}` };
-    }
-
-    const data = await res.json();
-    let text = '';
-    if (isAnthropic) {
-      text = data.content?.[0]?.text || '';
-    } else {
-      text = data.choices?.[0]?.message?.content || '';
-    }
-
-    return parseLlmResponse(text);
-  } catch (error) {
-    console.warn(`LLM request error: ${error.message}`);
-    return { resolved: false, reason: error.message };
-  }
-}
-
-export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, env = process.env } = {}) {
+export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost } = {}) {
   let config;
   try {
     config = createConfig(args, token);
@@ -364,15 +298,6 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     return 0;
   }
 
-  const llmConfig = {
-    url: env.OCR_LLM_URL,
-    model: env.RESOLVE_LLM_MODEL || env.OCR_LLM_MODEL,
-    authToken: env.OCR_LLM_AUTH_TOKEN,
-    extraHeaders: env.OCR_LLM_EXTRA_HEADERS,
-    authHeaderName: env.OCR_LLM_AUTH_HEADER_NAME,
-    useAnthropic: env.OCR_LLM_USE_ANTHROPIC,
-  };
-
   let resolvedCount = 0;
   for (const thread of openThreads) {
     const codeSnippet = extractCodeContext(config.targetDir, thread.path);
@@ -382,9 +307,9 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     }
 
     const prompt = buildPrompt(thread, codeSnippet);
-    const evaluation = await callLlmEvaluation({ prompt, llmConfig });
+    const evaluation = await threadHost({ prompt, cwd: config.targetDir });
 
-    if (evaluation.resolved) {
+    if (evaluation.status === 'success' && evaluation.decision === 'resolve') {
       console.log(`Thread ${thread.id} (${thread.path}:${thread.line}) evaluated as RESOLVED: ${evaluation.reason}`);
 
       const replyBody = config.autoResolve

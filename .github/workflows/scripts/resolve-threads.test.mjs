@@ -9,6 +9,7 @@ import {
   buildResolveMutation,
   extractCodeContext,
   isOcrThread
+  ,parseThreadHostResponse
 } from './resolve-threads.mjs';
 
 test('createConfig parses CLI args and token correctly', () => {
@@ -68,6 +69,26 @@ test('parseLlmResponse returns resolved: false for non-boolean resolved property
   assert.equal(resultTrueString.resolved, false);
 });
 
+test('parseThreadHostResponse accepts only a valid explicit resolve decision', () => {
+  const result = parseThreadHostResponse(JSON.stringify({
+    schema_version: '1.0',
+    mode: 'thread',
+    decision: 'resolve',
+    reason: '修正済みです',
+  }));
+  assert.deepEqual(result, { decision: 'resolve', reason: '修正済みです' });
+});
+
+test('parseThreadHostResponse keeps malformed, missing, and ambiguous output unresolved', () => {
+  for (const raw of [
+    'not-json',
+    JSON.stringify({ schema_version: '1.0', mode: 'thread', decision: 'resolve' }),
+    JSON.stringify({ schema_version: '1.0', mode: 'thread', decision: 'maybe', reason: '曖昧' }),
+  ]) {
+    assert.deepEqual(parseThreadHostResponse(raw), { decision: 'keep', reason: '' });
+  }
+});
+
 test('extractCodeContext prevents path traversal outside target directory', () => {
   const snippet = extractCodeContext('.', '../README.md');
   assert.equal(snippet, null);
@@ -109,4 +130,3 @@ test('isOcrThread correctly identifies opencodereview-app and opencodereview-app
   assert.equal(isOcrThread({ comments: [{ author: null }] }), false);
   assert.equal(isOcrThread(null), false);
 });
-
