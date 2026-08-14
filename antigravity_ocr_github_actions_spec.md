@@ -200,21 +200,31 @@ jobs:
           ref: ${{ github.event.client_payload.base_ref || 'main' }}
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Validate PR Metadata & Fork Check
         id: check_fork
         env:
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Head リポジトリと Base リポジトリを比較
-          # 外部フォーク PR の場合は Check Run を completed / neutral (skipped) に更新して終了
+          # Head リポジトリと Base リポジトリを比較し is_fork を出力
           node .github/workflows/scripts/check-pr-target.mjs
 
-      - name: Setup Node.js
-        if: steps.check_fork.outputs.is_fork != 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Handle External Fork Skip
+        if: steps.check_fork.outputs.is_fork == 'true'
+        env:
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 外部フォーク PR の Check Run を completed / neutral (skipped) に更新して終了
+          node .github/workflows/scripts/skip-check-run.mjs
 
       - name: Install Pinned OCR CLI & Antigravity CLI
         if: steps.check_fork.outputs.is_fork != 'true'
