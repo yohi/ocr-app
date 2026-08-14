@@ -132,7 +132,8 @@ sequenceDiagram
 ### 4.2 セキュリティ・認証管理
 - **NFR-03 (認証情報の保護とスモークテスト)**:
   - 認証 Secret は GitHub Repository Secrets の `GEMINI_OAUTH_CREDS_B64` および `GEMINI_GOOGLE_ACCOUNTS_B64` に統一する。
-  - `~/.gemini/` 配下にパーミッション `600` で復元し、実行前に非対話型認証スモークテスト（`agy --version` または軽量クエリ）を実施して正常性を確認する。
+  - `~/.gemini/` 配下にパーミッション `600` で復元し、実行前に OAuth 認証を伴う軽量・非対話の `agy` クエリ（例: `agy -p "ping" --output-format text`）による認証スモークテストの実施を必須とする（※ CLI の導入確認に過ぎない `agy --version` 単体での代替は不可）。
+  - 認証スモークテストが失敗した場合は、後続処理を実行せずに Check Run を `failure` として安全に異常終了させること。
   - ログ、エラーメッセージ、アーティファクトへの秘密情報の平文出力を完全にサニタイズ（マスキング）すること。
 - **NFR-04 (最小権限サンドボックス・Deny-by-default)**:
   - Antigravity の権限設定は deny-by-default を原則とし、`ocr delegate preview/rule` および read-only Git 操作（`diff`, `show`, `status`, `rev-parse`）のみを許可する。
@@ -242,7 +243,11 @@ jobs:
           echo "$GEMINI_OAUTH_CREDS_B64" | base64 -d > ~/.gemini/oauth_creds.json
           echo "$GEMINI_GOOGLE_ACCOUNTS_B64" | base64 -d > ~/.gemini/google_accounts.json
           chmod 600 ~/.gemini/*.json
-          agy --version || exit 1
+          # 復元した OAuth 認証情報を用いた認証スモークテスト（失敗時は exit 1 で異常終了）
+          agy -p "ping" --output-format text > /dev/null || {
+            echo "::error::Antigravity OAuth authentication smoke test failed."
+            exit 1
+          }
 
       - name: Install Official Delegation Skill
         if: steps.check_fork.outputs.is_fork != 'true'
@@ -262,6 +267,21 @@ jobs:
           node .github/workflows/scripts/antigravity-host.mjs
           node .github/workflows/scripts/resolve-threads.mjs
           node .github/workflows/scripts/post-ocr-comments.mjs
+
+      - name: Update Check Run Status
+        if: always() && steps.check_fork.outputs.is_fork != 'true'
+        env:
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 認証スモークテストやレビュー実行の成否に応じて Check Run を completed (success / failure) に更新
+          CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
+          curl -sS -X PATCH \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
+            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
 ```
 
 ---
