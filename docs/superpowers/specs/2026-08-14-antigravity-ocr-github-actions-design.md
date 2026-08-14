@@ -14,10 +14,11 @@ This design replaces the LLM reasoning portion of the central OCR review engine 
 Antigravity CLI (`agy`) while retaining the existing GitHub App, Cloudflare Worker,
 `repository_dispatch`, GitHub Check Run, and PR-commenting path.
 
-OpenCodeReview delegation mode supplies deterministic file selection and rule resolution.
-Antigravity receives only the resulting diff batches and rules, then returns strictly
-validated JSON findings. Existing comment-posting logic converts the validated findings
-into GitHub inline comments and an updatable PR summary.
+Antigravity CLI is the OpenCodeReview Delegation Mode host agent. It invokes OCR's
+deterministic delegation commands, reads the necessary Git context, applies its own
+Google AI Pro-backed reasoning, and returns strictly validated JSON findings. Existing
+Node.js logic only launches the host agent, validates its output, and performs GitHub API
+operations such as posting comments and resolving threads.
 
 The requested Google AI Pro authentication uses locally obtained Gemini OAuth artifacts
 restored from GitHub Secrets. Antigravity does not officially document importing those
@@ -32,10 +33,10 @@ smoke test and fail safely when the restored credentials cannot authenticate `ag
 ### In scope
 
 - Replace `ocr review` and the OpenAI-compatible LLM proxy in `ocr-engine.yml`.
-- Use `ocr delegate preview` and `ocr delegate rule` as the deterministic review
-  preprocessor.
-- Run Antigravity in headless JSON mode for review findings and thread-resolution
-  decisions.
+- Install the official OpenCodeReview delegate skill in the CI user's Antigravity skill
+  directory and run Antigravity as the Delegation Mode host agent.
+- Let `agy` invoke `ocr delegate preview`, `ocr delegate rule`, and required read-only
+  Git commands before generating review and thread-resolution decisions.
 - Preserve the current GitHub App dispatch, Check Run, inline-comment, summary-comment,
   artifact, and conservative thread-resolution responsibilities.
 - Update one marked PR summary comment instead of creating a new summary on every run.
@@ -66,8 +67,8 @@ sequenceDiagram
     autonumber
     participant Worker as Cloudflare Worker
     participant Engine as ocr-engine.yml
-    participant OCR as OCR Delegate CLI
     participant AGY as Antigravity CLI
+    participant OCR as OCR Delegate CLI
     participant GH as GitHub API
 
     Worker->>Engine: repository_dispatch
@@ -76,16 +77,14 @@ sequenceDiagram
         Engine->>GH: Mark Check Run skipped
     else Internal PR
         Engine->>Engine: Restore experimental OAuth artifacts
-        Engine->>AGY: Headless authentication smoke test
-        Engine->>OCR: delegate preview --format json
-        OCR-->>Engine: Reviewable files and exclusions
-        Engine->>OCR: delegate rule --format json <paths>
-        OCR-->>Engine: Rule groups
-        loop Bounded diff batches
-            Engine->>AGY: Review diff and rules as strict JSON
-            AGY-->>Engine: Findings JSON
-        end
-        Engine->>AGY: Evaluate unresolved OCR review threads
+        Engine->>AGY: Start headless host-agent review
+        AGY->>OCR: delegate preview --format json
+        OCR-->>AGY: Reviewable files and exclusions
+        AGY->>OCR: delegate rule --format json <paths>
+        OCR-->>AGY: Rule groups
+        AGY->>AGY: Read bounded Git diff batches and review
+        AGY-->>Engine: Findings JSON
+        Engine->>AGY: Start headless host-agent thread evaluation
         AGY-->>Engine: Resolve or keep JSON
         Engine->>GH: Post comments, update summary, resolve confirmed threads
         Engine->>GH: Complete Check Run
@@ -103,32 +102,37 @@ The following steps replace the LLM proxy and `ocr review` steps:
 1. Fetch PR metadata using the GitHub App token and reject external forks.
 2. Install a tested, pinned OCR CLI version and a tested, pinned Antigravity CLI version.
 3. Restore OAuth artifacts only after the fork check, with restrictive file permissions.
-4. Run the Antigravity headless authentication smoke test.
-5. Run the review orchestrator and then conservative thread resolution.
-6. Post validated findings and complete the Check Run.
+4. Install the official `open-code-review-delegate` skill in the CI user's
+   `~/.gemini/antigravity-cli/skills/` directory.
+5. Configure `agy` headless permissions for only the required OCR and read-only Git work.
+6. Run the Antigravity host agent for review and then conservative thread resolution.
+7. Post validated findings and complete the Check Run.
 
 No secret value, decoded OAuth artifact, complete diff, or complete prompt is written to
 workflow logs or uploaded as an artifact. Base64 is transport encoding, not encryption.
 
 ### New and changed modules
 
-1. **Review orchestrator**
+1. **Antigravity host runner**
    - New Node.js module under `.github/workflows/scripts/`.
-   - Runs `ocr delegate preview --format json` and validates `schema_version`.
-   - Calls `ocr delegate rule --format json` for reviewable file paths.
-   - Reads diffs from Git, batches them by configurable size limits, invokes `agy`, and
-     emits the existing OCR-result-compatible JSON consumed by comment posting.
+   - Invokes `agy -p` with the host-review task, strict JSON output, and a timeout.
+   - Does not execute `ocr delegate` or Git diff commands itself.
+   - Validates the returned schema and emits the existing OCR-result-compatible JSON
+     consumed by comment posting.
 
-2. **Antigravity command adapter**
-   - New Node.js module under `.github/workflows/scripts/`.
-   - Runs `agy -p` with `--output-format json`, a strict JSON schema, a timeout, and no
-     file-writing or arbitrary-command permissions.
-   - Treats all diff content and review-thread text as untrusted data, not instructions.
-   - Rejects malformed output rather than repairing or guessing its meaning.
+2. **Delegation Mode skill and permissions**
+   - Install the official `open-code-review-delegate` skill at runtime in the CI user's
+     `~/.gemini/antigravity-cli/skills/` directory; do not commit a project `.agents/`
+     directory.
+   - Allow the host agent to execute `ocr delegate preview`, `ocr delegate rule`, and
+     the required read-only Git commands (`diff`, `show`, `status`, and `rev-parse`).
+   - Deny file writes, `git push`, `rm`, `sudo`, network-fetch commands, unsandboxed
+     commands, and `--dangerously-skip-permissions`.
+   - Treat all diff content and review-thread text as untrusted data, not instructions.
 
 3. **Thread resolver**
-   - Update `.github/workflows/scripts/resolve-threads.mjs` to replace its old LLM HTTP
-     request with the Antigravity command adapter.
+   - Update `.github/workflows/scripts/resolve-threads.mjs` to prepare eligible thread
+     context and invoke the Antigravity host runner instead of its old LLM HTTP request.
    - Preserve existing GraphQL retrieval and mutation behavior.
    - Limit candidates to unresolved review threads created by OpenCodeReview.
 
@@ -137,9 +141,11 @@ workflow logs or uploaded as an artifact. Base64 is transport encoding, not encr
      by a stable HTML marker and update it in place.
    - Keep GitHub Review inline comments for newly validated findings.
 
-5. **Prompt definitions**
-   - Store versioned review and resolution prompt builders with the workflow scripts.
-   - Do not create `.agents/`, `SKILL.md`, or any other new agent-configuration path.
+5. **Host tasks**
+   - The review task tells `agy` to follow the installed OpenCodeReview delegate skill,
+     process every reviewable file, and return the required JSON result.
+   - The thread task provides prepared thread context and requests a conservative JSON
+     `resolve` or `keep` decision.
 
 ---
 
@@ -147,7 +153,8 @@ workflow logs or uploaded as an artifact. Base64 is transport encoding, not encr
 
 ### OCR delegation contract
 
-The orchestrator invokes the following commands from the checked-out target repository:
+The Antigravity host agent invokes the following commands from the checked-out target
+repository:
 
 ```text
 ocr delegate preview --format json --from origin/<base> --to <head>
@@ -155,13 +162,14 @@ ocr delegate rule --format json <reviewable-path...>
 ```
 
 `preview` determines reviewability, exclusions, merge base, and per-file change counts.
-`rule` groups the selected paths by applicable rule text. The orchestrator validates the
+`rule` groups the selected paths by applicable rule text. The host agent must validate the
 reported schema version before relying on either output.
 
-Files are processed in deterministic rule groups and bounded diff batches. The defaults
-are 20,000 diff characters and 10 files per batch. Repository variables
+The host agent processes files in deterministic rule groups and bounded diff batches. The
+defaults are 20,000 diff characters and 10 files per batch. Repository variables
 `ANTIGRAVITY_MAX_DIFF_CHARS` and `ANTIGRAVITY_MAX_FILES_PER_BATCH` may lower or raise
-those limits. Each reviewable file must be recorded as reviewed or skipped with a reason.
+those limits. The final agent result must record each reviewable file as reviewed or
+skipped with a reason.
 
 ### Antigravity review result contract
 
@@ -169,6 +177,13 @@ Each `agy` invocation must return JSON matching a schema equivalent to:
 
 ```json
 {
+  "coverage": [
+    {
+      "path": "relative/path",
+      "status": "reviewed | skipped",
+      "reason": "Required when skipped"
+    }
+  ],
   "findings": [
     {
       "severity": "Critical | High | Medium | Low",
@@ -182,10 +197,10 @@ Each `agy` invocation must return JSON matching a schema equivalent to:
 }
 ```
 
-The adapter accepts only `Critical`, `High`, `Medium`, and `Low`. It verifies that every
-path belongs to the selected batch and every line can be mapped to the current PR diff.
-Invalid findings are discarded and recorded as a validation error. Low findings may be
-filtered from the published result, but the filtering policy is deterministic and tested.
+The host runner accepts only `Critical`, `High`, `Medium`, and `Low`. It verifies that
+each reported line can be mapped to the current PR diff and rejects malformed output.
+Low findings may be filtered from the published result, but the filtering policy is
+deterministic and tested.
 
 ### Thread-resolution contract
 
@@ -230,10 +245,11 @@ internal:
 - `GEMINI_OAUTH_CREDS_B64`
 - `GEMINI_GOOGLE_ACCOUNTS_B64`
 
-The workflow restores the artifacts under `~/.gemini/` with owner-only permissions. The
-restoration mechanism is explicitly experimental because Antigravity officially documents
-native-keyring authentication, not CI import of Gemini CLI OAuth files. A headless smoke
-test is the compatibility gate for every run.
+The workflow restores the artifacts under `~/.gemini/` with owner-only permissions. It
+installs the delegate skill separately under `~/.gemini/antigravity-cli/skills/` for the
+ephemeral CI user. The restoration mechanism is explicitly experimental because
+Antigravity officially documents native-keyring authentication, not CI import of Gemini
+CLI OAuth files. A headless smoke test is the compatibility gate for every run.
 
 The central repository must protect workflow changes through branch protection and
 CODEOWNERS. Access to the two OAuth Secrets must be limited to trusted maintainers. No
@@ -243,7 +259,8 @@ workflow using these secrets may execute code from an external fork.
 
 - Missing or invalid OAuth artifact: fail before diff processing with a sanitized message.
 - Failed `agy` authentication or timeout: fail the Check Run; retain no full prompt output.
-- Unsupported OCR delegate schema: fail the Check Run to avoid a silent behavior change.
+- Unsupported OCR delegate schema reported by the host agent: fail the Check Run to avoid
+  a silent behavior change.
 - No eligible files: skip successfully without calling Antigravity.
 - A failed batch: fail the review run rather than posting a partial result as complete.
 - A failed thread-resolution decision: retain the thread and continue processing others.
@@ -262,7 +279,8 @@ Use Node.js native tests with fixtures and mocked process/GitHub boundaries to c
 
 - OCR preview and rule schema validation.
 - File selection, deterministic batching, and reviewed-or-skipped accounting.
-- Antigravity command construction, timeout handling, and strict JSON parsing.
+- Antigravity host-task construction, permission-policy generation, timeout handling, and
+  strict JSON parsing.
 - Finding path and diff-line validation.
 - Low-severity filtering and OCR-result-compatible output conversion.
 - Fork detection and prevention of credential-restoration execution.
@@ -281,7 +299,8 @@ Use Node.js native tests with fixtures and mocked process/GitHub boundaries to c
 
 ### Acceptance criteria
 
-- Internal PRs use OCR delegation and Antigravity without the prior OCR LLM proxy.
+- Internal PRs use Antigravity as the OCR Delegation Mode host without the prior OCR LLM
+  proxy.
 - External forks are skipped before OAuth restoration and without an LLM request.
 - A PR with fewer than 500 changed lines completes in three minutes or less.
 - Critical and High findings do not block merge by themselves.
