@@ -158,9 +158,10 @@ ocr delegate rule --format json <reviewable-path...>
 `rule` groups the selected paths by applicable rule text. The orchestrator validates the
 reported schema version before relying on either output.
 
-Files are processed in deterministic rule groups and bounded diff batches. The default
-batch limit is configurable through repository variables for maximum characters and
-maximum files. Each reviewable file must be recorded as reviewed or skipped with a reason.
+Files are processed in deterministic rule groups and bounded diff batches. The defaults
+are 20,000 diff characters and 10 files per batch. Repository variables
+`ANTIGRAVITY_MAX_DIFF_CHARS` and `ANTIGRAVITY_MAX_FILES_PER_BATCH` may lower or raise
+those limits. Each reviewable file must be recorded as reviewed or skipped with a reason.
 
 ### Antigravity review result contract
 
