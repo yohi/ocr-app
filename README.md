@@ -21,6 +21,7 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | `GITHUB_APP_SLUG` | はい | GitHub App の slug。mention 検出に使用。例: `opencodereview-app` |
 | `CHECK_RUN_NAME` | いいえ | PR Checks 欄に表示する check run 名。未設定時は `OpenCodeReview` |
 | `CHECK_RUN_DETAILS_URL` | いいえ | check run の詳細リンク。未設定時は対象リポジトリの Actions ページ |
+| `REQUIRED_LABEL` | いいえ | 自動レビュー発火に必要な PR ラベル名。未設定時は `review` |
 
 ### Webhook と GitHub App
 
@@ -217,6 +218,7 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 | Actions (Variable) | `GH_APP_SLUG` | GitHub App の slug（例: `opencodereview-app`） |
 | Actions (Variable) | `GH_CHECK_RUN_NAME` | check run 名（任意・未設定時は `OpenCodeReview`） |
 | Actions (Variable) | `GH_CHECK_RUN_DETAILS_URL` | check run 詳細リンク（任意・未設定時は対象リポジトリの Actions ページ） |
+| Actions (Variable) | `GH_REQUIRED_LABEL` | 自動レビュー発火に必要な PR ラベル名（任意・未設定時は `review`） |
 >
 > **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
 > そのため Actions 側では `GH_APP_ID` / `GH_APP_PRIVATE_KEY` という名前で登録します。

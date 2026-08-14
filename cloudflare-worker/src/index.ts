@@ -101,6 +101,9 @@ type PullRequestWebhookPayload = {
     readonly base: {
       readonly ref: string;
     };
+    readonly labels?: ReadonlyArray<{
+      readonly name?: string;
+    }>;
   };
 };
 
@@ -130,13 +133,36 @@ function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWe
     return false;
   }
 
-  return (
-    isRecord(payload.pull_request) &&
-    isRecord(payload.pull_request.head) &&
-    typeof payload.pull_request.head.sha === "string" &&
-    isRecord(payload.pull_request.base) &&
-    typeof payload.pull_request.base.ref === "string"
-  );
+  if (
+    !isRecord(payload.pull_request) ||
+    !isRecord(payload.pull_request.head) ||
+    typeof payload.pull_request.head.sha !== "string" ||
+    !isRecord(payload.pull_request.base) ||
+    typeof payload.pull_request.base.ref !== "string"
+  ) {
+    return false;
+  }
+
+  if (payload.pull_request.labels !== undefined && !Array.isArray(payload.pull_request.labels)) {
+    return false;
+  }
+
+  return true;
+}
+
+export function hasRequiredLabel(
+  labels: ReadonlyArray<{ readonly name?: string }> | undefined,
+  requiredLabelSetting?: string,
+): boolean {
+  const targetLabel = (requiredLabelSetting && requiredLabelSetting.trim().length > 0)
+    ? requiredLabelSetting.trim().toLowerCase()
+    : "review";
+
+  if (!Array.isArray(labels) || labels.length === 0) {
+    return false;
+  }
+
+  return labels.some((l) => typeof l?.name === "string" && l.name.trim().toLowerCase() === targetLabel);
 }
 
 type IssueCommentPayload = {
@@ -395,6 +421,7 @@ export interface Env {
   GITHUB_APP_SLUG: string;
   CHECK_RUN_NAME?: string;
   CHECK_RUN_DETAILS_URL?: string;
+  REQUIRED_LABEL?: string;
 }
 
 export default {
@@ -449,8 +476,16 @@ export default {
 
         const action = payload.action;
 
-        // PR 開設・更新時のみトリガー
+        // PR 開設・更新時のみトリガー（指定ラベルが存在する場合のみ発火）
         if (action === "opened" || action === "synchronize" || action === "reopened") {
+          if (!hasRequiredLabel(payload.pull_request.labels, env.REQUIRED_LABEL)) {
+            const required = env.REQUIRED_LABEL?.trim() || "review";
+            console.log(
+              `Skipping PR #${payload.number} for ${payload.repository.owner.login}/${payload.repository.name}: required label "${required}" not found.`,
+            );
+            return new Response("OK", { status: 200 });
+          }
+
           const repoOwner = payload.repository.owner.login;
           const repoName = payload.repository.name;
           const prNumber = payload.number;
