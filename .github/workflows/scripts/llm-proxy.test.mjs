@@ -220,3 +220,75 @@ test('createProxyServer preserves query params and normalizes existing /chat/com
 
   assert.equal(requestedPath, '/openai/v1/chat/completions?trace=1');
 });
+
+test('createProxyServer forwards accept-encoding as identity and preserves gzip error response without corrupting binary data', async () => {
+  const zlib = await import('node:zlib');
+  let receivedAcceptEncoding = null;
+
+  const mockErrorPayload = {
+    error: {
+      code: 429,
+      message: 'Resource has been exhausted (e.g. check quota).',
+      status: 'RESOURCE_EXHAUSTED',
+    },
+  };
+  const gzippedError = zlib.gzipSync(Buffer.from(JSON.stringify(mockErrorPayload)));
+
+  const mockUpstream = http.createServer((req, res) => {
+    receivedAcceptEncoding = req.headers['accept-encoding'];
+    res.writeHead(429, {
+      'Content-Type': 'application/json',
+      'Content-Encoding': 'gzip',
+      'Content-Length': gzippedError.length,
+    });
+    res.end(gzippedError);
+  });
+
+  await new Promise((resolve) => mockUpstream.listen(0, '127.0.0.1', resolve));
+  activeServers.push(mockUpstream);
+  const upstreamPort = mockUpstream.address().port;
+  const upstreamUrl = `http://127.0.0.1:${upstreamPort}/chat/completions`;
+
+  const proxyServer = await createProxyServer({ targetUrl: upstreamUrl, port: 0 });
+  activeServers.push(proxyServer);
+  const proxyPort = proxyServer.address().port;
+
+  const proxyResponse = await new Promise((resolve, reject) => {
+    const req = http.request(
+      `http://127.0.0.1:${proxyPort}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+        },
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('end', () => {
+          const raw = Buffer.concat(chunks);
+          let unzipped = null;
+          if (res.headers['content-encoding'] === 'gzip') {
+            unzipped = JSON.parse(zlib.gunzipSync(raw).toString('utf-8'));
+          }
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            data: unzipped,
+          });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(JSON.stringify({ messages: [{ role: 'user', content: 'test' }] }));
+    req.end();
+  });
+
+  assert.equal(receivedAcceptEncoding, 'identity');
+  assert.equal(proxyResponse.status, 429);
+  assert.equal(proxyResponse.headers['content-encoding'], 'gzip');
+  assert.equal(proxyResponse.data.error.code, 429);
+  assert.equal(proxyResponse.data.error.status, 'RESOURCE_EXHAUSTED');
+});
+
