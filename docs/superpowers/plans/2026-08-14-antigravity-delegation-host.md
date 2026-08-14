@@ -45,6 +45,9 @@ or dedicated adapter returning `{ status, decision, reason, message }` (with `sc
 - [ ] Add secret-sanitization tests: simulate child process emitting dummy OAuth/token strings in
   stdout/stderr and triggering timeout-error paths. Assert that those secrets are strictly absent
   from returned messages, logs, and failure objects while preserving sanitized error diagnostics.
+- [ ] Add batch variable boundary tests:
+  - `ANTIGRAVITY_MAX_DIFF_CHARS`: test `0`, negative (`-100`), non-numeric (`"abc"`), valid default (`20000`), and above-maximum (`50000` clamped to `40000`).
+  - `ANTIGRAVITY_MAX_FILES_PER_BATCH`: test `0`, negative (`-5`), non-numeric (`"ten"`), valid default (`10`), and above-maximum (`30` clamped to `20`).
 - [ ] Implement `runHost` and `runThreadHost` using `agy -p`, `--output-format json`, and JSON schema validators.
 - [ ] Validate coverage, severity, relative paths, clamped batch variables, and changed-line positions; return
   sanitized failures without process output containing secrets.
@@ -55,18 +58,21 @@ or dedicated adapter returning `{ status, decision, reason, message }` (with `sc
 
 **Files:** Modify `.github/workflows/ocr-engine.yml`, create/modify permission and checkout tests.
 
-- [ ] Add a PR metadata step that compares head and base repositories before any secret use.
+- [ ] Add a PR metadata step (`check-pr-target.mjs`) that compares head and base repositories before any secret use.
+- [ ] Implement external fork handling: update the existing `check_run_id` to `completed` with conclusion `neutral` (skipped) and terminate early without restoring Secrets.
 - [ ] Enforce Trusted Checkout execution boundary: check out only trusted base revision for workflow,
   scripts, and configuration execution; treat PR head strictly as passive diff data.
-- [ ] Add a successful skipped-result path for fork PRs and zero reviewable files.
 - [ ] Replace the LLM proxy, OCR configuration, and `ocr review` steps with tested pinned
-  OCR/Antigravity installation, OAuth restoration, runtime skill installation, and `agy`.
+  OCR/Antigravity installation (`@alibaba-group/open-code-review@1.2.0`, `@google/antigravity@0.8.2`), OAuth restoration, runtime skill installation, and `agy`.
 - [ ] Write a restrictive Antigravity settings file: allow `ocr delegate preview/rule` and
   Git `diff`, `show`, `status`, `rev-parse`; deny writes, push, `rm`, `sudo`, network fetch,
   unsandboxed commands, and dangerous permission bypass.
-- [ ] Add automated permission-policy and execution-boundary tests: verify allowed OCR delegation
-  and read-only Git commands succeed, and verify `rm`, `sudo`, `git push`, network fetch, and
-  `--dangerously-skip-permissions` are rejected.
+- [ ] Add automated permission-policy and execution-boundary tests:
+  - Verify allowed OCR delegation and read-only Git commands succeed.
+  - Verify `rm`, `sudo`, `git push`, network fetch, and `--dangerously-skip-permissions` are rejected.
+  - Verify Trusted Checkout boundary: assert that PR `head` workflow files, scripts, `.opencodereview/rule.json`, `.agents/skills`, or prompt injections are never loaded or executed.
+  - Verify execution source: assert that all executed Node.js modules and Antigravity skills originate strictly from the trusted base revision checkout.
+  - Verify that even for internal PRs, no executable file from PR `head` is run after OAuth Secret restoration.
 - [ ] Add head SHA revalidation check before comment publishing to prevent posting stale results.
 - [ ] Preserve artifact upload and Check Run failure for auth, CLI, schema, and API failures.
 - [ ] Validate workflow syntax and run all workflow-script tests.
@@ -99,7 +105,8 @@ or dedicated adapter returning `{ status, decision, reason, message }` (with `sc
 ### Task 5: End-to-end verification
 
 - [ ] Run every workflow-script test with `node --test .github/workflows/scripts/*.test.mjs`.
-- [ ] Validate an internal test PR, a fork skip, zero targets, failed auth, malformed host JSON,
+- [ ] Validate pinned versions (`@alibaba-group/open-code-review@1.2.0`, `@google/antigravity@0.8.2`) in CI execution environment.
+- [ ] Validate an internal test PR, a fork skip with `neutral` Check Run completion, zero targets, failed auth, malformed host JSON,
   High finding, and one fixed versus one ambiguous OCR thread.
 - [ ] Confirm no Secret, OAuth artifact, complete prompt, or complete diff appears in logs/artifacts.
 - [ ] Confirm a sub-500-line internal PR completes within three minutes.

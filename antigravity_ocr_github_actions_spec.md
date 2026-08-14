@@ -202,9 +202,12 @@ jobs:
 
       - name: Validate PR Metadata & Fork Check
         id: check_fork
+        env:
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Head リポジトリと Base リポジトリを比較
-          # 外部フォーク PR の場合はスキップフラグをセット
+          # 外部フォーク PR の場合は Check Run を completed / neutral (skipped) に更新して終了
           node .github/workflows/scripts/check-pr-target.mjs
 
       - name: Setup Node.js
