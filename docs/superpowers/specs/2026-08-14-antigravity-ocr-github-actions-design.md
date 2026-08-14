@@ -157,26 +157,39 @@ The Antigravity host agent invokes the following commands from the checked-out t
 repository:
 
 ```text
-ocr delegate preview --format json --from origin/<base> --to <head>
+ocr delegate preview --format json --from origin/<base> --to <commit_sha>
 ocr delegate rule --format json <reviewable-path...>
 ```
 
-`preview` determines reviewability, exclusions, merge base, and per-file change counts.
+`preview` determines reviewability, exclusions, merge base, and per-file change counts using
+the immutable `commit_sha` provided in the dispatch payload (never a mutable branch ref).
 `rule` groups the selected paths by applicable rule text. The host agent must validate the
 reported schema version before relying on either output.
 
 The host agent processes files in deterministic rule groups and bounded diff batches. The
 defaults are 20,000 diff characters and 10 files per batch. Repository variables
-`ANTIGRAVITY_MAX_DIFF_CHARS` and `ANTIGRAVITY_MAX_FILES_PER_BATCH` may lower or raise
-those limits. The final agent result must record each reviewable file as reviewed or
-skipped with a reason.
+`ANTIGRAVITY_MAX_DIFF_CHARS` and `ANTIGRAVITY_MAX_FILES_PER_BATCH` are clamped to fixed hard
+bounds:
+- `ANTIGRAVITY_MAX_DIFF_CHARS`: min 1,000, default 20,000, hard maximum 40,000. Values <= 0,
+  non-numeric, or above 40,000 fallback to default or clamp to maximum.
+- `ANTIGRAVITY_MAX_FILES_PER_BATCH`: min 1, default 10, hard maximum 20. Values <= 0,
+  non-numeric, or above 20 fallback to default or clamp to maximum.
+
+The final agent result must record each reviewable file as reviewed or skipped with a reason.
+
+Before posting review findings or summary updates, the host runner revalidates that the PR's
+current head SHA still matches `commit_sha`. If the head SHA has changed (e.g. due to a newer
+push during execution), the runner aborts publishing to avoid posting stale results.
 
 ### Antigravity review result contract
 
-Each `agy` invocation must return JSON matching a schema equivalent to:
+Each `agy` review invocation runs with mode `review` and must return JSON matching
+schema version `1.0` validated by the host runner:
 
 ```json
 {
+  "schema_version": "1.0",
+  "mode": "review",
   "coverage": [
     {
       "path": "relative/path",
@@ -197,24 +210,26 @@ Each `agy` invocation must return JSON matching a schema equivalent to:
 }
 ```
 
-The host runner accepts only `Critical`, `High`, `Medium`, and `Low`. It verifies that
-each reported line can be mapped to the current PR diff and rejects malformed output.
+The host runner validator accepts only `Critical`, `High`, `Medium`, and `Low`. It verifies
+that each reported line can be mapped to the current PR diff and rejects malformed output.
 Low findings may be filtered from the published result, but the filtering policy is
 deterministic and tested.
 
 ### Thread-resolution contract
 
-For each eligible unresolved review thread, the resolver provides its comment history and
-current file context to `agy`. The required response is:
+For each eligible unresolved review thread, the thread resolver invokes `agy` in `thread`
+mode. The required response matching schema version `1.0` is:
 
 ```json
 {
+  "schema_version": "1.0",
+  "mode": "thread",
   "decision": "resolve | keep",
   "reason": "Evidence from the current code"
 }
 ```
 
-Only `resolve` triggers the existing GitHub GraphQL reply and `resolveReviewThread`
+Only an explicit `resolve` triggers the existing GitHub GraphQL reply and `resolveReviewThread`
 mutation. Any parse error, timeout, missing file, ambiguous context, or non-`resolve`
 response leaves the thread unresolved.
 
@@ -228,32 +243,40 @@ response leaves the thread unresolved.
 | Authentication or CLI failure | `failure` | Failure summary without secret details |
 | Invalid LLM output or GitHub API failure | `failure` | Failure summary and sanitized diagnostic artifact |
 
-The summary comment contains a stable marker such as
-`<!-- antigravity-ocr-summary -->`. Re-runs update that comment rather than appending a
-new summary. Inline review comments remain GitHub review records; stale ones are handled
-only by the conservative resolver.
+The summary comment contains an exact matching marker `<!-- antigravity-ocr-summary -->`.
+Re-runs inspect existing comments to confirm both the exact marker and the expected bot login
+owner before performing a PATCH, and only POST if absent. This prevents modifying user comments
+or duplicating bot comments. Inline review comments remain GitHub review records; stale ones
+are handled only by the conservative resolver.
 
 ---
 
 ## 5. Security and Reliability
 
-### OAuth handling
+### OAuth handling and Trusted Checkout Boundary
 
-The workflow reads these central-repository Secrets only after confirming the PR is
-internal:
+The workflow reads central-repository Secrets only after confirming the PR is internal:
 
 - `GEMINI_OAUTH_CREDS_B64`
 - `GEMINI_GOOGLE_ACCOUNTS_B64`
 
-The workflow restores the artifacts under `~/.gemini/` with owner-only permissions. It
-installs the delegate skill separately under `~/.gemini/antigravity-cli/skills/` for the
-ephemeral CI user. The restoration mechanism is explicitly experimental because
-Antigravity officially documents native-keyring authentication, not CI import of Gemini
-CLI OAuth files. A headless smoke test is the compatibility gate for every run.
+**Trusted Checkout Execution Boundary:**
+- The runner checks out only the protected `base` revision (or workflow repository code) as
+  the trusted execution environment. All workflows, Node.js scripts, configuration, and
+  installed delegate skills are strictly executed from this trusted source.
+- PR `head` code and files are fetched purely as passive diff data (`git diff`, `git show`,
+  `ocr delegate preview/rule`). No scripts, build hooks, configuration files, skills, or
+  prompts originating from the PR `head` are ever executed or loaded into the host environment.
 
-The central repository must protect workflow changes through branch protection and
-CODEOWNERS. Access to the two OAuth Secrets must be limited to trusted maintainers. No
-workflow using these secrets may execute code from an external fork.
+The workflow restores the OAuth artifacts under `~/.gemini/` with owner-only permissions (`600`).
+It installs the official delegate skill separately under `~/.gemini/antigravity-cli/skills/` for the
+ephemeral CI user. The restoration mechanism is explicitly experimental because Antigravity
+officially documents native-keyring authentication, not CI import of Gemini CLI OAuth files. A
+headless smoke test is the compatibility gate for every run.
+
+The central repository must protect workflow changes through branch protection and CODEOWNERS.
+Access to the two OAuth Secrets must be limited to trusted maintainers. No workflow using these
+secrets may execute code from an external fork.
 
 ### Failure handling
 
