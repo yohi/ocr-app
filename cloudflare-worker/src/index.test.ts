@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { isRecord, isIssueCommentPayload, isMentioningReviewer } from "./index";
+import { isRecord, isIssueCommentPayload, isMentioningReviewer, hasRequiredLabel } from "./index";
 import worker from "./index";
 
 vi.mock("@octokit/auth-app", () => ({
@@ -254,6 +254,26 @@ describe("issue_comment mention flow", () => {
   });
 });
 
+describe("hasRequiredLabel", () => {
+  it("returns true when default 'review' label is present", () => {
+    expect(hasRequiredLabel([{ name: "review" }])).toBe(true);
+    expect(hasRequiredLabel([{ name: "REVIEW" }])).toBe(true);
+    expect(hasRequiredLabel([{ name: "bug" }, { name: "review" }])).toBe(true);
+  });
+
+  it("returns false when required label is not present", () => {
+    expect(hasRequiredLabel(undefined)).toBe(false);
+    expect(hasRequiredLabel([])).toBe(false);
+    expect(hasRequiredLabel([{ name: "bug" }, { name: "feature" }])).toBe(false);
+  });
+
+  it("matches custom required label when specified", () => {
+    expect(hasRequiredLabel([{ name: "opencode-review" }], "opencode-review")).toBe(true);
+    expect(hasRequiredLabel([{ name: "OPENCODE-REVIEW" }], "opencode-review")).toBe(true);
+    expect(hasRequiredLabel([{ name: "review" }], "opencode-review")).toBe(false);
+  });
+});
+
 describe("pull_request opened flow", () => {
   const env = {
     GITHUB_APP_ID: "123",
@@ -262,12 +282,13 @@ describe("pull_request opened flow", () => {
     GITHUB_APP_SLUG: "opencodereview-app",
   };
 
-  const basePayload = {
+  const basePayloadWithLabel = {
     action: "opened",
     number: 1,
     pull_request: {
       head: { sha: "abc123" },
       base: { ref: "main" },
+      labels: [{ name: "review" }],
     },
     repository: { owner: { login: "owner" }, name: "repo" },
     installation: { id: 456 },
@@ -284,12 +305,12 @@ describe("pull_request opened flow", () => {
     vi.restoreAllMocks();
   });
 
-  it("dispatches repository_dispatch with base_ref and check_run_id", async () => {
+  it("dispatches repository_dispatch when required label is present", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) }) // create check run
       .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
 
-    const body = JSON.stringify(basePayload);
+    const body = JSON.stringify(basePayloadWithLabel);
     const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
     const request = new Request("https://example.com/webhook", {
       method: "POST",
@@ -314,5 +335,213 @@ describe("pull_request opened flow", () => {
     expect(dispatchBody.client_payload.base_ref).toBe("main");
     expect(dispatchBody.client_payload.commit_sha).toBe("abc123");
     expect(dispatchBody.client_payload.check_run_id).toBe(98765);
+  });
+
+  it("skips dispatch when required label is not present", async () => {
+    const payloadWithoutLabel = {
+      ...basePayloadWithLabel,
+      pull_request: {
+        ...basePayloadWithLabel.pull_request,
+        labels: [{ name: "other-label" }],
+      },
+    };
+
+    const body = JSON.stringify(payloadWithoutLabel);
+    const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it("respects custom REQUIRED_LABEL environment variable", async () => {
+    const customEnv = {
+      ...env,
+      REQUIRED_LABEL: "ocr-trigger",
+    };
+
+    const payloadWithCustomLabel = {
+      ...basePayloadWithLabel,
+      pull_request: {
+        ...basePayloadWithLabel.pull_request,
+        labels: [{ name: "ocr-trigger" }],
+      },
+    };
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) })
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" });
+
+    const body = JSON.stringify(payloadWithCustomLabel);
+    const signature = await calculateSignature(customEnv.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, customEnv);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("pull_request labeled flow", () => {
+  const env = {
+    GITHUB_APP_ID: "123",
+    GITHUB_APP_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nMIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8wggE7AgEAAkEA\n-----END PRIVATE KEY-----",
+    WEBHOOK_SECRET: "test-secret",
+    GITHUB_APP_SLUG: "opencodereview-app",
+  };
+
+  const baseLabeledPayload = {
+    action: "labeled",
+    number: 1,
+    label: { name: "review" },
+    pull_request: {
+      head: { sha: "abc123" },
+      base: { ref: "main" },
+      labels: [{ name: "review" }],
+    },
+    repository: { owner: { login: "owner" }, name: "repo" },
+    installation: { id: 456 },
+  };
+
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    fetchMock.mockReset();
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("dispatches repository_dispatch when assigned label matches default required label", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) }) // create check run
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
+
+    const body = JSON.stringify(baseLabeledPayload);
+    const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [checkRunCall, dispatchCall] = fetchMock.mock.calls;
+    expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
+    expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
+    const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
+    expect(dispatchBody.event_type).toBe("open_code_review_trigger");
+    expect(dispatchBody.client_payload.check_run_id).toBe(98765);
+  });
+
+  it("skips dispatch when assigned label is not the required label even if PR already has required label", async () => {
+    const payloadWithUnrelatedLabel = {
+      ...baseLabeledPayload,
+      label: { name: "documentation" },
+      pull_request: {
+        ...baseLabeledPayload.pull_request,
+        labels: [{ name: "review" }, { name: "documentation" }],
+      },
+    };
+
+    const body = JSON.stringify(payloadWithUnrelatedLabel);
+    const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(0);
+  });
+
+  it("dispatches when assigned label matches custom REQUIRED_LABEL", async () => {
+    const customEnv = {
+      ...env,
+      REQUIRED_LABEL: "ocr-trigger",
+    };
+
+    const payloadWithCustomLabel = {
+      ...baseLabeledPayload,
+      label: { name: "ocr-trigger" },
+      pull_request: {
+        ...baseLabeledPayload.pull_request,
+        labels: [{ name: "ocr-trigger" }],
+      },
+    };
+
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) })
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" });
+
+    const body = JSON.stringify(payloadWithCustomLabel);
+    const signature = await calculateSignature(customEnv.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, customEnv);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips dispatch when payload.label is undefined in labeled event", async () => {
+    const payloadWithoutLabel = {
+      ...baseLabeledPayload,
+      label: undefined,
+    };
+
+    const body = JSON.stringify(payloadWithoutLabel);
+    const signature = await calculateSignature(env.WEBHOOK_SECRET, body);
+    const request = new Request("https://example.com/webhook", {
+      method: "POST",
+      headers: {
+        "X-GitHub-Event": "pull_request",
+        "X-Hub-Signature-256": signature,
+        "Content-Type": "application/json",
+      },
+      body,
+    });
+    const response = await worker.fetch(request, env);
+    expect(response.status).toBe(200);
+
+    expect(fetchMock).toHaveBeenCalledTimes(0);
   });
 });

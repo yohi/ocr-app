@@ -208,6 +208,18 @@ export function executeGraphQLQuery(token, query) {
   });
 }
 
+export function isOcrThread(thread) {
+  const comments = Array.isArray(thread?.comments)
+    ? thread.comments
+    : (Array.isArray(thread?.comments?.nodes) ? thread.comments.nodes : []);
+  const firstComment = comments[0];
+  const login = firstComment?.author?.login;
+  if (!login || typeof login !== 'string') {
+    return false;
+  }
+  return /^opencodereview-app(\[bot\])?$/i.test(login.trim());
+}
+
 export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
   const openThreads = [];
   let cursor = null;
@@ -227,7 +239,7 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
     }
 
     for (const thread of reviewThreads.nodes) {
-      if (!thread.isResolved) {
+      if (!thread.isResolved && isOcrThread(thread)) {
         openThreads.push({
           id: thread.id,
           path: thread.path,
