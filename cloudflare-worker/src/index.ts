@@ -105,6 +105,9 @@ type PullRequestWebhookPayload = {
       readonly name?: string;
     }>;
   };
+  readonly label?: {
+    readonly name?: string;
+  };
 };
 
 const textEncoder = new TextEncoder();
@@ -144,6 +147,14 @@ function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWe
   }
 
   if (payload.pull_request.labels !== undefined && !Array.isArray(payload.pull_request.labels)) {
+    return false;
+  }
+
+  if (
+    payload.label !== undefined &&
+    (!isRecord(payload.label) ||
+      (payload.label.name !== undefined && typeof payload.label.name !== "string"))
+  ) {
     return false;
   }
 
@@ -476,9 +487,22 @@ export default {
 
         const action = payload.action;
 
-        // PR 開設・更新時のみトリガー（指定ラベルが存在する場合のみ発火）
-        if (action === "opened" || action === "synchronize" || action === "reopened") {
-          if (!hasRequiredLabel(payload.pull_request.labels, env.REQUIRED_LABEL)) {
+        // PR 開設・更新・ラベル付与時のみトリガー（指定ラベルが存在する場合のみ発火）
+        if (
+          action === "opened" ||
+          action === "synchronize" ||
+          action === "reopened" ||
+          action === "labeled"
+        ) {
+          if (action === "labeled") {
+            if (!hasRequiredLabel(payload.label ? [payload.label] : undefined, env.REQUIRED_LABEL)) {
+              const required = env.REQUIRED_LABEL?.trim() || "review";
+              console.log(
+                `Skipping PR #${payload.number} for ${payload.repository.owner.login}/${payload.repository.name}: added label is not "${required}".`,
+              );
+              return new Response("OK", { status: 200 });
+            }
+          } else if (!hasRequiredLabel(payload.pull_request.labels, env.REQUIRED_LABEL)) {
             const required = env.REQUIRED_LABEL?.trim() || "review";
             console.log(
               `Skipping PR #${payload.number} for ${payload.repository.owner.login}/${payload.repository.name}: required label "${required}" not found.`,
