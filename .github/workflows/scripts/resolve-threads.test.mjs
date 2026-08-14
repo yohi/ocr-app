@@ -7,7 +7,8 @@ import {
   buildFetchThreadsQuery,
   buildReplyMutation,
   buildResolveMutation,
-  extractCodeContext
+  extractCodeContext,
+  isOcrThread
 } from './resolve-threads.mjs';
 
 test('createConfig parses CLI args and token correctly', () => {
@@ -94,3 +95,18 @@ test('model selection prioritizes RESOLVE_LLM_MODEL over OCR_LLM_MODEL', () => {
   const selectedFallback = envFallback.RESOLVE_LLM_MODEL || envFallback.OCR_LLM_MODEL;
   assert.equal(selectedFallback, 'ocr-fallback-model');
 });
+
+test('isOcrThread correctly identifies opencodereview-app and opencodereview-app[bot]', () => {
+  assert.equal(isOcrThread({ comments: [{ author: { login: 'opencodereview-app' } }] }), true);
+  assert.equal(isOcrThread({ comments: [{ author: { login: 'opencodereview-app[bot]' } }] }), true);
+  assert.equal(isOcrThread({ comments: [{ author: { login: 'OPENCODEREVIEW-APP' } }] }), true);
+  assert.equal(isOcrThread({ comments: { nodes: [{ author: { login: 'opencodereview-app' } }] } }), true);
+
+  // Non-OCR authors
+  assert.equal(isOcrThread({ comments: [{ author: { login: 'coderabbitai' } }] }), false);
+  assert.equal(isOcrThread({ comments: [{ author: { login: 'human-user' } }] }), false);
+  assert.equal(isOcrThread({ comments: [] }), false);
+  assert.equal(isOcrThread({ comments: [{ author: null }] }), false);
+  assert.equal(isOcrThread(null), false);
+});
+
