@@ -89,7 +89,9 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0 @google/antigravity@0.8.2
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0
+          curl -fsSL https://antigravity.google/cli/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Restore experimental Antigravity OAuth
         if: steps.target.outputs.internal == 'true'
@@ -100,6 +102,7 @@ jobs:
             umask 077
             install -d "$HOME/.gemini/antigravity-cli"
             printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/oauth.json"
+            printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
           fi
 
       - name: Install trusted delegate skill
@@ -174,10 +177,12 @@ jobs:
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
-          node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
-            --repo "${{ github.event.client_payload.target_repo }}" \
-            --pr "${{ github.event.client_payload.pr_number }}" \
-            --result "/tmp/ocr-result.json"
+          if [ -f "/tmp/ocr-result.json" ]; then
+            node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
+              --repo "${{ github.event.client_payload.target_repo }}" \
+              --pr "${{ github.event.client_payload.pr_number }}" \
+              --result "/tmp/ocr-result.json"
+          fi
 
       - name: Upload result artifacts
         if: always() && steps.target.outputs.internal == 'true'
