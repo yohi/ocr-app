@@ -92,6 +92,45 @@ function validateThread(data) {
   return data;
 }
 
+function parseJsonFromText(text) {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch) {
+      return JSON.parse(codeBlockMatch[1].trim());
+    }
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      return JSON.parse(trimmed.slice(firstBrace, lastBrace + 1));
+    }
+    throw new Error('No valid JSON object found in response');
+  }
+}
+
+export function extractPayload(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    if (raw.status === 'ERROR' || raw.status === 'FAILED') {
+      throw new Error(raw.error || raw.message || 'Antigravity execution failed');
+    }
+    if ('response' in raw) {
+      if (typeof raw.response === 'string') {
+        return parseJsonFromText(raw.response);
+      }
+      if (typeof raw.response === 'object' && raw.response !== null) {
+        return raw.response;
+      }
+    }
+    return raw;
+  }
+  if (typeof raw === 'string') {
+    return parseJsonFromText(raw);
+  }
+  throw new Error('Invalid payload format');
+}
+
 function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
   return new Promise((resolve) => {
     let stdout = '';
@@ -149,7 +188,8 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
         return;
       }
       try {
-        const parsed = JSON.parse(stdout);
+        const topLevel = JSON.parse(stdout);
+        const parsed = extractPayload(topLevel);
         finish({ parsed });
       } catch {
         finish({ error: new Error('Antigravity host returned malformed JSON') });

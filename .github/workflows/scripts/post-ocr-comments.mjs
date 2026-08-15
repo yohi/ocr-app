@@ -69,7 +69,11 @@ function normalizeComment(comment) {
   const path = typeof comment.path === 'string' ? comment.path : null;
   const body = typeof comment.body === 'string'
     ? comment.body
-    : typeof comment.content === 'string' ? comment.content : null;
+    : typeof comment.content === 'string'
+      ? comment.content
+      : typeof comment.message === 'string'
+        ? comment.message
+        : null;
 
   let line = null;
   if (isValidLineNumber(comment.line)) {
@@ -437,11 +441,15 @@ export async function run({
     return 1;
   }
 
-  if (!Array.isArray(result.comments)) {
-    throw new CliError('Invalid result format: "comments" property must be an array');
+  const rawList = Array.isArray(result.findings)
+    ? result.findings
+    : (Array.isArray(result.comments) ? result.comments : null);
+
+  if (!rawList) {
+    throw new CliError('Invalid result format: "findings" or "comments" property must be an array');
   }
 
-  const comments = getValidComments(result.comments);
+  const comments = getValidComments(rawList);
   if (comments.length === 0) {
     return 0;
   }

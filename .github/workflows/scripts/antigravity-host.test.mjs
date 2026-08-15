@@ -53,6 +53,37 @@ test('runHost invokes agy and returns a validated review result', async () => {
   assert.deepEqual(result, validReview);
 });
 
+test('runHost unwraps agy CLI JSON envelope with string response', async () => {
+  const envelope = {
+    conversation_id: '12345',
+    status: 'SUCCESS',
+    response: JSON.stringify(validReview),
+    duration_seconds: 1.5,
+  };
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(envelope)),
+  });
+
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost unwraps agy CLI JSON envelope with markdown code block', async () => {
+  const envelope = {
+    conversation_id: '12345',
+    status: 'SUCCESS',
+    response: '```json\n' + JSON.stringify(validReview, null, 2) + '\n```',
+  };
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(envelope)),
+  });
+
+  assert.deepEqual(result, validReview);
+});
+
 test('runHost rejects malformed JSON as a sanitized failure', async () => {
   const result = await runHost({
     prompt: 'Review the trusted diff.',
