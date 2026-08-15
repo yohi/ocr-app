@@ -191,18 +191,18 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
     child.once('error', error => finish({ error }));
     child.once('close', (code, signal) => {
       if (code !== 0) {
-        finish({ error: new Error(`Antigravity host exited with ${signal || `code ${code}`}`) });
+        const errorDetail = stderr.trim() ? `: ${stderr.trim()}` : '';
+        finish({ error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`) });
         return;
       }
       try {
         const parsed = extractPayload(stdout);
         finish({ parsed });
       } catch (err) {
-        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}`) });
+        const errorDetail = stderr.trim() ? ` (stderr: ${stderr.trim()})` : '';
+        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`) });
       }
     });
-    void stderr;
-    void mode;
   });
 }
 
