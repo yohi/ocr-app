@@ -57,6 +57,12 @@ test('workflow policy allows only review delegation and read-only Git', () => {
 
   assert.deepEqual(settings.permissions.allow, [
     'command(*)',
+    'read_file(*)',
+    'view_file(*)',
+    'list_dir(*)',
+    'grep_search(*)',
+    'find_by_name(*)',
+    'read_symbol_definition(*)',
   ]);
   assert.deepEqual(settings.permissions.deny, [
     'command(git push*)',

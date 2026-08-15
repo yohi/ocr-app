@@ -127,8 +127,23 @@ jobs:
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
             "permissions": {
-              "allow": ["command(*)"],
-              "deny": ["command(git push*)", "command(git fetch*)", "command(curl*)", "command(wget*)", "command(rm*)", "command(sudo*)"]
+              "allow": [
+                "command(*)",
+                "read_file(*)",
+                "view_file(*)",
+                "list_dir(*)",
+                "grep_search(*)",
+                "find_by_name(*)",
+                "read_symbol_definition(*)"
+              ],
+              "deny": [
+                "command(git push*)",
+                "command(git fetch*)",
+                "command(curl*)",
+                "command(wget*)",
+                "command(rm*)",
+                "command(sudo*)"
+              ]
             }
           }
           EOF
