@@ -211,13 +211,15 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 | 登録先 | 名前 | 説明 |
 | --- | --- | --- |
 | Actions (Secret) | `CLOUDFLARE_API_TOKEN` | Cloudflare デプロイ用 API トークン |
+| Actions (Secret または Variable) | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare アカウント ID（Worker デプロイで必須） |
 | Actions (Secret) | `GH_APP_PRIVATE_KEY` | GitHub App の秘密鍵 (PEM 形式) |
 | Actions (Secret) | `WEBHOOK_SECRET` | Webhook 署名検証用シークレット |
+| Actions (Secret) | `ANTIGRAVITY_OAUTH_JSON` | Antigravity CLI (agy) の OAuth 認証情報 |
 | Actions (Variable) | `GH_APP_ID` | GitHub App の ID（`ocr-engine.yml` および Worker デプロイで使用） |
 | Actions (Variable) | `GH_TARGET_DISPATCH_REPO` | dispatch 先（任意・未設定時は `yohi/ocr-app`） |
 | Actions (Variable) | `GH_APP_SLUG` | GitHub App の slug（例: `opencodereview-app`） |
 | Actions (Variable) | `GH_CHECK_RUN_NAME` | check run 名（任意・未設定時は `OpenCodeReview`） |
-| Actions (Variable) | `GH_CHECK_RUN_DETAILS_URL` | check run 詳細リンク（任意・未設定時は対象リポジトリの Actions ページ） |
+| Actions (Variable) | `GH_CHECK_RUN_DETAILS_URL` | check run 詳細リンク（任意・未設定時は対象リポジトリの Actionsページ） |
 | Actions (Variable) | `GH_REQUIRED_LABEL` | 自動レビュー発火に必要な PR ラベル名（任意・未設定時は `review`） |
 >
 > **注意**: GitHub Actions の Secret 名は `GITHUB_` で始められません（GitHub が予約しているため）。
@@ -226,6 +228,12 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
 - **GitHub Actions**: 本リポジトリの
   **Settings → Secrets and variables → Actions** に登録します。
   LLM 関連の Secrets は [LLM の設定](#llm-の設定) を参照してください。
+- **Antigravity 認証情報の自動同期**:
+  ローカルの `agy` 認証情報を一括登録するための同期スクリプトが利用可能です。
+  ```bash
+  ./scripts/sync-agy-credentials.sh
+  ```
+  ※ GitHub CLI (`gh`) を利用して `~/.gemini/antigravity-cli/oauth.json` を Secret `ANTIGRAVITY_OAUTH_JSON` に自動登録します。
 - **Cloudflare Worker**: Secrets `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` は
   デプロイワークフローが Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）から、
   Vars `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は Actions の
@@ -245,14 +253,14 @@ GitHub Actions で自動化しています。
 | 項目 | 内容 |
 | --- | --- |
 | トリガー | `workflow_dispatch`（手動実行のみ） |
-| 必要な Secrets / Variables | `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`（Secret）と `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`（Variable・下記手順 2 参照） |
+| 必要な Secrets / Variables | `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`（Secret）と `GH_APP_ID` / `GH_TARGET_DISPATCH_REPO`（Variable・下記手順 2 参照） |
 | 作業ディレクトリ | `cloudflare-worker` |
 
 1. [Cloudflare API トークン](https://dash.cloudflare.com/profile/api-tokens) を作成し、
-   Worker 編集に必要な権限を付与します。
+   Worker 編集に必要な権限を付与します。また、Cloudflare ダッシュボードから Account ID を取得します。
 2. 本リポジトリの **Settings > Secrets and variables > Actions** に登録します。
-   - **Secrets** タブ: `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`
-   - **Variables** タブ: `GH_APP_ID`（App ID）/ `GH_TARGET_DISPATCH_REPO`（任意）
+   - **Secrets** タブ: `CLOUDFLARE_API_TOKEN` / `GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`（および必要に応じて `CLOUDFLARE_ACCOUNT_ID`）
+   - **Variables** タブ: `CLOUDFLARE_ACCOUNT_ID` / `GH_APP_ID`（App ID）/ `GH_TARGET_DISPATCH_REPO`（任意）
      > ※ 既存環境で `GH_APP_ID` を Secret に登録していた場合は、Secret と同じ値を Variable に移行登録してください。
 3. GitHub の Actions タブから `Deploy Cloudflare Worker (GitHub App Backend)` を選択し、
    「Run workflow」を押して手動デプロイします。
