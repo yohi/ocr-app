@@ -40,6 +40,7 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
 });
 
 test('workflow policy allows only review delegation and read-only Git', () => {
+  assert.match(workflow, /concurrency:\n  group: ocr-engine-\$\{\{ github\.event\.client_payload\.target_repo \}\}-\$\{\{ github\.event\.client_payload\.pr_number \}\}\n  cancel-in-progress: false/);
   const settingsMatch = workflow.match(/settings\.json"?\s*<<'EOF'\n([\s\S]*?)\n\s*EOF/);
   assert.ok(settingsMatch, 'restrictive settings.json must be written by the workflow');
   const settings = JSON.parse(settingsMatch[1]);
