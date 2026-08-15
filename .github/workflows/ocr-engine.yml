@@ -89,7 +89,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g @alibaba-group/open-code-review@1.2.0 @google/antigravity@0.8.2
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0 @google/antigravity@0.8.2
 
       - name: Restore experimental Antigravity OAuth
         if: steps.target.outputs.internal == 'true'

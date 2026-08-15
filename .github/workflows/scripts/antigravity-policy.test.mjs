@@ -32,6 +32,7 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /@alibaba-group\/open-code-review@1\.2\.0/);
   assert.match(workflow, /@google\/antigravity@0\.8\.2/);
+  assert.match(workflow, /npm install -g --ignore-scripts /);
   assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/ocr-delegate/);
   assert.match(workflow, /ANTIGRAVITY_OAUTH_JSON/);
   assert.match(workflow, /printf '%s' "\$ANTIGRAVITY_OAUTH_JSON"/);
