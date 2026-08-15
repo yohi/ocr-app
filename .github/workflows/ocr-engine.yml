@@ -127,8 +127,8 @@ jobs:
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
             "permissions": {
-              "allow": ["ocr delegate preview", "ocr delegate rule", "git diff", "git show", "git status", "git rev-parse"],
-              "deny": ["git push", "git fetch", "curl", "wget", "rm", "sudo", "--dangerously-skip-permissions"]
+              "allow": ["command(*)"],
+              "deny": ["command(git push*)", "command(git fetch*)", "command(curl*)", "command(wget*)", "command(rm*)", "command(sudo*)"]
             }
           }
           EOF

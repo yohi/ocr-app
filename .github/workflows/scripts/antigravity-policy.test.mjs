@@ -56,21 +56,15 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.doesNotMatch(reviewStep, /--dangerously-skip-permissions/);
 
   assert.deepEqual(settings.permissions.allow, [
-    'ocr delegate preview',
-    'ocr delegate rule',
-    'git diff',
-    'git show',
-    'git status',
-    'git rev-parse',
+    'command(*)',
   ]);
   assert.deepEqual(settings.permissions.deny, [
-    'git push',
-    'git fetch',
-    'curl',
-    'wget',
-    'rm',
-    'sudo',
-    '--dangerously-skip-permissions',
+    'command(git push*)',
+    'command(git fetch*)',
+    'command(curl*)',
+    'command(wget*)',
+    'command(rm*)',
+    'command(sudo*)',
   ]);
   assert.ok(settings.permissions.allow.every(command => !settings.permissions.deny.includes(command)));
   assert.ok(

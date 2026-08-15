@@ -84,6 +84,38 @@ test('runHost unwraps agy CLI JSON envelope with markdown code block', async () 
   assert.deepEqual(result, validReview);
 });
 
+test('runHost extracts envelope even when stdout contains prefix warnings or noise', async () => {
+  const envelope = {
+    conversation_id: '12345',
+    status: 'SUCCESS',
+    response: JSON.stringify(validReview),
+  };
+  const noisyStdout = 'jetski: warning — some info\n' + JSON.stringify(envelope);
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(noisyStdout),
+  });
+
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost handles error status envelope from agy', async () => {
+  const envelope = {
+    conversation_id: '12345',
+    status: 'ERROR',
+    error: 'Authentication failed',
+  };
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(envelope)),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.message, /Authentication failed/i);
+});
+
 test('runHost rejects malformed JSON as a sanitized failure', async () => {
   const result = await runHost({
     prompt: 'Review the trusted diff.',

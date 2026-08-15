@@ -93,7 +93,13 @@ function validateThread(data) {
 }
 
 function parseJsonFromText(text) {
+  if (typeof text !== 'string') {
+    throw new Error('Expected string input for JSON parsing');
+  }
   const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    throw new Error('Response text is empty');
+  }
   try {
     return JSON.parse(trimmed);
   } catch {
@@ -126,7 +132,8 @@ export function extractPayload(raw) {
     return raw;
   }
   if (typeof raw === 'string') {
-    return parseJsonFromText(raw);
+    const parsed = parseJsonFromText(raw);
+    return extractPayload(parsed);
   }
   throw new Error('Invalid payload format');
 }
@@ -188,11 +195,10 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
         return;
       }
       try {
-        const topLevel = JSON.parse(stdout);
-        const parsed = extractPayload(topLevel);
+        const parsed = extractPayload(stdout);
         finish({ parsed });
-      } catch {
-        finish({ error: new Error('Antigravity host returned malformed JSON') });
+      } catch (err) {
+        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}`) });
       }
     });
     void stderr;
