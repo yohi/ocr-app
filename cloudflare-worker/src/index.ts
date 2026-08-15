@@ -97,9 +97,15 @@ type PullRequestWebhookPayload = {
   readonly pull_request: {
     readonly head: {
       readonly sha: string;
+      readonly repo?: {
+        readonly full_name?: string;
+      };
     };
     readonly base: {
       readonly ref: string;
+      readonly repo?: {
+        readonly full_name?: string;
+      };
     };
     readonly labels?: ReadonlyArray<{
       readonly name?: string;
@@ -114,6 +120,13 @@ const textEncoder = new TextEncoder();
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function resolveHeadRepository(value: unknown, fallback: string): string {
+  if (!isRecord(value) || typeof value.full_name !== "string" || value.full_name.trim().length === 0) {
+    return fallback;
+  }
+  return value.full_name;
 }
 
 function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWebhookPayload {
@@ -339,6 +352,7 @@ async function sendRepositoryDispatch(
   token: string,
   clientPayload: {
     target_repo: string;
+    head_repo: string;
     pr_number: number;
     commit_sha: string;
     base_ref: string;
@@ -523,6 +537,7 @@ export default {
           );
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
+            head_repo: resolveHeadRepository(payload.pull_request.head.repo, `${repoOwner}/${repoName}`),
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
             base_ref: payload.pull_request.base.ref,
@@ -606,6 +621,7 @@ export default {
 
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
+            head_repo: resolveHeadRepository(pullRequestPayload.head.repo, `${repoOwner}/${repoName}`),
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,

@@ -4,6 +4,10 @@ on:
   repository_dispatch:
     types: [open_code_review_trigger]
 
+concurrency:
+  group: ocr-engine-${{ github.event.client_payload.target_repo }}-${{ github.event.client_payload.pr_number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: write
@@ -13,32 +17,49 @@ jobs:
   run-ocr-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Parse target repo
-        id: parse-target
-        env:
-          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
-        run: |
-          echo "owner=${TARGET_REPO%%/*}" >> "$GITHUB_OUTPUT"
-          echo "repo=${TARGET_REPO##*/}" >> "$GITHUB_OUTPUT"
-      - name: Checkout self repository (for scripts)
+      - name: Checkout trusted workflow repository
         uses: actions/checkout@v4
         with:
           path: self-repo
+          ref: ${{ github.sha }}
+
+      - name: Parse PR target metadata
+        id: target
+        env:
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          HEAD_REPO: ${{ github.event.client_payload.head_repo }}
+          BASE_REPO: ${{ github.event.client_payload.target_repo }}
+        run: node self-repo/.github/workflows/scripts/check-pr-target.mjs
+
+      - name: Complete external fork check as neutral
+        if: steps.target.outputs.internal == 'false' && github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+        run: |
+          curl --fail-with-body -sS -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
+            -d '{"status":"completed","conclusion":"neutral","output":{"title":"Skipped external fork","summary":"OpenCodeReview runs only for internal pull requests."}}'
 
       - name: Generate GitHub App token
         id: app-token
+        if: steps.target.outputs.internal == 'true'
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ vars.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ steps.parse-target.outputs.owner }}
-          repositories: ${{ steps.parse-target.outputs.repo }}
+          owner: ${{ steps.target.outputs.owner }}
+          repositories: ${{ steps.target.outputs.repo }}
           permission-pull-requests: write
           permission-issues: write
           permission-contents: read
           permission-checks: write
 
-      - name: Checkout Target Repo
+      - name: Checkout PR head as passive diff data
+        if: steps.target.outputs.internal == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.client_payload.target_repo }}
@@ -46,161 +67,112 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
           path: target-repo
-      - name: Mark Check Run in_progress
-        if: github.event.client_payload.check_run_id != null
+
+      - name: Mark Check Run in progress
+        if: steps.target.outputs.internal == 'true' && github.event.client_payload.check_run_id != null
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
-          WORKFLOW_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          REPO="${TARGET_REPO}"
-          CHECK_RUN_ID="${CHECK_RUN_ID}"
-          DETAILS_URL="${WORKFLOW_RUN_URL}"
-          echo "Marking check run ${CHECK_RUN_ID} in_progress for ${REPO}"
-          curl -sS -X PATCH \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
-            -d "{\"status\":\"in_progress\",\"details_url\":\"${DETAILS_URL}\"}"
+          curl --fail-with-body -sS -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
+            -d '{"status":"in_progress"}'
+
       - uses: actions/setup-node@v4
+        if: steps.target.outputs.internal == 'true'
         with:
           node-version: '20'
 
-      - name: Install OpenCodeReview
-        run: npm install -g @alibaba-group/open-code-review@latest
-
-      - name: Start LLM Gateway Compatibility Proxy
-        # 【背景・目的】
-        # TrueFoundry AI Gateway (https://gateway.truefoundry.ai) 経由で Gemini モデルを使用する際、
-        # OpenCodeReview が送信する OpenAI 形式の `role: "tool"` メッセージを TrueFoundry 側が GCP 側へ
-        # 誤変換して `gcp error: Role 'function' is not supported` (HTTP 400) が返るバグを吸収します。
-        env:
-          REAL_OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
-          LLM_PROXY_PORT: '8080'
-          MAX_COMPLETION_TOKENS: ${{ vars.MAX_COMPLETION_TOKENS || secrets.MAX_COMPLETION_TOKENS || '32768' }}
+      - name: Install pinned review tools
+        if: steps.target.outputs.internal == 'true'
         run: |
-          NODE_UNBUFFERED=1 node self-repo/.github/workflows/scripts/llm-proxy.mjs > /tmp/llm-proxy.log 2>&1 &
-          sleep 1
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0 @google/antigravity@0.8.2
 
-      - name: Configure OCR
+      - name: Restore experimental Antigravity OAuth
+        if: steps.target.outputs.internal == 'true'
         env:
-          OCR_LLM_URL: ${{ vars.OCR_LLM_URL || secrets.OCR_LLM_URL }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
-          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
-          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
-          OCR_LLM_EXTRA_BODY: ${{ vars.OCR_LLM_EXTRA_BODY || secrets.OCR_LLM_EXTRA_BODY }}
+          ANTIGRAVITY_OAUTH_JSON: ${{ secrets.ANTIGRAVITY_OAUTH_JSON }}
         run: |
-          # TrueFoundry の GCP ロール変換バグを回避するため、ローカル中継プロキシ経由（http://127.0.0.1:8080）で送信します
-          ocr config set llm.url "http://127.0.0.1:8080"
-          ocr config set llm.protocol "openai"
-          ocr config set llm.model "${OCR_LLM_MODEL}"
-          ocr config set llm.auth_token "${OCR_LLM_AUTH_TOKEN}"
-          ocr config set llm.use_anthropic "${OCR_LLM_USE_ANTHROPIC}"
-          
-          EXTRA_HEADERS=""
-          if [ -n "${OCR_LLM_AUTH_HEADER_NAME}" ]; then
-            EXTRA_HEADERS="${OCR_LLM_AUTH_HEADER_NAME}=Bearer ${OCR_LLM_AUTH_TOKEN}"
+          if [ -n "$ANTIGRAVITY_OAUTH_JSON" ]; then
+            umask 077
+            install -d "$HOME/.gemini/antigravity-cli"
+            printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/oauth.json"
           fi
 
-          if [ -n "${OCR_LLM_EXTRA_HEADERS}" ]; then
-            if [ -n "${EXTRA_HEADERS}" ]; then
-              EXTRA_HEADERS="${EXTRA_HEADERS},${OCR_LLM_EXTRA_HEADERS}"
-            else
-              EXTRA_HEADERS="${OCR_LLM_EXTRA_HEADERS}"
-            fi
-          fi
-
-          if [ -n "${EXTRA_HEADERS}" ]; then
-            ocr config set llm.extra_headers "${EXTRA_HEADERS}"
-          fi
-
-          if [ -n "${OCR_LLM_EXTRA_BODY}" ]; then
-            ocr config set llm.extra_body "${OCR_LLM_EXTRA_BODY}"
-          fi
-
-
-      - name: Test OCR LLM connection
-        continue-on-error: true
-        env:
-          OCR_LLM_URL: http://127.0.0.1:8080
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
-          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
-          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
+      - name: Install trusted delegate skill
+        if: steps.target.outputs.internal == 'true'
         run: |
-          echo "Testing LLM connection..."
-          ocr llm test || echo "LLM test failed with exit code: ${PIPESTATUS[0]}"
+          install -d "$HOME/.gemini/antigravity-cli/skills/ocr-delegate"
+          cat > "$HOME/.gemini/antigravity-cli/skills/ocr-delegate/SKILL.md" <<'EOF'
+          # OpenCodeReview delegation
 
-      - name: Preview OCR targets
-        continue-on-error: true
+          Use only `ocr delegate preview` and `ocr delegate rule` for review work.
+          Use only read-only Git commands: `git diff`, `git show`, `git status`, and `git rev-parse`.
+          Never write files, fetch network data, push, remove files, use sudo, or bypass permissions.
+          Return only schema_version 1.0 JSON for the requested review contract.
+          EOF
+
+      - name: Configure restrictive Antigravity policy
+        if: steps.target.outputs.internal == 'true'
+        run: |
+          install -d "$HOME/.gemini/antigravity-cli"
+          cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
+          {
+            "permissions": {
+              "allow": ["ocr delegate preview", "ocr delegate rule", "git diff", "git show", "git status", "git rev-parse"],
+              "deny": ["git push", "git fetch", "curl", "wget", "rm", "sudo", "--dangerously-skip-permissions"]
+            }
+          }
+          EOF
+
+      - name: Run Antigravity review host
+        if: steps.target.outputs.internal == 'true'
         env:
-          BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
-          OCR_LLM_URL: http://127.0.0.1:8080
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
-          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
-          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
-        run: |
-          ocr review \
-            --repo target-repo \
-            --from "origin/${BASE_REF}" \
-            --to "${COMMIT_SHA}" \
-            --preview \
-            --audience agent
-
-      - name: Run OCR review
-        env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
-          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
-          OCR_LLM_URL: http://127.0.0.1:8080
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
-          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
-          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
-          OCR_MAX_TOOLS: ${{ vars.OCR_MAX_TOOLS || '15' }}
         run: |
-          set -o pipefail
-          ocr review \
-            --repo target-repo \
-            --from "origin/${BASE_REF}" \
-            --to "${COMMIT_SHA}" \
-            --background "PR #${PR_NUMBER}" \
-            --format json \
-            --audience agent \
-            --max-tools "${OCR_MAX_TOOLS}" \
-            --concurrency 1 \
-            > /tmp/ocr-result.json 2> >(tee /tmp/ocr-stderr.log >&2)
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs';
+          import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
+          const result = await runHost({
+            cwd: 'target-repo',
+            timeoutMs: 180000,
+            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
+          });
+          fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
+          if (result.status === 'failed') process.exitCode = 1;
+          EOF
 
       - name: Resolve fixed review threads
-        if: always()
-        continue-on-error: true
+        if: always() && steps.target.outputs.internal == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          OCR_LLM_URL: http://127.0.0.1:8080/chat/completions
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          RESOLVE_LLM_MODEL: ${{ vars.RESOLVE_LLM_MODEL || secrets.RESOLVE_LLM_MODEL || vars.OCR_LLM_MODEL || secrets.OCR_LLM_MODEL }}
-          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
-          OCR_LLM_EXTRA_HEADERS: ${{ vars.OCR_LLM_EXTRA_HEADERS || secrets.OCR_LLM_EXTRA_HEADERS }}
-          OCR_LLM_AUTH_HEADER_NAME: ${{ vars.OCR_LLM_AUTH_HEADER_NAME || secrets.OCR_LLM_AUTH_HEADER_NAME }}
-          OCR_LLM_USE_ANTHROPIC: ${{ vars.OCR_LLM_USE_ANTHROPIC || 'false' }}
         run: |
           node self-repo/.github/workflows/scripts/resolve-threads.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
             --pr "${{ github.event.client_payload.pr_number }}" \
             --target-dir "target-repo"
 
-      - name: Post review comments
-        if: always()
+      - name: Revalidate PR head before publishing
+        if: always() && steps.target.outputs.internal == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
+        run: |
+          node self-repo/.github/workflows/scripts/check-pr-head.mjs
+
+      - name: Post review comments
+        if: always() && steps.target.outputs.internal == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
           node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
@@ -208,28 +180,24 @@ jobs:
             --result "/tmp/ocr-result.json"
 
       - name: Upload result artifacts
-        if: always()
+        if: always() && steps.target.outputs.internal == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ocr-debug-logs
           path: |
             /tmp/ocr-result.json
-            /tmp/ocr-stderr.log
-            /tmp/llm-proxy.log
           if-no-files-found: ignore
+
       - name: Update Check Run completed
-        if: always() && github.event.client_payload.check_run_id != null
+        if: always() && steps.target.outputs.internal == 'true' && github.event.client_payload.check_run_id != null
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          CONCLUSION: ${{ job.status == 'success' && 'success' || 'failure' }}
         run: |
-          REPO="${TARGET_REPO}"
-          CHECK_RUN_ID="${CHECK_RUN_ID}"
-          CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
-          echo "Marking check run ${CHECK_RUN_ID} completed (${CONCLUSION}) for ${REPO}"
-          curl -sS -X PATCH \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/$REPO/check-runs/$CHECK_RUN_ID" \
+          curl --fail-with-body -sS -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
             -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
