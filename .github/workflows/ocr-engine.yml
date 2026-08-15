@@ -90,7 +90,7 @@ jobs:
         if: steps.target.outputs.internal == 'true'
         run: |
           npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0
-          curl -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
+          curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
