@@ -766,3 +766,34 @@ test('does not modify a user comment containing the Summary marker', async () =>
   assert.equal(requests.at(-1).method, 'POST');
   assert.equal(requests.at(-1).path, '/repos/owner/repo/issues/123/comments');
 });
+
+test('supports findings array from antigravity host format', async () => {
+  const result = {
+    schema_version: '1.0',
+    mode: 'review',
+    status: 'success',
+    coverage: 0.8,
+    findings: [
+      { severity: 'high', path: 'src/example.js', line: 1, message: 'Fix this issue' },
+    ],
+  };
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: {}, status: 201 },
+    { data: [], status: 200 },
+    { data: {}, status: 201 },
+  ];
+
+  const { exitCode, requests } = await runWithResult(result, outcomes);
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 4);
+  assert.deepEqual(requests[2].body.comments[0], {
+    body: '```\nFix this issue\n```\n\n---\n*Posted by OpenCodeReview*',
+    line: 1,
+    path: 'src/example.js',
+    side: 'RIGHT',
+  });
+});
+
