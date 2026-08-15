@@ -25,7 +25,7 @@ fi
 # 3. リポジトリへのアクセス権限確認
 echo "--> リポジトリのアクセス権限を確認中..."
 VIEWER_PERM=$(gh repo view --json viewerPermission --jq '.viewerPermission' 2>/dev/null || echo "UNKNOWN")
-if [ "$VIEWER_PERM" != "ADMIN" ] && [ "$VIEWER_PERM" != "WRITE" ]; then
+if [[ "$VIEWER_PERM" != "ADMIN" && "$VIEWER_PERM" != "WRITE" ]]; then
   echo "⚠️  [Warning] 現在ログインしているユーザーのリポジトリ権限: $VIEWER_PERM" >&2
   echo "   GitHub Actions Secrets を設定するにはリポジトリの管理者権限(ADMIN)が必要です。" >&2
   echo "   権限スコープが不足している場合は、以下を実行してスコープを更新してください:" >&2
@@ -53,24 +53,28 @@ SUCCESS_COUNT=0
 
 # 4. ANTIGRAVITY_OAUTH_JSON の同期
 AGY_OAUTH_PATH=""
-if [ -f "$HOME/.gemini/antigravity-cli/oauth.json" ]; then
+if [[ -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]]; then
+  AGY_OAUTH_PATH="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+elif [[ -f "$HOME/.gemini/antigravity-cli/oauth.json" ]]; then
   AGY_OAUTH_PATH="$HOME/.gemini/antigravity-cli/oauth.json"
-elif [ -f "$HOME/.gemini/oauth.json" ]; then
+elif [[ -f "$HOME/.gemini/antigravity-oauth-token" ]]; then
+  AGY_OAUTH_PATH="$HOME/.gemini/antigravity-oauth-token"
+elif [[ -f "$HOME/.gemini/oauth.json" ]]; then
   AGY_OAUTH_PATH="$HOME/.gemini/oauth.json"
 fi
 
-if [ -n "$AGY_OAUTH_PATH" ]; then
+if [[ -n "$AGY_OAUTH_PATH" ]]; then
   echo "--> $AGY_OAUTH_PATH を Secret 'ANTIGRAVITY_OAUTH_JSON' として登録中..."
   CONTENT=$(cat "$AGY_OAUTH_PATH")
   if set_github_secret "ANTIGRAVITY_OAUTH_JSON" "$CONTENT"; then
     SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
   fi
 else
-  echo "    ⚠ Antigravity OAuth ファイル ($HOME/.gemini/antigravity-cli/oauth.json) が見つかりませんでした (スキップ)"
+  echo "    ⚠ Antigravity OAuth ファイル ($HOME/.gemini/antigravity-cli/antigravity-oauth-token または oauth.json) が見つかりませんでした (スキップ)"
 fi
 
 # 5. GEMINI_OAUTH_CREDS_B64 / GEMINI_GOOGLE_ACCOUNTS_B64 の同期 (存在する場合)
-if [ -f "$HOME/.gemini/oauth_creds.json" ]; then
+if [[ -f "$HOME/.gemini/oauth_creds.json" ]]; then
   echo "--> $HOME/.gemini/oauth_creds.json を Secret 'GEMINI_OAUTH_CREDS_B64' として登録中..."
   B64_CONTENT=$(base64 -w 0 "$HOME/.gemini/oauth_creds.json")
   if set_github_secret "GEMINI_OAUTH_CREDS_B64" "$B64_CONTENT"; then
@@ -78,7 +82,7 @@ if [ -f "$HOME/.gemini/oauth_creds.json" ]; then
   fi
 fi
 
-if [ -f "$HOME/.gemini/google_accounts.json" ]; then
+if [[ -f "$HOME/.gemini/google_accounts.json" ]]; then
   echo "--> $HOME/.gemini/google_accounts.json を Secret 'GEMINI_GOOGLE_ACCOUNTS_B64' として登録中..."
   B64_CONTENT=$(base64 -w 0 "$HOME/.gemini/google_accounts.json")
   if set_github_secret "GEMINI_GOOGLE_ACCOUNTS_B64" "$B64_CONTENT"; then
@@ -87,7 +91,7 @@ if [ -f "$HOME/.gemini/google_accounts.json" ]; then
 fi
 
 echo ""
-if [ "$SUCCESS_COUNT" -gt 0 ]; then
+if [[ "$SUCCESS_COUNT" -gt 0 ]]; then
   echo "==> 完了: $SUCCESS_COUNT 件の認証情報を GitHub Actions Secrets に正常に設定しました。"
 else
   echo "==> 警告: 対象の認証情報ファイルが見つかりませんでした。"
