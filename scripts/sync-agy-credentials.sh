@@ -53,8 +53,12 @@ SUCCESS_COUNT=0
 
 # 4. ANTIGRAVITY_OAUTH_JSON の同期
 AGY_OAUTH_PATH=""
-if [ -f "$HOME/.gemini/antigravity-cli/oauth.json" ]; then
+if [ -f "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" ]; then
+  AGY_OAUTH_PATH="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+elif [ -f "$HOME/.gemini/antigravity-cli/oauth.json" ]; then
   AGY_OAUTH_PATH="$HOME/.gemini/antigravity-cli/oauth.json"
+elif [ -f "$HOME/.gemini/antigravity-oauth-token" ]; then
+  AGY_OAUTH_PATH="$HOME/.gemini/antigravity-oauth-token"
 elif [ -f "$HOME/.gemini/oauth.json" ]; then
   AGY_OAUTH_PATH="$HOME/.gemini/oauth.json"
 fi
@@ -66,7 +70,7 @@ if [ -n "$AGY_OAUTH_PATH" ]; then
     SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
   fi
 else
-  echo "    ⚠ Antigravity OAuth ファイル ($HOME/.gemini/antigravity-cli/oauth.json) が見つかりませんでした (スキップ)"
+  echo "    ⚠ Antigravity OAuth ファイル ($HOME/.gemini/antigravity-cli/antigravity-oauth-token または oauth.json) が見つかりませんでした (スキップ)"
 fi
 
 # 5. GEMINI_OAUTH_CREDS_B64 / GEMINI_GOOGLE_ACCOUNTS_B64 の同期 (存在する場合)

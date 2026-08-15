@@ -233,7 +233,7 @@ Installation ID は Webhook の `installation.id` から自動取得されるた
   ```bash
   ./scripts/sync-agy-credentials.sh
   ```
-  ※ GitHub CLI (`gh`) を利用して `~/.gemini/antigravity-cli/oauth.json` を Secret `ANTIGRAVITY_OAUTH_JSON` に自動登録します。
+  ※ GitHub CLI (`gh`) を利用して `~/.gemini/antigravity-cli/antigravity-oauth-token` (または `oauth.json`) を Secret `ANTIGRAVITY_OAUTH_JSON` に自動登録します。
 - **Cloudflare Worker**: Secrets `GITHUB_APP_PRIVATE_KEY` / `WEBHOOK_SECRET` は
   デプロイワークフローが Actions の Secrets（`GH_APP_PRIVATE_KEY` / `WEBHOOK_SECRET`）から、
   Vars `GITHUB_APP_ID` / `TARGET_DISPATCH_REPO` は Actions の
