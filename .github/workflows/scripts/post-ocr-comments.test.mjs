@@ -694,6 +694,55 @@ test('updates an existing bot-owned marked Summary instead of creating a duplica
   assert.equal(requests.at(-1).path, '/repos/owner/repo/issues/comments/42');
 });
 
+test('updates an existing bot-owned marked Summary found on the second comments page', async () => {
+  const result = { comments: [validComment('Updated finding')] };
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    id: index + 1,
+    body: `ordinary comment ${index}`,
+    user: { login: 'human-user' },
+  }));
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: {}, status: 201 },
+    { data: firstPage, status: 200 },
+    {
+      data: [{
+        id: 44,
+        body: '<!-- antigravity-ocr-summary --> old summary',
+        user: { login: 'opencodereview-app[bot]' },
+      }],
+      status: 200,
+    },
+    { data: {}, status: 200 },
+  ];
+
+  const { exitCode, requests } = await runWithResult(result, outcomes);
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.at(-1).method, 'PATCH');
+  assert.equal(requests.at(-1).path, '/repos/owner/repo/issues/comments/44');
+});
+
+test('rechecks the PR head before posting and refuses stale review results', async () => {
+  const resultPath = await createResultFile({ comments: [validComment()] });
+  const requests = installHttpsMock([
+    { data: { head: { sha: 'initial-sha' } }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: { head: { sha: 'new-sha' } }, status: 200 },
+  ]);
+
+  await assert.rejects(
+    run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+      token: 'test-token',
+      expectedSha: 'initial-sha',
+    }),
+    /refusing to publish stale results/,
+  );
+  assert.equal(requests.filter(request => request.method !== 'GET').length, 0);
+});
+
 test('does not modify a user comment containing the Summary marker', async () => {
   const result = { comments: [validComment('New finding')] };
   const outcomes = [

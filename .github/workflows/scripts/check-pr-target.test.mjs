@@ -7,6 +7,8 @@ test('parses owner/repository values without accepting malformed targets', () =>
   assert.deepEqual(parseRepository('acme/project'), { owner: 'acme', repo: 'project' });
   assert.throws(() => parseRepository('project'), /owner\/repo/);
   assert.throws(() => parseRepository('acme/project/extra'), /owner\/repo/);
+  assert.throws(() => parseRepository('acme\n/project'), /owner\/repo/);
+  assert.throws(() => parseRepository('acme/ pro\rject'), /owner\/repo/);
 });
 
 test('marks same-repository pull requests internal and forks external', () => {

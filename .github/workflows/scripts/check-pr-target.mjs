@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
 export function parseRepository(value) {
-  if (typeof value !== 'string' || !/^[^/]+\/[^/]+$/.test(value)) {
+  if (typeof value !== 'string' || !/^[^/\x00-\x1f\x7f]+\/[^/\x00-\x1f\x7f]+$/.test(value)) {
     throw new Error('Repository must be in owner/repo format');
   }
   const [owner, repo] = value.split('/');

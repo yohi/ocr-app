@@ -122,6 +122,13 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function resolveHeadRepository(value: unknown, fallback: string): string {
+  if (!isRecord(value) || typeof value.full_name !== "string" || value.full_name.trim().length === 0) {
+    return fallback;
+  }
+  return value.full_name;
+}
+
 function isPullRequestWebhookPayload(payload: unknown): payload is PullRequestWebhookPayload {
   if (!isRecord(payload) || typeof payload.action !== "string" || typeof payload.number !== "number") {
     return false;
@@ -530,7 +537,7 @@ export default {
           );
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
-            head_repo: payload.pull_request.head.repo?.full_name || `${repoOwner}/${repoName}`,
+            head_repo: resolveHeadRepository(payload.pull_request.head.repo, `${repoOwner}/${repoName}`),
             pr_number: prNumber,
             commit_sha: payload.pull_request.head.sha,
             base_ref: payload.pull_request.base.ref,
@@ -614,11 +621,7 @@ export default {
 
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
             target_repo: `${repoOwner}/${repoName}`,
-            head_repo:
-              isRecord(pullRequestPayload.head.repo) &&
-              typeof pullRequestPayload.head.repo.full_name === "string"
-                ? pullRequestPayload.head.repo.full_name
-                : `${repoOwner}/${repoName}`,
+            head_repo: resolveHeadRepository(pullRequestPayload.head.repo, `${repoOwner}/${repoName}`),
             pr_number: prNumber,
             commit_sha: pullRequestPayload.head.sha,
             base_ref: pullRequestPayload.base.ref,

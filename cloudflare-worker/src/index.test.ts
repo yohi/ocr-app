@@ -147,7 +147,7 @@ describe("issue_comment mention flow", () => {
   it("adds reaction, fetches pull request, creates check run, and dispatches", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" }) // reaction
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123" }, base: { ref: "main" } }) }) // PR
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123", repo: { full_name: "owner/repo" } }, base: { ref: "main" } }) }) // PR
       .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) }) // create check run
       .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" }); // dispatch
 
@@ -172,6 +172,28 @@ describe("issue_comment mention flow", () => {
     expect(dispatchBody.event_type).toBe("open_code_review_trigger");
     expect(dispatchBody.client_payload.base_ref).toBe("main");
     expect(dispatchBody.client_payload.check_run_id).toBe(98765);
+    expect(dispatchBody.client_payload.target_repo).toBe("owner/repo");
+    expect(dispatchBody.client_payload.head_repo).toBe("owner/repo");
+  });
+
+  it.each([
+    ["fork", { full_name: "contributor/repo" }, "contributor/repo"],
+    ["missing", undefined, "owner/repo"],
+    ["empty", { full_name: "" }, "owner/repo"],
+  ])("uses the fetched PR head repository for an issue_comment %s case", async (_label, headRepo, expected) => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, status: 201, text: async () => "" })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ head: { sha: "abc123", repo: headRepo }, base: { ref: "main" } }) })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ id: 98765 }) })
+      .mockResolvedValueOnce({ ok: true, status: 204, text: async () => "" });
+
+    const body = JSON.stringify(basePayload);
+    const request = createIssueCommentRequest(basePayload, await calculateSignature(env.WEBHOOK_SECRET, body));
+    await worker.fetch(request, env);
+
+    const dispatchBody = JSON.parse((fetchMock.mock.calls[3][1] as RequestInit | undefined)?.body as string);
+    expect(dispatchBody.client_payload.target_repo).toBe("owner/repo");
+    expect(dispatchBody.client_payload.head_repo).toBe(expected);
   });
   it("continues pull request fetch, check run creation and dispatch when reaction fails", async () => {
     fetchMock

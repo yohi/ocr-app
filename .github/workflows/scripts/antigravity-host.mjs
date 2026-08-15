@@ -5,6 +5,8 @@ const REVIEW_MODE = 'review';
 const THREAD_MODE = 'thread';
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 const DEFAULT_TIMEOUT_MS = 180_000;
+const MAX_OUTPUT_CHARS = 1_000_000;
+const KILL_GRACE_PERIOD_MS = 25;
 
 function sanitize(value) {
   return String(value ?? '')
@@ -98,24 +100,48 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
     const child = spawn('agy', ['-p', prompt, '--output-format', 'json'], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
     });
+    const appendOutput = (current, chunk) => {
+      if (current.length >= MAX_OUTPUT_CHARS) return current;
+      return current + String(chunk).slice(0, MAX_OUTPUT_CHARS - current.length);
+    };
+    const onStdout = chunk => {
+      if (!settled) stdout = appendOutput(stdout, chunk);
+    };
+    const onStderr = chunk => {
+      if (!settled) stderr = appendOutput(stderr, chunk);
+    };
+    const removeOutputListeners = () => {
+      child.stdout?.removeListener('data', onStdout);
+      child.stderr?.removeListener('data', onStderr);
+    };
+    const killProcessTree = signal => {
+      try {
+        if (Number.isInteger(child.pid) && child.pid > 0) {
+          process.kill(-child.pid, signal);
+        } else {
+          child.kill(signal);
+        }
+      } catch {
+        // The process or its group is already gone; preserve the timeout result.
+      }
+    };
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      removeOutputListeners();
       resolve(result);
     };
     const timer = setTimeout(() => {
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        // The child is already gone; the timeout result remains authoritative.
-      }
+      killProcessTree('SIGTERM');
       finish({ error: new Error('Antigravity host timed out') });
+      setTimeout(() => killProcessTree('SIGKILL'), KILL_GRACE_PERIOD_MS);
     }, timeoutMs);
 
-    child.stdout?.on('data', chunk => { stdout += String(chunk); });
-    child.stderr?.on('data', chunk => { stderr += String(chunk); });
+    child.stdout?.on('data', onStdout);
+    child.stderr?.on('data', onStderr);
     child.once('error', error => finish({ error }));
     child.once('close', (code, signal) => {
       if (code !== 0) {

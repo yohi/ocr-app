@@ -101,6 +101,33 @@ test('runHost times out without returning child output or secrets', async () => 
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
+test('runHost stops collecting output and escalates termination for a child that ignores SIGTERM', async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const signals = [];
+  child.kill = (signal) => {
+    signals.push(signal);
+    if (signal === 'SIGKILL') child.emit('close', null, signal);
+  };
+
+  const result = await runHost({
+    prompt: 'Review.',
+    cwd: '/tmp/trusted',
+    timeoutMs: 5,
+    spawn: () => child,
+  });
+
+  child.stdout.emit('data', 'still writing');
+  child.stderr.emit('data', 'still writing');
+  await new Promise(resolve => setTimeout(resolve, 30));
+
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(child.stdout.listenerCount('data'), 0);
+  assert.equal(child.stderr.listenerCount('data'), 0);
+});
+
 test('runHost sanitizes secrets from child errors and malformed output paths', async () => {
   const secret = 'ghp_dummy_oauth_token_abcdef';
   const spawn = () => {

@@ -181,7 +181,17 @@ function buildSummaryBody(comments, ocrSummary) {
   return body + footer;
 }
 
-async function postSkipComment({ githubApi, prNumber, message }) {
+async function assertExpectedHead({ expectedSha, githubApi, prNumber }) {
+  if (!expectedSha) return;
+  const response = await githubApi('GET', `/pulls/${prNumber}`);
+  const actualSha = response.status === 200 ? response.data?.head?.sha : null;
+  if (actualSha !== expectedSha) {
+    throw new CliError('PR head changed while the review was running; refusing to publish stale results');
+  }
+}
+
+async function postSkipComment({ expectedSha, githubApi, prNumber, message }) {
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
   });
@@ -193,7 +203,8 @@ async function postSkipComment({ githubApi, prNumber, message }) {
   return 0;
 }
 
-async function postFailureComment({ githubApi, prNumber, message }) {
+async function postFailureComment({ expectedSha, githubApi, prNumber, message }) {
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
   });
@@ -206,21 +217,27 @@ async function postFailureComment({ githubApi, prNumber, message }) {
 }
 
 
-async function postSummaryComment({ botLogin, comments, githubApi, ocrSummary, prNumber }) {
+async function postSummaryComment({ botLogin, comments, expectedSha, githubApi, ocrSummary, prNumber }) {
   const body = buildSummaryBody(comments, ocrSummary);
-const existing = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100`);
-  if (existing.status !== 200 || !Array.isArray(existing.data)) {
-    console.error('Failed to fetch existing Summary comments:', JSON.stringify(existing.data));
-    return 1;
+  const existing = [];
+  for (let page = 1; ; page++) {
+    const response = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100&page=${page}`);
+    if (response.status !== 200 || !Array.isArray(response.data)) {
+      console.error('Failed to fetch existing Summary comments:', JSON.stringify(response.data));
+      return 1;
+    }
+    existing.push(...response.data);
+    if (response.data.length < 100) break;
   }
 
   const normalizedBotLogin = botLogin.replace(/\[bot\]$/i, '').toLowerCase();
-  const matchingComment = existing.data.find(comment => {
+  const matchingComment = existing.find(comment => {
     const login = typeof comment?.user?.login === 'string'
       ? comment.user.login.replace(/\[bot\]$/i, '').toLowerCase()
       : '';
     return comment?.body?.includes(SUMMARY_MARKER) && login === normalizedBotLogin;
   });
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = matchingComment
     ? await githubApi('PATCH', `/issues/comments/${matchingComment.id}`, { body })
     : await githubApi('POST', `/issues/${prNumber}/comments`, { body });
@@ -289,7 +306,7 @@ async function fetchAllPrFiles(githubApi, prNumber) {
   return filesMap;
 }
 
-async function postReviewComments({ comments, githubApi, prNumber }) {
+async function postReviewComments({ comments, expectedSha, githubApi, prNumber }) {
   if (comments.length === 0) {
     console.log('No comments to post');
     return 0;
@@ -320,6 +337,7 @@ async function postReviewComments({ comments, githubApi, prNumber }) {
     return 0;
   }
 
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const review = await githubApi('POST', `/pulls/${prNumber}/reviews`, {
     commit_id: headSha,
     event: 'COMMENT',
@@ -336,6 +354,7 @@ async function postReviewComments({ comments, githubApi, prNumber }) {
   let failureCount = 0;
   for (const comment of reviewComments) {
     try {
+      await assertExpectedHead({ expectedSha, githubApi, prNumber });
       const response = await githubApi('POST', `/pulls/${prNumber}/comments`, {
         commit_id: headSha,
         path: comment.path,
@@ -394,6 +413,7 @@ export async function run({
   args = process.argv.slice(2),
   token = process.env.GITHUB_TOKEN,
   botLogin = process.env.GH_APP_SLUG || 'opencodereview-app',
+  expectedSha = process.env.EXPECTED_SHA,
 } = {}) {
   const config = createConfig(args, token);
   const result = readResult(config.resultPath);
@@ -403,14 +423,14 @@ export async function run({
     const skipMessage = result.message
       ? `\u23ED\uFE0F OpenCodeReview skipped: ${result.message}`
       : '\u23ED\uFE0F OpenCodeReview skipped: No supported files changed.';
-    return postSkipComment({ githubApi, prNumber: config.prNumber, message: skipMessage });
+    return postSkipComment({ expectedSha, githubApi, prNumber: config.prNumber, message: skipMessage });
   }
 
   if (result.status === 'failed') {
     const failureMessage = result.message || 'OpenCodeReview failed to complete the review.';
     const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n` +
       `If this persists, please check your LLM configuration and API key.`;
-    const exitCode = await postFailureComment({ githubApi, prNumber: config.prNumber, message: commentBody });
+    const exitCode = await postFailureComment({ expectedSha, githubApi, prNumber: config.prNumber, message: commentBody });
     if (exitCode !== 0) {
       return exitCode;
     }
@@ -426,13 +446,14 @@ export async function run({
     return 0;
   }
 
-  const reviewExitCode = await postReviewComments({ comments, githubApi, prNumber: config.prNumber });
+  const reviewExitCode = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
   if (reviewExitCode !== 0) {
     return reviewExitCode;
   }
   return postSummaryComment({
     botLogin,
     comments,
+    expectedSha,
     githubApi,
     ocrSummary: result.summary,
     prNumber: config.prNumber,

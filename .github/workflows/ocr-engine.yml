@@ -4,6 +4,10 @@ on:
   repository_dispatch:
     types: [open_code_review_trigger]
 
+concurrency:
+  group: ocr-engine-${{ github.event.client_payload.target_repo }}-${{ github.event.client_payload.pr_number }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   pull-requests: write
@@ -168,6 +172,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
           node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
