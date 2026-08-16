@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   resolveBatchLimits,
+  resolveTimeoutMs,
   runHost,
   runThreadHost,
 } from './antigravity-host.mjs';
@@ -264,4 +265,25 @@ test('resolveBatchLimits clamps invalid and excessive values', () => {
     ANTIGRAVITY_MAX_DIFF_CHARS: '50000',
     ANTIGRAVITY_MAX_FILES_PER_BATCH: '30',
   }), { maxDiffChars: 40_000, maxFilesPerBatch: 20 });
+});
+
+test('resolveTimeoutMs defaults to 5 minutes (300000ms) and respects environment variable', () => {
+  assert.equal(resolveTimeoutMs({}), 300_000);
+  assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: '600000' }), 600_000);
+  assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: 'invalid' }), 300_000);
+  assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: '0' }), 1);
+  assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: '-50' }), 1);
+  assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: '2000000' }), 1_800_000);
+});
+
+test('runHost respects ANTIGRAVITY_TIMEOUT_MS from env option', async () => {
+  const result = await runHost({
+    prompt: 'Review.',
+    cwd: '/tmp/trusted',
+    env: { ANTIGRAVITY_TIMEOUT_MS: '5' },
+    spawn: spawnWith('delayed output', { delayMs: 50 }),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.match(result.message, /timed out/i);
 });
