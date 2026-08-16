@@ -154,13 +154,13 @@ jobs:
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          ANTIGRAVITY_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_TIMEOUT_MS || '' }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
           import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
           const result = await runHost({
             cwd: 'target-repo',
-            timeoutMs: 180000,
             prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
           });
           fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));

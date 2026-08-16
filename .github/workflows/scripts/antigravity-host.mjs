@@ -4,9 +4,14 @@ const SCHEMA_VERSION = '1.0';
 const REVIEW_MODE = 'review';
 const THREAD_MODE = 'thread';
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
-const DEFAULT_TIMEOUT_MS = 180_000;
+const DEFAULT_TIMEOUT_MS = 300_000;
 const MAX_OUTPUT_CHARS = 1_000_000;
 const KILL_GRACE_PERIOD_MS = 25;
+const MAX_TIMEOUT_MS = 1_800_000;
+
+export function resolveTimeoutMs(env = process.env, fallback = DEFAULT_TIMEOUT_MS) {
+  return parsePositiveInteger(env?.ANTIGRAVITY_TIMEOUT_MS, fallback, MAX_TIMEOUT_MS);
+}
 
 function sanitize(value) {
   return String(value ?? '')
@@ -181,8 +186,8 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
       resolve(result);
     };
     const timer = setTimeout(() => {
-      killProcessTree('SIGTERM');
       finish({ error: new Error('Antigravity host timed out') });
+      killProcessTree('SIGTERM');
       setTimeout(() => killProcessTree('SIGKILL'), KILL_GRACE_PERIOD_MS);
     }, timeoutMs);
 
@@ -206,12 +211,15 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
   });
 }
 
-async function runMode({ prompt, cwd, timeoutMs = DEFAULT_TIMEOUT_MS, spawn = nodeSpawn, mode }) {
+async function runMode({ prompt, cwd, timeoutMs, spawn = nodeSpawn, mode, env = process.env }) {
   if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
   if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
+  const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : resolveTimeoutMs(env);
   let childResult;
   try {
-    childResult = await readChild({ prompt, cwd, timeoutMs, spawn, mode });
+    childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode });
   } catch (error) {
     return failure(mode, error.message);
   }
