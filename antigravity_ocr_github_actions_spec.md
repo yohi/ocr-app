@@ -202,86 +202,158 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
+        if: steps.target.outputs.internal == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Validate PR Metadata & Fork Check
-        id: check_fork
-        env:
-          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
-          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
-          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install pinned review tools
+        if: steps.target.outputs.internal == 'true'
         run: |
-          # Head リポジトリと Base リポジトリを比較し is_fork を出力
-          node .github/workflows/scripts/check-pr-target.mjs
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.9.7
+          curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
+          bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
+          rm -f /tmp/install-agy.sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Handle External Fork Skip
-        if: steps.check_fork.outputs.is_fork == 'true'
+      - name: Restore experimental Antigravity OAuth
+        if: steps.target.outputs.internal == 'true'
         env:
-          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
-          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTIGRAVITY_OAUTH_JSON: ${{ secrets.ANTIGRAVITY_OAUTH_JSON }}
         run: |
-          # 外部フォーク PR の Check Run を completed / neutral (skipped) に更新して終了
-          node .github/workflows/scripts/skip-check-run.mjs
+          if [ -n "$ANTIGRAVITY_OAUTH_JSON" ]; then
+            umask 077
+            install -d "$HOME/.gemini/antigravity-cli"
+            printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/oauth.json"
+            printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+          fi
 
-      - name: Install Pinned OCR CLI & Antigravity CLI
-        if: steps.check_fork.outputs.is_fork != 'true'
+      - name: Prepare target repo workspace
+        if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g @alibaba-group/open-code-review@1.2.0
-          npm install -g @google/antigravity@0.8.2
+          mkdir -p target-repo/.opencodereview
 
-      - name: Restore OAuth Credentials & Smoke Test
-        if: steps.check_fork.outputs.is_fork != 'true'
-        env:
-          GEMINI_OAUTH_CREDS_B64: ${{ secrets.GEMINI_OAUTH_CREDS_B64 }}
-          GEMINI_GOOGLE_ACCOUNTS_B64: ${{ secrets.GEMINI_GOOGLE_ACCOUNTS_B64 }}
+      - name: Install trusted delegate skill
+        if: steps.target.outputs.internal == 'true'
         run: |
-          mkdir -p ~/.gemini
-          echo "$GEMINI_OAUTH_CREDS_B64" | base64 -d > ~/.gemini/oauth_creds.json
-          echo "$GEMINI_GOOGLE_ACCOUNTS_B64" | base64 -d > ~/.gemini/google_accounts.json
-          chmod 600 ~/.gemini/*.json
-          # 復元した OAuth 認証情報を用いた認証スモークテスト（失敗時は exit 1 で異常終了）
-          agy -p "ping" --output-format text > /dev/null || {
-            echo "::error::Antigravity OAuth authentication smoke test failed."
-            exit 1
+          install -d "$HOME/.gemini/antigravity-cli/skills/ocr-delegate"
+          cat > "$HOME/.gemini/antigravity-cli/skills/ocr-delegate/SKILL.md" <<'EOF'
+          # OpenCodeReview delegation
+
+          Perform automated PR code reviews using OpenCodeReview delegation tools and read-only Git.
+
+          ## Review Procedure
+          1. Use `ocr delegate preview --from <BASE_REF> --to <COMMIT_SHA>` to preview reviewable files and determine changes.
+          2. Use `ocr delegate rule <files...>` to get resolved review rules. (Do not manually search or inspect `.opencodereview` with file tools; `ocr delegate rule` handles rule resolution automatically).
+          3. Use read-only Git commands (`git diff`, `git show`, `git status`, `git rev-parse`) to inspect diffs and code.
+          4. Never write files, fetch network data, push, remove files, use sudo, or bypass permissions.
+          5. Return only schema_version 1.0 JSON for the requested review contract.
+          EOF
+
+      - name: Configure restrictive Antigravity policy
+        if: steps.target.outputs.internal == 'true'
+        run: |
+          install -d "$HOME/.gemini/antigravity-cli"
+          cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
+          {
+            "permissions": {
+              "allow": [
+                "command(*)",
+                "read_file(*)",
+                "view_file(*)",
+                "list_dir(*)",
+                "grep_search(*)",
+                "find_by_name(*)",
+                "read_symbol_definition(*)"
+              ],
+              "deny": [
+                "command(git push*)",
+                "command(git fetch*)",
+                "command(curl*)",
+                "command(wget*)",
+                "command(rm*)",
+                "command(sudo*)"
+              ]
+            }
           }
+          EOF
 
-      - name: Install Official Delegation Skill
-        if: steps.check_fork.outputs.is_fork != 'true'
-        run: |
-          mkdir -p ~/.gemini/antigravity-cli/skills/open-code-review-delegate
-          npx @alibaba-group/open-code-review export-skill ~/.gemini/antigravity-cli/skills/open-code-review-delegate
-
-      - name: Execute Antigravity Host Review
-        if: steps.check_fork.outputs.is_fork != 'true'
+      - name: Run Antigravity review host
+        if: steps.target.outputs.internal == 'true'
         env:
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
-          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTIGRAVITY_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_TIMEOUT_MS || '' }}
         run: |
-          node .github/workflows/scripts/antigravity-host.mjs
-          node .github/workflows/scripts/resolve-threads.mjs
-          node .github/workflows/scripts/post-ocr-comments.mjs
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs';
+          import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
+          const result = await runHost({
+            cwd: 'target-repo',
+            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Do not search for or access .opencodereview directly with file tools. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
+          });
+          fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
+          if (result.status === 'failed') process.exitCode = 1;
+          EOF
 
-      - name: Update Check Run Status
-        if: always() && steps.check_fork.outputs.is_fork != 'true'
+      - name: Resolve fixed review threads
+        if: always() && steps.target.outputs.internal == 'true'
         env:
-          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
-          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          # 認証スモークテストやレビュー実行の成否に応じて Check Run を completed (success / failure) に更新
-          CONCLUSION="${{ job.status == 'success' && 'success' || 'failure' }}"
-          curl -sS -X PATCH \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
+          node self-repo/.github/workflows/scripts/resolve-threads.mjs \
+            --repo "${{ github.event.client_payload.target_repo }}" \
+            --pr "${{ github.event.client_payload.pr_number }}" \
+            --target-dir "target-repo"
+
+      - name: Revalidate PR head before publishing
+        if: always() && steps.target.outputs.internal == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
+        run: |
+          node self-repo/.github/workflows/scripts/check-pr-head.mjs
+
+      - name: Post review comments
+        if: always() && steps.target.outputs.internal == 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
+        run: |
+          if [ -f "/tmp/ocr-result.json" ]; then
+            node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
+              --repo "${{ github.event.client_payload.target_repo }}" \
+              --pr "${{ github.event.client_payload.pr_number }}" \
+              --result "/tmp/ocr-result.json"
+          fi
+
+      - name: Upload result artifacts
+        if: always() && steps.target.outputs.internal == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocr-debug-logs
+          path: |
+            /tmp/ocr-result.json
+          if-no-files-found: ignore
+
+      - name: Update Check Run completed
+        if: always() && steps.target.outputs.internal == 'true' && github.event.client_payload.check_run_id != null
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          CONCLUSION: ${{ job.status == 'success' && 'success' || 'failure' }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          curl --fail-with-body -sS -X PATCH \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
-            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
+            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\",\"details_url\":\"$DETAILS_URL\"}"
 ```
 
 ---
@@ -289,14 +361,14 @@ jobs:
 ## 6. 導入・運用手順
 
 1. **GitHub Secrets の設定**:
-   - `GEMINI_OAUTH_CREDS_B64`: 取得済み OAuth 認証情報の Base64 文字列
-   - `GEMINI_GOOGLE_ACCOUNTS_B64`: 取得済み Google アカウント情報の Base64 文字列
+   - `ANTIGRAVITY_OAUTH_JSON`: `./scripts/sync-agy-credentials.sh` によりローカルから自動同期された Antigravity OAuth 認証トークン
+   - `GH_APP_PRIVATE_KEY` / `GH_APP_ID`: GitHub App 連携用シークレット
 2. **アップストリーム連携**:
    - Cloudflare Worker の Webhook 設定を行い、PR 作成・更新時に `repository_dispatch` を送信する構成を維持。
 3. **ルール定義のカスタマイズ (任意)**:
-   - レビュー対象リポジトリの `.opencodereview/rule.json` にプロジェクト固有のコーディング規約を設定。
+   - レビュー対象リポジトリの `.opencodereview/rule.json` にプロジェクト固有のコーディング規約を設定（未設定時はデフォルトルールが適用されます）。
 4. **動作検証**:
-   - 内部 PR および外部フォーク PR を作成し、フォークスキップ、認証スモークテスト、サマリーの冪等更新、インラインコメント投稿が正常に行われることを確認。
+   - 内部 PR および外部フォーク PR を作成し、フォークスキップ、認証連携、サマリーの冪等更新、インラインコメント投稿が正常に行われることを確認。
 
 ---
 

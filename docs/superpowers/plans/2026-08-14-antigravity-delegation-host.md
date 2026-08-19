@@ -63,7 +63,7 @@ or dedicated adapter returning `{ status, decision, reason, message }` (with `sc
 - [ ] Enforce Trusted Checkout execution boundary: check out only trusted base revision for workflow,
   scripts, and configuration execution; treat PR head strictly as passive diff data.
 - [ ] Replace the LLM proxy, OCR configuration, and `ocr review` steps with tested pinned
-  OCR/Antigravity installation (`@alibaba-group/open-code-review@1.2.0`, `@google/antigravity@0.8.2`), OAuth restoration, runtime skill installation, and `agy`.
+  OCR/Antigravity installation (`@alibaba-group/open-code-review@1.9.7`, `@google/antigravity@0.8.2`), OAuth restoration, runtime skill installation, and `agy`.
 - [ ] Write a restrictive Antigravity settings file: allow `ocr delegate preview/rule` and
   Git `diff`, `show`, `status`, `rev-parse`; deny writes, push, `rm`, `sudo`, network fetch,
   unsandboxed commands, and dangerous permission bypass.
@@ -105,7 +105,7 @@ or dedicated adapter returning `{ status, decision, reason, message }` (with `sc
 ### Task 5: End-to-end verification
 
 - [ ] Run every workflow-script test with `node --test .github/workflows/scripts/*.test.mjs`.
-- [ ] Validate pinned versions (`@alibaba-group/open-code-review@1.2.0`, `@google/antigravity@0.8.2`) in CI execution environment.
+- [ ] Validate pinned versions (`@alibaba-group/open-code-review@1.9.7`, `@google/antigravity@0.8.2`) in CI execution environment.
 - [ ] Validate an internal test PR, a fork skip with `neutral` Check Run completion, zero targets, failed auth, malformed host JSON,
   High finding, and one fixed versus one ambiguous OCR thread.
 - [ ] Confirm no Secret, OAuth artifact, complete prompt, or complete diff appears in logs/artifacts.
