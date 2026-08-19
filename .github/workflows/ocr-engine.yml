@@ -37,12 +37,13 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl --fail-with-body -sS -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
-            -d '{"status":"completed","conclusion":"neutral","output":{"title":"Skipped external fork","summary":"OpenCodeReview runs only for internal pull requests."}}'
+            -d '{"status":"completed","conclusion":"neutral","details_url":"'"$DETAILS_URL"'","output":{"title":"Skipped external fork","summary":"OpenCodeReview runs only for internal pull requests."}}'
 
       - name: Generate GitHub App token
         id: app-token
@@ -74,12 +75,13 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl --fail-with-body -sS -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
-            -d '{"status":"in_progress"}'
+            -d "{\"status\":\"in_progress\",\"details_url\":\"$DETAILS_URL\"}"
 
       - uses: actions/setup-node@v4
         if: steps.target.outputs.internal == 'true'
@@ -89,7 +91,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.2.0
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.9.7
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
@@ -107,6 +109,11 @@ jobs:
             printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
           fi
 
+      - name: Prepare target repo workspace
+        if: steps.target.outputs.internal == 'true'
+        run: |
+          mkdir -p target-repo/.opencodereview
+
       - name: Install trusted delegate skill
         if: steps.target.outputs.internal == 'true'
         run: |
@@ -114,10 +121,14 @@ jobs:
           cat > "$HOME/.gemini/antigravity-cli/skills/ocr-delegate/SKILL.md" <<'EOF'
           # OpenCodeReview delegation
 
-          Use only `ocr delegate preview` and `ocr delegate rule` for review work.
-          Use only read-only Git commands: `git diff`, `git show`, `git status`, and `git rev-parse`.
-          Never write files, fetch network data, push, remove files, use sudo, or bypass permissions.
-          Return only schema_version 1.0 JSON for the requested review contract.
+          Perform automated PR code reviews using OpenCodeReview delegation tools and read-only Git.
+
+          ## Review Procedure
+          1. Use `ocr delegate preview --from <BASE_REF> --to <COMMIT_SHA>` to preview reviewable files and determine changes.
+          2. Use `ocr delegate rule <files...>` to get resolved review rules. (Do not manually search or inspect `.opencodereview` with file tools; `ocr delegate rule` handles rule resolution automatically).
+          3. Use read-only Git commands (`git diff`, `git show`, `git status`, `git rev-parse`) to inspect diffs and code.
+          4. Never write files, fetch network data, push, remove files, use sudo, or bypass permissions.
+          5. Return only schema_version 1.0 JSON for the requested review contract.
           EOF
 
       - name: Configure restrictive Antigravity policy
@@ -161,7 +172,7 @@ jobs:
           import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
           const result = await runHost({
             cwd: 'target-repo',
-            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
+            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Do not search for or access .opencodereview directly with file tools. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
           });
           fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
           if (result.status === 'failed') process.exitCode = 1;
@@ -217,9 +228,10 @@ jobs:
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
           CONCLUSION: ${{ job.status == 'success' && 'success' || 'failure' }}
+          DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl --fail-with-body -sS -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
-            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\"}"
+            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\",\"details_url\":\"$DETAILS_URL\"}"

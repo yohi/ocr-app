@@ -230,7 +230,7 @@ jobs:
       - name: Install Pinned OCR CLI & Antigravity CLI
         if: steps.check_fork.outputs.is_fork != 'true'
         run: |
-          npm install -g @alibaba-group/open-code-review@1.2.0
+          npm install -g @alibaba-group/open-code-review@1.9.7
           npm install -g @google/antigravity@0.8.2
 
       - name: Restore OAuth Credentials & Smoke Test
