@@ -54,6 +54,32 @@ test('runHost invokes agy and returns a validated review result', async () => {
   assert.deepEqual(result, validReview);
 });
 
+test('runHost accepts review result without top-level message and defaults to empty string', async () => {
+  const { message, ...reviewWithoutMessage } = validReview;
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(reviewWithoutMessage)),
+  });
+
+  assert.deepEqual(result, { ...reviewWithoutMessage, message: '' });
+});
+
+test('runHost rejects review result with non-string top-level message', async () => {
+  const invalidMessageReview = {
+    ...validReview,
+    message: 12345,
+  };
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(invalidMessageReview)),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.message, 'Review message is invalid');
+});
+
 test('runHost unwraps agy CLI JSON envelope with string response', async () => {
   const envelope = {
     conversation_id: '12345',

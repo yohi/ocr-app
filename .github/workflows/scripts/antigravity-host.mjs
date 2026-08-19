@@ -82,7 +82,11 @@ function validateReview(data) {
       throw new Error('Finding message is invalid');
     }
   }
-  if (typeof data.message !== 'string') throw new Error('Review message is invalid');
+  if (data.message === undefined || data.message === null) {
+    data.message = '';
+  } else if (typeof data.message !== 'string') {
+    throw new Error('Review message is invalid');
+  }
   return data;
 }
 

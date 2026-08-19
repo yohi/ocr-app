@@ -172,7 +172,7 @@ jobs:
           import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
           const result = await runHost({
             cwd: 'target-repo',
-            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Do not search for or access .opencodereview directly with file tools. Return JSON schema_version 1.0, mode review, status success/skipped/failed, coverage 0..1, findings with severity low/medium/high/critical, relative path, positive changed line, and message. Do not include secrets or complete prompts in the response.`,
+            prompt: `Review PR #${process.env.PR_NUMBER} from ${process.env.BASE_REF} to ${process.env.COMMIT_SHA}. Use only the trusted OpenCodeReview delegate skill. Inspect the diff with read-only Git and use ocr delegate preview/rule. Do not search for or access .opencodereview directly with file tools. Return JSON with schema_version: "1.0", mode: "review", status: "success" | "skipped" | "failed", coverage: number (0..1), findings: [{ severity: "low" | "medium" | "high" | "critical", path: string, line: positive integer, message: string }], message: string. Do not include secrets or complete prompts in the response.`,
           });
           fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
           if (result.status === 'failed') process.exitCode = 1;
