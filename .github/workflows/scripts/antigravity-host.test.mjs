@@ -302,14 +302,44 @@ test('resolveTimeoutMs defaults to 5 minutes (300000ms) and respects environment
   assert.equal(resolveTimeoutMs({ ANTIGRAVITY_TIMEOUT_MS: '2000000' }), 1_800_000);
 });
 
-test('runHost respects ANTIGRAVITY_TIMEOUT_MS from env option', async () => {
+test('runHost retries on transient context canceled error and succeeds on subsequent attempt', async () => {
+  let attempts = 0;
+  const spawn = () => {
+    attempts++;
+    if (attempts === 1) {
+      return childFor('{"error": "context canceled"}', { exitCode: 0 });
+    }
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
   const result = await runHost({
-    prompt: 'Review.',
+    prompt: 'Review the diff.',
     cwd: '/tmp/trusted',
-    env: { ANTIGRAVITY_TIMEOUT_MS: '5' },
-    spawn: spawnWith('delayed output', { delayMs: 50 }),
+    spawn,
+    maxRetries: 2,
+    retryDelayMs: 1,
   });
 
-  assert.equal(result.status, 'failed');
-  assert.match(result.message, /timed out/i);
+  assert.equal(attempts, 2);
+  assert.deepEqual(result, validReview);
 });
+
+test('runHost does not retry on non-transient schema error', async () => {
+  let attempts = 0;
+  const spawn = () => {
+    attempts++;
+    return childFor('{invalid-json', { exitCode: 0 });
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(attempts, 1);
+  assert.equal(result.status, 'failed');
+});
+
