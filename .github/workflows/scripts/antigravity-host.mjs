@@ -127,7 +127,7 @@ function parseJsonFromText(text) {
 
 export function extractPayload(raw) {
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    if (raw.status === 'ERROR' || raw.status === 'FAILED') {
+    if (raw.status === 'ERROR' || raw.status === 'FAILED' || raw.error) {
       throw new Error(raw.error || raw.message || 'Antigravity execution failed');
     }
     if ('response' in raw) {
@@ -215,27 +215,60 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
   });
 }
 
-async function runMode({ prompt, cwd, timeoutMs, spawn = nodeSpawn, mode, env = process.env }) {
+const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_RETRY_DELAY_MS = 3000;
+
+function isTransientError(errorMessage) {
+  return /context canceled|resource has been exhausted|rate limit|quota|503|502|500|econnreset|etimedout/i.test(errorMessage);
+}
+
+
+async function runMode({
+  prompt,
+  cwd,
+  timeoutMs,
+  spawn = nodeSpawn,
+  mode,
+  env = process.env,
+  maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
+  retryDelayMs = DEFAULT_RETRY_DELAY_MS,
+}) {
   if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
   if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
-  let childResult;
-  try {
-    childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode });
-  } catch (error) {
-    return failure(mode, error.message);
-  }
-  if (childResult.error) return failure(mode, childResult.error.message);
-  try {
-    if (mode === THREAD_MODE) {
-      const data = validateThread(childResult.parsed);
-      return { ...data, status: 'success', message: '' };
+
+  const attempts = Math.max(1, maxRetries + 1);
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    let childResult;
+    try {
+      childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode });
+    } catch (error) {
+      if (attempt < attempts && isTransientError(error.message)) {
+        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+        continue;
+      }
+      return failure(mode, error.message);
     }
-    return validateReview(childResult.parsed);
-  } catch (error) {
-    return failure(mode, error.message);
+
+    if (childResult.error) {
+      if (attempt < attempts && isTransientError(childResult.error.message)) {
+        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+        continue;
+      }
+      return failure(mode, childResult.error.message);
+    }
+
+    try {
+      if (mode === THREAD_MODE) {
+        const data = validateThread(childResult.parsed);
+        return { ...data, status: 'success', message: '' };
+      }
+      return validateReview(childResult.parsed);
+    } catch (error) {
+      return failure(mode, error.message);
+    }
   }
 }
 
