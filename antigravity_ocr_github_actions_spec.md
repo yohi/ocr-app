@@ -210,7 +210,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.11.0
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.11.3
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
@@ -256,6 +256,7 @@ jobs:
           install -d "$HOME/.gemini/antigravity-cli"
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
+            "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
             "permissions": {
               "allow": [
                 "command(*)",

@@ -307,7 +307,11 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     }
 
     const prompt = buildPrompt(thread, codeSnippet);
-    const evaluation = await threadHost({ prompt, cwd: config.targetDir });
+    const evaluation = await threadHost({
+      prompt,
+      cwd: config.targetDir,
+      model: process.env.RESOLVE_LLM_MODEL || process.env.OCR_LLM_MODEL,
+    });
 
     if (evaluation.status === 'success' && evaluation.decision === 'resolve') {
       console.log(`Thread ${thread.id} (${thread.path}:${thread.line}) evaluated as RESOLVED: ${evaluation.reason}`);
