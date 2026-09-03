@@ -3,7 +3,9 @@ import { EventEmitter } from 'node:events';
 import test from 'node:test';
 
 import {
+  normalizeAntigravityModel,
   resolveBatchLimits,
+  resolveModel,
   resolveTimeoutMs,
   runHost,
   runThreadHost,
@@ -341,5 +343,42 @@ test('runHost does not retry on non-transient schema error', async () => {
 
   assert.equal(attempts, 1);
   assert.equal(result.status, 'failed');
+});
+
+test('normalizeAntigravityModel handles effort suffix and fallbacks', () => {
+  assert.equal(normalizeAntigravityModel(''), 'gemini-3.8-flash-medium');
+  assert.equal(normalizeAntigravityModel(undefined), 'gemini-3.8-flash-medium');
+  assert.equal(normalizeAntigravityModel('gemini-3.7-flash'), 'gemini-3.7-flash-medium');
+  assert.equal(normalizeAntigravityModel('gemini-3.8-flash'), 'gemini-3.8-flash-medium');
+  assert.equal(normalizeAntigravityModel('gemini-3.8-flash-high'), 'gemini-3.8-flash-high');
+  assert.equal(normalizeAntigravityModel('claude-sonnet-4-6'), 'claude-sonnet-4-6');
+});
+
+test('resolveModel prioritizes OCR_LLM_MODEL over ANTIGRAVITY_MODEL and defaults', () => {
+  assert.equal(resolveModel({ OCR_LLM_MODEL: 'gemini-3.7-flash' }), 'gemini-3.7-flash-medium');
+  assert.equal(resolveModel({ ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'claude-sonnet-4-6');
+  assert.equal(resolveModel({ OCR_LLM_MODEL: 'gemini-3.8-flash-high', ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'gemini-3.8-flash-high');
+  assert.equal(resolveModel({}), 'gemini-3.8-flash-medium');
+});
+
+test('runHost passes --model flag to agy spawn args', async () => {
+  let capturedCmd = null;
+  let capturedArgs = null;
+  const spawn = (cmd, args) => {
+    capturedCmd = cmd;
+    capturedArgs = args;
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  await runHost({
+    prompt: 'Review diff',
+    cwd: '/tmp/trusted',
+    spawn,
+    model: 'gemini-3.7-flash',
+  });
+
+  assert.equal(capturedCmd, 'agy');
+  assert.equal(capturedArgs[0], '--model');
+  assert.equal(capturedArgs[1], 'gemini-3.7-flash-medium');
 });
 

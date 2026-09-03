@@ -30,14 +30,15 @@ function topLevelPermissions() {
 
 test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /@alibaba-group\/open-code-review@1\.11\.0/);
+  assert.match(workflow, /@alibaba-group\/open-code-review@1\.11\.3/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --ignore-scripts /);
   assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/ocr-delegate/);
   assert.match(workflow, /ANTIGRAVITY_OAUTH_JSON/);
   assert.match(workflow, /printf '%s' "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /echo "\$ANTIGRAVITY_OAUTH_JSON"/);
-  assert.doesNotMatch(workflow, /OCR_LLM_/);
+  assert.doesNotMatch(workflow, /OCR_LLM_AUTH_TOKEN/);
+  assert.doesNotMatch(workflow, /OCR_LLM_URL/);
 });
 
 test('workflow policy allows only review delegation and read-only Git', () => {
@@ -55,6 +56,7 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.doesNotMatch(reviewStep, /\b(?:agy|curl|wget|npm|git\s+(?:push|fetch)|rm|sudo)\b/);
   assert.doesNotMatch(reviewStep, /--dangerously-skip-permissions/);
 
+  assert.equal(settings.model, "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}");
   assert.deepEqual(settings.permissions.allow, [
     'command(*)',
     'read_file(*)',

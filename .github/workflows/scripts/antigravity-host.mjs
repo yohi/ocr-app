@@ -13,6 +13,17 @@ export function resolveTimeoutMs(env = process.env, fallback = DEFAULT_TIMEOUT_M
   return parsePositiveInteger(env?.ANTIGRAVITY_TIMEOUT_MS, fallback, MAX_TIMEOUT_MS);
 }
 
+export function normalizeAntigravityModel(model) {
+  const trimmed = String(model ?? '').trim();
+  if (!trimmed) return 'gemini-3.8-flash-medium';
+  if (/^gemini-\d+\.\d+-flash$/i.test(trimmed)) return `${trimmed.toLowerCase()}-medium`;
+  return trimmed;
+}
+
+export function resolveModel(env = process.env) {
+  return normalizeAntigravityModel(env?.OCR_LLM_MODEL || env?.ANTIGRAVITY_MODEL);
+}
+
 function sanitize(value) {
   return String(value ?? '')
     .replace(/(?:gh[pousr]|github_pat|sk-[a-z0-9_-]+|oauth)[a-z0-9._-]*/gi, '[REDACTED]')
@@ -147,12 +158,13 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, spawn, mode }) {
+function readChild({ prompt, cwd, timeoutMs, spawn, mode, model }) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let settled = false;
-    const child = spawn('agy', ['-p', prompt, '--output-format', 'json'], {
+    const effectiveModel = normalizeAntigravityModel(model);
+    const child = spawn('agy', ['--model', effectiveModel, '-p', prompt, '--output-format', 'json'], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,
@@ -230,6 +242,7 @@ async function runMode({
   spawn = nodeSpawn,
   mode,
   env = process.env,
+  model,
   maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 }) {
@@ -238,12 +251,13 @@ async function runMode({
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
+  const effectiveModel = model ? normalizeAntigravityModel(model) : resolveModel(env);
 
   const attempts = Math.max(1, maxRetries + 1);
   for (let attempt = 1; attempt <= attempts; attempt++) {
     let childResult;
     try {
-      childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode });
+      childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode, model: effectiveModel });
     } catch (error) {
       if (attempt < attempts && isTransientError(error.message)) {
         await new Promise(r => setTimeout(r, retryDelayMs * attempt));

@@ -91,7 +91,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.11.0
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.11.3
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
@@ -137,6 +137,7 @@ jobs:
           install -d "$HOME/.gemini/antigravity-cli"
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
+            "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
             "permissions": {
               "allow": [
                 "command(*)",
@@ -166,6 +167,7 @@ jobs:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           ANTIGRAVITY_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_TIMEOUT_MS || '' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || '' }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
@@ -182,6 +184,8 @@ jobs:
         if: always() && steps.target.outputs.internal == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          RESOLVE_LLM_MODEL: ${{ vars.RESOLVE_LLM_MODEL || '' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || '' }}
         run: |
           node self-repo/.github/workflows/scripts/resolve-threads.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
