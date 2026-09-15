@@ -164,7 +164,12 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode, model }) {
     let stderr = '';
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
-    const child = spawn('agy', ['--model', effectiveModel, '-p', prompt, '--output-format', 'json'], {
+    const child = spawn('agy', [
+      '--model', effectiveModel,
+      '-p', prompt,
+      '--output-format', 'json',
+      '--print-timeout', `${timeoutMs}ms`,
+    ], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: true,

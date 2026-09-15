@@ -382,3 +382,28 @@ test('runHost passes --model flag to agy spawn args', async () => {
   assert.equal(capturedArgs[1], 'gemini-3.7-flash-medium');
 });
 
+test('runHost passes the configured timeout to agy print mode', async () => {
+  let capturedArgs = null;
+  const spawn = (_cmd, args) => {
+    capturedArgs = args;
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  await runHost({
+    prompt: 'Review diff',
+    cwd: '/tmp/trusted',
+    spawn,
+    timeoutMs: 600_000,
+  });
+
+  assert.deepEqual(capturedArgs, [
+    '--model',
+    'gemini-3.8-flash-medium',
+    '-p',
+    'Review diff',
+    '--output-format',
+    'json',
+    '--print-timeout',
+    '600000ms',
+  ]);
+});
