@@ -260,13 +260,12 @@ jobs:
             "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
             "permissions": {
               "allow": [
-                "command(*)",
-                "read_file(*)",
-                "view_file(*)",
-                "list_dir(*)",
-                "grep_search(*)",
-                "find_by_name(*)",
-                "read_symbol_definition(*)"
+                "command(ocr delegate preview)",
+                "command(ocr delegate rule)",
+                "command(git diff)",
+                "command(git show)",
+                "command(git status)",
+                "command(git rev-parse)"
               ],
               "deny": [
                 "command(git push*)",

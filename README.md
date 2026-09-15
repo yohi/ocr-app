@@ -55,7 +55,9 @@ sequenceDiagram
     CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
     CR->>GH: GitHub App token 発行
     CR->>TR: 対象リポジトリ・コミットを checkout
-    CR->>CR: npm install & ocr review 実行
+    CR->>CR: npm install & Antigravity CLI (agy) セットアップ
+    CR->>CR: Antigravity Host (runHost) から agy を起動
+    CR->>CR: agy が ocr delegate preview/rule と read-only Git でレビュー
     CR->>TR: レビューコメントを PR に投稿
 ```
 
@@ -75,7 +77,9 @@ sequenceDiagram
    - GitHub App token を発行します。
    - 対象リポジトリ・コミットを checkout します。
    - `@alibaba-group/open-code-review` をインストール・設定します。
-   - `ocr review` を実行します。
+   - Antigravity Host の `runHost` から `agy` を起動します。
+   - `agy` が `ocr delegate preview` でレビュー対象ファイルを決定し、`ocr delegate rule` で中央ルールを解決します。
+   - read-only Git（`git diff`、`git show`、`git status`、`git rev-parse`）でコード差分を確認し、レビュー結果をJSONで返します。
 6. **レビュー結果の投稿**
    - `.github/workflows/scripts/post-ocr-comments.mjs` を使って、
      対象 PR にインラインでレビューコメントを投稿します。
@@ -104,7 +108,9 @@ sequenceDiagram
     CW->>CR: repository_dispatch<br/>(open_code_review_trigger)
     CR->>GH: GitHub App token 発行
     CR->>TR: 対象リポジトリ・コミットを checkout
-    CR->>CR: npm install & ocr review 実行
+    CR->>CR: npm install & Antigravity CLI (agy) セットアップ
+    CR->>CR: Antigravity Host (runHost) から agy を起動
+    CR->>CR: agy が ocr delegate preview/rule と read-only Git でレビュー
     CR->>GH: PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}
     CR->>TR: レビューコメントを PR に投稿
 ```
@@ -293,8 +299,9 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
    - GitHub App token の発行
    - 対象リポジトリ・コミットの checkout
    - `@alibaba-group/open-code-review` のインストールと設定
-   - `ocr delegate preview` と `ocr delegate rule` による対象Markdownと中央ルールの解決
-   - `ocr review` の実行（コード差分がある場合）
+   - Antigravity Host の `runHost` から `agy` を起動
+   - `agy` が `ocr delegate preview` でレビュー対象ファイルを決定し、`ocr delegate rule` で中央ルールを解決します。
+   - read-only Git（`git diff`、`git show`、`git status`、`git rev-parse`）によるコード差分の確認とレビュー結果JSONの生成
    - レビュー結果を PR にインライン投稿
 
 #### Markdownレビュー

@@ -85,13 +85,12 @@ test('workflow policy allows only review delegation and read-only Git', () => {
 
   assert.equal(settings.model, "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}");
   assert.deepEqual(settings.permissions.allow, [
-    'command(*)',
-    'read_file(*)',
-    'view_file(*)',
-    'list_dir(*)',
-    'grep_search(*)',
-    'find_by_name(*)',
-    'read_symbol_definition(*)',
+    'command(ocr delegate preview)',
+    'command(ocr delegate rule)',
+    'command(git diff)',
+    'command(git show)',
+    'command(git status)',
+    'command(git rev-parse)',
   ]);
   assert.deepEqual(settings.permissions.deny, [
     'command(git push*)',
