@@ -305,7 +305,7 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
 - `README.md`
 - `AGENTS.md`
 - `SPEC.md`
-- `docs/**/*.md`
+- `docs/*.md`
 - `docs/superpowers/plans/*.md`
 - `docs/superpowers/specs/*.md`
 

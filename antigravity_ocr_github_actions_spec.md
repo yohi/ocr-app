@@ -38,8 +38,8 @@ flowchart TD
 
         subgraph HostAgent["Antigravity Host Agent (agy -p)"]
             HostRunner -->|厳格な権限サンドボックス| AGY["agy CLI (Gemini 3.7 / Pro)"]
-            AGY -->|1. 対象ファイル抽出| Preview["ocr delegate preview --format json --to <commit_sha>"]
-            AGY -->|2. ルール解決| Rules["ocr delegate rule --format json <ファイル一覧>"]
+            AGY -->|1. 対象ファイル抽出| Preview["ocr delegate preview --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from <base_ref> --to <commit_sha>"]
+            AGY -->|2. ルール解決| Rules["ocr delegate rule --rule ../self-repo/.github/workflows/config/markdown-review-rules.json <ファイル一覧>"]
             AGY -->|3. Read-only Git| GitDiff["git diff / show (Bounded Batches)"]
             AGY -->|4. 構造化推論| ReviewJSON["Review JSON 出力"]
         end
@@ -75,9 +75,9 @@ sequenceDiagram
         GHA->>GHA: 公式 delegate skill を ~/.gemini/... にインストール
         GHA->>Host: ホストランナー実行 (commit_sha, base_ref, batch設定)
         Host->>AGY: `agy -p --output-format json` 起動 (Deny-by-default権限)
-        AGY->>OCR: `ocr delegate preview --format json --from origin/<base> --to <commit_sha>`
+        AGY->>OCR: `ocr delegate preview --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from <base_ref> --to <commit_sha>`
         OCR-->>AGY: レビュー対象ファイルリスト & 除外情報
-        AGY->>OCR: `ocr delegate rule --format json <ファイル一覧>`
+        AGY->>OCR: `ocr delegate rule --rule ../self-repo/.github/workflows/config/markdown-review-rules.json <ファイル一覧>`
         OCR-->>AGY: 適用ルールグループ
         AGY->>AGY: read-only git diff 取得 & バッチ推論
         AGY-->>Host: 構造化 Review JSON 出力
