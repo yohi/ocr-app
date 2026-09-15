@@ -141,8 +141,7 @@ jobs:
             "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
             "permissions": {
               "allow": [
-                "command(ocr delegate preview)",
-                "command(ocr delegate rule)",
+                "command(ocr delegate)",
                 "command(git diff)",
                 "command(git show)",
                 "command(git status)",
