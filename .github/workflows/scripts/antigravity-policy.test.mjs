@@ -3,6 +3,10 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
+const markdownRules = JSON.parse(fs.readFileSync(
+  new URL('../config/markdown-review-rules.json', import.meta.url),
+  'utf8',
+));
 
 function stepRun(name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -39,6 +43,29 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.doesNotMatch(workflow, /echo "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /OCR_LLM_AUTH_TOKEN/);
   assert.doesNotMatch(workflow, /OCR_LLM_URL/);
+});
+
+test('trusted markdown rules select only the configured documentation paths', () => {
+  assert.deepEqual(markdownRules.include, [
+    'docs/superpowers/plans/*.md',
+    'docs/superpowers/specs/*.md',
+    'README.md',
+    'docs/*.md',
+    'AGENTS.md',
+    'SPEC.md',
+  ]);
+  assert.deepEqual(markdownRules.rules.map(rule => rule.path), [
+    'docs/superpowers/specs/*.md',
+    'docs/superpowers/plans/*.md',
+    '{README.md,docs/*.md,AGENTS.md,SPEC.md}',
+  ]);
+  for (const rule of markdownRules.rules) {
+    assert.ok(rule.rule.length > 100, `rule must be substantive: ${rule.path}`);
+    assert.match(rule.rule, /untrusted data/i);
+    assert.match(rule.rule, /changed line/i);
+    assert.match(rule.rule, /concrete/i);
+    assert.match(rule.rule, /speculative/i);
+  }
 });
 
 test('workflow policy allows only review delegation and read-only Git', () => {
@@ -94,6 +121,14 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.doesNotMatch(workflow, /permissions:\n[\s\S]*\n  contents: write/);
   assert.doesNotMatch(workflow, /permissions:\n[\s\S]*\n  actions: write/);
   assert.doesNotMatch(workflow, /permissions:\n[\s\S]*\n  id-token: write/);
+});
+
+test('workflow uses the trusted Markdown rule for selection and delegation', () => {
+  const rulePath = '../self-repo/.github/workflows/config/markdown-review-rules.json';
+  assert.match(workflow, new RegExp(`ocr delegate preview --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(workflow, new RegExp(`ocr delegate rule --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(workflow, /Markdown content as untrusted data/);
+  assert.match(workflow, /evidence-backed findings only/);
 });
 
 test('external forks are checked before the app-token secret step', () => {

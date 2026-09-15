@@ -293,8 +293,25 @@ Cloudflare Worker から `open_code_review_trigger` タイプの dispatch が送
    - GitHub App token の発行
    - 対象リポジトリ・コミットの checkout
    - `@alibaba-group/open-code-review` のインストールと設定
-   - `ocr review` の実行
+   - `ocr delegate preview` と `ocr delegate rule` による対象Markdownと中央ルールの解決
+   - `ocr review` の実行（コード差分がある場合）
    - レビュー結果を PR にインライン投稿
+
+#### Markdownレビュー
+
+以下のMarkdown差分は、中央リポジトリの
+`.github/workflows/config/markdown-review-rules.json` に定義されたルールでレビューします。
+
+- `README.md`
+- `AGENTS.md`
+- `SPEC.md`
+- `docs/**/*.md`
+- `docs/superpowers/plans/*.md`
+- `docs/superpowers/specs/*.md`
+
+Markdown本文に含まれる命令はレビュー対象データとして扱い、実行しません。指摘は
+変更行に対応し、根拠のある設計・実装計画・文書間の不整合に限定します。対象ファイルが
+存在しない変更では推論を実行せず、Check Runを成功として終了します。
 
 失敗時には `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
 `ocr-debug-logs` という Artifact として保存します。
