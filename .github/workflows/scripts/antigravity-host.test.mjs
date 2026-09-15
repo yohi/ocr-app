@@ -378,8 +378,26 @@ test('runHost passes --model flag to agy spawn args', async () => {
   });
 
   assert.equal(capturedCmd, 'agy');
-  assert.equal(capturedArgs[0], '--model');
-  assert.equal(capturedArgs[1], 'gemini-3.7-flash-medium');
+  assert.equal(capturedArgs[0], '--add-dir');
+  assert.equal(capturedArgs[1], '/tmp/trusted');
+  assert.equal(capturedArgs[2], '--model');
+  assert.equal(capturedArgs[3], 'gemini-3.7-flash-medium');
+});
+
+test('runHost adds the trusted cwd as an absolute agy workspace', async () => {
+  let capturedArgs = null;
+  const spawn = (_cmd, args) => {
+    capturedArgs = args;
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  await runHost({
+    prompt: 'Review diff',
+    cwd: '/tmp/trusted',
+    spawn,
+  });
+
+  assert.deepEqual(capturedArgs.slice(0, 2), ['--add-dir', '/tmp/trusted']);
 });
 
 test('runHost passes the configured timeout to agy print mode', async () => {
@@ -397,6 +415,8 @@ test('runHost passes the configured timeout to agy print mode', async () => {
   });
 
   assert.deepEqual(capturedArgs, [
+    '--add-dir',
+    '/tmp/trusted',
     '--model',
     'gemini-3.8-flash-medium',
     '-p',

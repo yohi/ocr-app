@@ -1,4 +1,5 @@
 import { spawn as nodeSpawn } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 
 const SCHEMA_VERSION = '1.0';
 const REVIEW_MODE = 'review';
@@ -164,7 +165,9 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode, model }) {
     let stderr = '';
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
+    const workspace = resolvePath(cwd);
     const child = spawn('agy', [
+      '--add-dir', workspace,
       '--model', effectiveModel,
       '-p', prompt,
       '--output-format', 'json',
