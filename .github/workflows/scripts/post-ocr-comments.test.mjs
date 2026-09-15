@@ -154,6 +154,36 @@ test('posts a batch review when GitHub accepts the review request', async () => 
   });
 });
 
+test('posts findings for a changed Markdown file through the normal review path', async () => {
+  // Given
+  const result = {
+    findings: [{ body: 'Document the new workflow contract', line: 8, path: 'README.md' }],
+  };
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    {
+      data: [{ filename: 'README.md', patch: '@@ -8 +8 @@\n+updated documentation' }],
+      status: 200,
+    },
+    { data: {}, status: 201 },
+    { data: [], status: 200 },
+    { data: {}, status: 201 },
+  ];
+
+  // When
+  const { exitCode, requests } = await runWithResult(result, outcomes);
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].path, '/repos/owner/repo/pulls/123/reviews');
+  assert.deepEqual(requests[2].body.comments[0], {
+    body: '```\nDocument the new workflow contract\n```\n\n---\n*Posted by OpenCodeReview*',
+    line: 8,
+    path: 'README.md',
+    side: 'RIGHT',
+  });
+});
+
 test('falls back to individual comments when GitHub rejects the batch review', async () => {
   // Given
   // When
@@ -796,4 +826,3 @@ test('supports findings array from antigravity host format', async () => {
     side: 'RIGHT',
   });
 });
-
