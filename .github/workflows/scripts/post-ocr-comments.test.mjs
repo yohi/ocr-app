@@ -92,6 +92,7 @@ test('posts a Summary issue comment when the comments array is empty', async () 
   // Given
   const outcomes = [
     { data: [], status: 200 },
+    { data: [], status: 200 },
     { data: {}, status: 201 },
   ];
 
@@ -103,10 +104,42 @@ test('posts a Summary issue comment when the comments array is empty', async () 
 
   // Then
   assert.equal(exitCode, 0);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0].method, 'POST');
-  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
-  assert.match(requests[0].body.body, /0 件のコメント \/ 0 ファイル \/ 所要時間: 1s/);
+  assert.equal(requests.length, 2);
+  assert.equal(requests[1].method, 'POST');
+  assert.equal(requests[1].path, '/repos/owner/repo/issues/123/comments');
+  assert.match(requests[1].body.body, /0 件のコメント \/ 0 ファイル \/ 所要時間: 1s/);
+});
+
+test('posts an informative Summary when the review has no findings', async () => {
+  const outcomes = [
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: [], status: 200 },
+    { data: {}, status: 201 },
+  ];
+
+  const { exitCode, requests } = await runWithResult(
+    { comments: [], coverage: 0.8, summary: { elapsed: '1s' } },
+    outcomes,
+  );
+
+  assert.equal(exitCode, 0);
+  const body = requests.at(-1).body.body;
+  assert.match(body, /レビュー結果: 指摘なし/);
+  assert.match(body, /レビュー対象: 1 ファイル/);
+  assert.match(body, /カバレッジ: 80%/);
+  assert.match(body, /所要時間: 1s/);
+  assert.match(body, /`src\/example\.js`/);
+});
+
+test('reports zero changed files without inventing file details', async () => {
+  const { exitCode, requests } = await runWithResult(
+    { comments: [], coverage: 0, summary: {} },
+    [{ data: [], status: 200 }, { data: [], status: 200 }, { data: {}, status: 201 }],
+  );
+
+  assert.equal(exitCode, 0);
+  assert.match(requests.at(-1).body.body, /レビュー対象: 0 ファイル/);
+  assert.doesNotMatch(requests.at(-1).body.body, /変更ファイル/);
 });
 
 test('warns and returns zero when every comment is invalid', async () => {
