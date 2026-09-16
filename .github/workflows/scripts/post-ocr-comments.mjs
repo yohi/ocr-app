@@ -122,22 +122,44 @@ function wrapInCodeBlock(body, language = '') {
   return `${fence}${language}\n${body}\n${fence}`;
 }
 
-function buildSummarySection(comments, ocrSummary) {
+function buildSummarySection(comments, reviewMetadata, changedFiles = []) {
   const countsByPath = new Map();
   for (const comment of comments) {
     countsByPath.set(comment.path, (countsByPath.get(comment.path) || 0) + 1);
   }
-  const elapsed = ocrSummary && typeof ocrSummary.elapsed === 'string'
-    ? ` / 所要時間: ${ocrSummary.elapsed}`
+  const elapsed = reviewMetadata && typeof reviewMetadata.elapsed === 'string'
+    ? ` / 所要時間: ${reviewMetadata.elapsed}`
+    : '';
+  const coverage = Number.isFinite(reviewMetadata?.coverage) &&
+    reviewMetadata.coverage >= 0 && reviewMetadata.coverage <= 1
+    ? ` / カバレッジ: ${Math.round(reviewMetadata.coverage * 100)}%`
     : '';
   const rows = [...countsByPath]
     .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
     .map(([filePath, count]) => `| \`${filePath}\` | ${count} |`);
+  const changedFilePaths = [...new Set(changedFiles)]
+    .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0));
+  const noFindingsSection = comments.length === 0
+    ? [
+      'レビュー結果: 指摘なし',
+      `レビュー対象: ${changedFilePaths.length} ファイル${coverage}${elapsed}`,
+      ...(changedFilePaths.length > 0
+        ? [
+          '',
+          '| 変更ファイル | 判定 |',
+          '| --- | --- |',
+          ...changedFilePaths.map(filePath => `| \`${filePath}\` | 指摘なし |`),
+        ]
+        : []),
+    ]
+    : [];
 
   return [
     '## 📋 OpenCodeReview Summary',
     SUMMARY_MARKER,
     '',
+    ...noFindingsSection,
+    ...(noFindingsSection.length > 0 ? ['',] : []),
     `${comments.length} 件のコメント / ${countsByPath.size} ファイル${elapsed}`,
     '',
     '| ファイル | コメント数 |',
@@ -160,10 +182,10 @@ function buildCombinedCodeBlock(comments, maxTranscriptLength) {
   return wrapInCodeBlock(transcript, 'text');
 }
 
-function buildSummaryBody(comments, ocrSummary) {
+function buildSummaryBody(comments, reviewMetadata, changedFiles) {
   const MAX_LENGTH = 65536;
   const footer = '\n\n---\n*Posted by OpenCodeReview*';
-  const summarySection = buildSummarySection(comments, ocrSummary);
+  const summarySection = buildSummarySection(comments, reviewMetadata, changedFiles);
   const separator = '\n\n';
 
   // Calculate initial max transcript length assuming minimal fence (```)
@@ -221,8 +243,8 @@ async function postFailureComment({ expectedSha, githubApi, prNumber, message })
 }
 
 
-async function postSummaryComment({ botLogin, comments, expectedSha, githubApi, ocrSummary, prNumber }) {
-  const body = buildSummaryBody(comments, ocrSummary);
+async function postSummaryComment({ botLogin, changedFiles, comments, expectedSha, githubApi, reviewMetadata, prNumber }) {
+  const body = buildSummaryBody(comments, reviewMetadata, changedFiles);
   const existing = [];
   for (let page = 1; ; page++) {
     const response = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100&page=${page}`);
@@ -313,7 +335,7 @@ async function fetchAllPrFiles(githubApi, prNumber) {
 async function postReviewComments({ comments, expectedSha, githubApi, prNumber }) {
   if (comments.length === 0) {
     console.log('No comments to post');
-    return 0;
+    return { exitCode: 0, filesMap: new Map() };
   }
 
   const prData = await githubApi('GET', `/pulls/${prNumber}`);
@@ -338,7 +360,7 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
 
   if (reviewComments.length === 0) {
     console.log('No valid positions found for comments');
-    return 0;
+    return { exitCode: 0, filesMap };
   }
 
   await assertExpectedHead({ expectedSha, githubApi, prNumber });
@@ -351,7 +373,7 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
 
   if (review.status >= 200 && review.status < 300) {
     console.log(`Posted ${reviewComments.length} review comments`);
-    return 0;
+    return { exitCode: 0, filesMap };
   }
 
   console.warn(`Batch review failed; posting ${reviewComments.length} comments individually`);
@@ -378,11 +400,11 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
 
   if (failureCount > 0) {
     console.error(`Failed to post ${failureCount} individual review comments`);
-    return 1;
+    return { exitCode: 1, filesMap };
   }
 
   console.log(`Posted ${reviewComments.length} review comments individually`);
-  return 0;
+  return { exitCode: 0, filesMap };
 }
 
 function findDiffPosition(comment, filesMap) {
@@ -454,19 +476,28 @@ export async function run({
     return 0;
   }
 
+  let changedFiles = [];
   if (comments.length > 0) {
-    const reviewExitCode = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
-    if (reviewExitCode !== 0) {
-      return reviewExitCode;
+    const reviewResult = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
+    if (reviewResult.exitCode !== 0) {
+      return reviewResult.exitCode;
     }
+    changedFiles = [...reviewResult.filesMap.keys()];
+  } else {
+    const filesMap = await fetchAllPrFiles(githubApi, config.prNumber);
+    changedFiles = [...filesMap.keys()];
   }
 
   return postSummaryComment({
     botLogin,
+    changedFiles,
     comments,
     expectedSha,
     githubApi,
-    ocrSummary: result.summary,
+    reviewMetadata: {
+      coverage: result.coverage,
+      elapsed: result.summary?.elapsed,
+    },
     prNumber: config.prNumber,
   });
 }
