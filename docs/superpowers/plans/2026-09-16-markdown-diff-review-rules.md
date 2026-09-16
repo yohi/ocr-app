@@ -135,7 +135,7 @@
 
 - [ ] **Step 3: Update the runtime delegate skill**
 
-  In the heredoc installed at `$HOME/.gemini/antigravity-cli/skills/ocr-delegate/SKILL.md`, change the procedure to use:
+  In the heredoc installed at `$HOME/.gemini/antigravity-cli/skills/open-code-review-delegate/SKILL.md`, change the procedure to use:
 
   ```text
   ocr delegate preview --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from "$BASE_REF" --to "$COMMIT_SHA"
