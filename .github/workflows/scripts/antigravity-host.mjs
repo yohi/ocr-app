@@ -266,10 +266,12 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     child.stdout?.on('data', onStdout);
     child.stderr?.on('data', onStderr);
     child.once('error', error => {
+      if (settled) return;
       flushProgress();
       finish({ error });
     });
     child.once('close', (code, signal) => {
+      if (settled) return;
       flushProgress();
       if (code !== 0) {
         const errorDetail = stderr.trim() ? `: ${stderr.trim()}` : '';

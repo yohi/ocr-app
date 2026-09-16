@@ -170,6 +170,32 @@ test('runHost does not forward stderr emitted after timeout', async () => {
   assert.deepEqual(progress, []);
 });
 
+test('runHost does not flush buffered stderr after timeout settlement', async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => {};
+  const progress = [];
+  const spawn = () => {
+    queueMicrotask(() => child.stderr.emit('data', 'partial stderr'));
+    setTimeout(() => child.emit('close', 0, null), 20);
+    return child;
+  };
+
+  const result = await runHost({
+    prompt: 'Review.',
+    cwd: '/tmp/trusted',
+    timeoutMs: 5,
+    maxRetries: 0,
+    spawn,
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(progress, []);
+});
+
 test('runHost accepts review result without top-level message and defaults to empty string', async () => {
   const { message, ...reviewWithoutMessage } = validReview;
   const result = await runHost({
