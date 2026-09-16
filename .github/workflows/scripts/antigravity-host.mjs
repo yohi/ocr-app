@@ -164,7 +164,7 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model }) {
+function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress }) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -190,7 +190,16 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model 
       if (!settled) stdout = appendOutput(stdout, chunk);
     };
     const onStderr = chunk => {
-      if (!settled) stderr = appendOutput(stderr, chunk);
+      if (!settled) {
+        stderr = appendOutput(stderr, chunk);
+        if (typeof onProgress === 'function') {
+          try {
+            onProgress(String(chunk));
+          } catch {
+            // Progress output is best-effort and must not change review results.
+          }
+        }
+      }
     };
     const removeOutputListeners = () => {
       child.stdout?.removeListener('data', onStdout);
@@ -264,6 +273,7 @@ async function runMode({
   maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   printTimeoutMs,
+  onProgress,
 }) {
   if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
   if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
@@ -294,6 +304,7 @@ async function runMode({
           spawn,
           mode,
           model: currentModel,
+          onProgress,
         });
       } catch (error) {
         if (isFallbackError(error.message)) {
