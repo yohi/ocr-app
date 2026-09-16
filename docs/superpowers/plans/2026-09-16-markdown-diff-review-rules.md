@@ -138,7 +138,7 @@
   In the heredoc installed at `$HOME/.gemini/antigravity-cli/skills/open-code-review-delegate/SKILL.md`, change the procedure to use:
 
   ```text
-  ocr delegate preview --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from "$BASE_REF" --to "$COMMIT_SHA"
+  ocr delegate preview --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from "origin/$BASE_REF" --to "$COMMIT_SHA"
   ocr delegate rule --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json docs/superpowers/specs/example.md
   ```
 
