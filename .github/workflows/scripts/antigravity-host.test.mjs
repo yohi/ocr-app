@@ -12,7 +12,7 @@ import {
   runThreadHost,
 } from './antigravity-host.mjs';
 
-function childFor(output, { stderr = '', exitCode = 0, delayMs = 0 } = {}) {
+function childFor(output, { stderr = '', stderrChunks = [], exitCode = 0, delayMs = 0 } = {}) {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -22,6 +22,7 @@ function childFor(output, { stderr = '', exitCode = 0, delayMs = 0 } = {}) {
   queueMicrotask(() => {
     setTimeout(() => {
       if (output !== undefined) child.stdout.emit('data', output);
+      for (const chunk of stderrChunks) child.stderr.emit('data', chunk);
       if (stderr) child.stderr.emit('data', stderr);
       child.emit('close', exitCode, null);
     }, delayMs);
@@ -54,6 +55,21 @@ test('runHost invokes agy and returns a validated review result', async () => {
     spawn: spawnWith(JSON.stringify(validReview)),
   });
 
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost forwards live stderr progress without changing the JSON result', async () => {
+  const progress = [];
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: ['[ocr] reviewing files\n', '[ocr] checking findings\n'],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  assert.deepEqual(progress, ['[ocr] reviewing files\n', '[ocr] checking findings\n']);
   assert.deepEqual(result, validReview);
 });
 
