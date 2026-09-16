@@ -450,14 +450,17 @@ export async function run({
   }
 
   const comments = getValidComments(rawList);
-  if (comments.length === 0) {
+  if (comments.length === 0 && rawList.length > 0) {
     return 0;
   }
 
-  const reviewExitCode = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
-  if (reviewExitCode !== 0) {
-    return reviewExitCode;
+  if (comments.length > 0) {
+    const reviewExitCode = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
+    if (reviewExitCode !== 0) {
+      return reviewExitCode;
+    }
   }
+
   return postSummaryComment({
     botLogin,
     comments,
