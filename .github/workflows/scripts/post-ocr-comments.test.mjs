@@ -88,14 +88,25 @@ afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => fs.rm(directory, { force: true, recursive: true })));
 });
 
-test('returns zero without requests when the comments array is empty', async () => {
+test('posts a Summary issue comment when the comments array is empty', async () => {
   // Given
+  const outcomes = [
+    { data: [], status: 200 },
+    { data: {}, status: 201 },
+  ];
+
   // When
-  const { exitCode, requests } = await runWith([], []);
+  const { exitCode, requests } = await runWithResult(
+    { comments: [], summary: { elapsed: '1s' } },
+    outcomes,
+  );
 
   // Then
   assert.equal(exitCode, 0);
-  assert.equal(requests.length, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+  assert.match(requests[0].body.body, /0 件のコメント \/ 0 ファイル \/ 所要時間: 1s/);
 });
 
 test('warns and returns zero when every comment is invalid', async () => {
