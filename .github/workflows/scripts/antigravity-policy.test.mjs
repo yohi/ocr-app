@@ -45,6 +45,18 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.doesNotMatch(workflow, /OCR_LLM_URL/);
 });
 
+test('workflow registers and explicitly invokes the trusted delegate skill', () => {
+  const skillStep = stepRun('Install trusted delegate skill');
+  const reviewStep = stepRun('Run Antigravity review host');
+
+  assert.match(
+    skillStep,
+    /SKILL\.md" <<'EOF'\n---\nname: ocr-delegate\n/,
+    'delegate skill must include valid frontmatter',
+  );
+  assert.match(reviewStep, /prompt: `\/ocr-delegate\b/);
+});
+
 test('trusted markdown rules select only the configured documentation paths', () => {
   assert.deepEqual(markdownRules.include, [
     'docs/superpowers/plans/*.md',
