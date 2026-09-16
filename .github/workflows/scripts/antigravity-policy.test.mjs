@@ -59,6 +59,8 @@ test('workflow registers and explicitly invokes the trusted delegate skill', () 
   assert.match(reviewStep, /Do not use ls, cat, pwd, find, grep, sed/);
   assert.match(reviewStep, /If a permitted command fails, return the requested failed JSON immediately; never try fallback diagnostics/);
   assert.match(reviewStep, /ocr delegate preview --format json/);
+  assert.match(workflow, /--from "origin\/\$BASE_REF"/);
+  assert.match(reviewStep, /--from origin\/\$\{process\.env\.BASE_REF\}/);
 });
 
 test('trusted markdown rules select only the configured documentation paths', () => {
