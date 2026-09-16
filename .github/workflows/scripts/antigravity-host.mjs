@@ -37,6 +37,15 @@ function sanitize(value) {
     .replace(/(token|secret|password|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
 }
 
+function sanitizeProgress(value) {
+  const cleaned = String(value ?? '')
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[@-_]/g, '')
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+  return sanitize(cleaned);
+}
+
 function failure(mode, message) {
   if (mode === THREAD_MODE) {
     return {
@@ -168,6 +177,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
+    let progressBuffer = '';
+    let progressLength = 0;
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
     const workspace = resolvePath(cwd);
@@ -193,13 +204,32 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       if (!settled) {
         stderr = appendOutput(stderr, chunk);
         if (typeof onProgress === 'function') {
-          try {
-            onProgress(String(chunk));
-          } catch {
-            // Progress output is best-effort and must not change review results.
-          }
+          progressBuffer = appendOutput(progressBuffer, chunk);
+          emitProgressLines();
         }
       }
+    };
+    const emitProgress = value => {
+      if (progressLength >= MAX_OUTPUT_CHARS) return;
+      const safeProgress = sanitizeProgress(value);
+      const remaining = MAX_OUTPUT_CHARS - progressLength;
+      const output = safeProgress.slice(0, remaining);
+      if (!output) return;
+      try {
+        onProgress(output);
+      } catch {
+        // Progress output is best-effort and must not change review results.
+      }
+      progressLength += output.length;
+    };
+    const emitProgressLines = () => {
+      const lines = progressBuffer.split('\n');
+      progressBuffer = lines.pop() ?? '';
+      for (const line of lines) emitProgress(`${line}\n`);
+    };
+    const flushProgress = () => {
+      if (progressBuffer) emitProgress(progressBuffer);
+      progressBuffer = '';
     };
     const removeOutputListeners = () => {
       child.stdout?.removeListener('data', onStdout);
@@ -231,8 +261,12 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
 
     child.stdout?.on('data', onStdout);
     child.stderr?.on('data', onStderr);
-    child.once('error', error => finish({ error }));
+    child.once('error', error => {
+      flushProgress();
+      finish({ error });
+    });
     child.once('close', (code, signal) => {
+      flushProgress();
       if (code !== 0) {
         const errorDetail = stderr.trim() ? `: ${stderr.trim()}` : '';
         finish({ error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`) });
