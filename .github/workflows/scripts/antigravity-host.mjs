@@ -34,7 +34,10 @@ function sanitize(value) {
   return String(value ?? '')
     .replace(/(?:gh[pousr]|github_pat|sk-[a-z0-9_-]+|oauth)[a-z0-9._-]*/gi, '[REDACTED]')
     .replace(/bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/(token|secret|password|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+    .replace(/(token|secret|password|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
+    .replace(/(["']?(?:access|refresh|id)[_-]?token["']?|oauth[_-]?token)\s*[:=]\s*["']?[^"'\s,;}]+["']?/gi, '$1=[REDACTED]')
+    .replace(/\bya29\.[a-z0-9._-]+\b/gi, '[REDACTED]')
+    .replace(/\b1\/\/[a-z0-9._~-]+\b/gi, '[REDACTED]');
 }
 
 function sanitizeProgress(value) {
@@ -42,7 +45,8 @@ function sanitizeProgress(value) {
     .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
     .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
     .replace(/\u001b[@-_]/g, '')
-    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '');
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+    .replace(/^::/gm, ': :');
   return sanitize(cleaned);
 }
 

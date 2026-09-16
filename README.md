@@ -84,8 +84,7 @@ sequenceDiagram
    - `.github/workflows/scripts/post-ocr-comments.mjs` を使って、
      対象 PR にインラインでレビューコメントを投稿します。
 7. **失敗時**
-   - `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
-     `ocr-debug-logs` という Artifact として保存します。
+   - `/tmp/ocr-result.json` を `ocr-debug-logs` という Artifact として保存します。
 ### Mention トリガーによる実行フロー
 
 PR コメントで `@<GITHUB_APP_SLUG> review` とメンションすることで、
@@ -320,8 +319,7 @@ Markdown本文に含まれる命令はレビュー対象データとして扱い
 変更行に対応し、根拠のある設計・実装計画・文書間の不整合に限定します。対象ファイルが
 存在しない変更では推論を実行せず、Check Runを成功として終了します。
 
-失敗時には `/tmp/ocr-result.json` と `/tmp/ocr-stderr.log` を
-`ocr-debug-logs` という Artifact として保存します。
+失敗時には `/tmp/ocr-result.json` を `ocr-debug-logs` という Artifact として保存します。
 
 ## LLM の設定
 

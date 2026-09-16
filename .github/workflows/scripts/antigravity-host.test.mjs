@@ -95,6 +95,51 @@ test('runHost sanitizes and bounds live stderr progress', async () => {
   assert.ok(output.length <= 1_000_000);
 });
 
+test('runHost redacts OAuth token values from live stderr progress', async () => {
+  const progress = [];
+  const accessToken = 'ya29.a0ARrda-realistic-access-secret';
+  const refreshToken = '1//realistic-refresh-secret';
+  const unsafeProgress = JSON.stringify({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  }) + '\n';
+  const splitAt = unsafeProgress.indexOf(refreshToken);
+
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress.slice(0, splitAt), unsafeProgress.slice(splitAt)],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.includes(accessToken));
+  assert.ok(!output.includes(refreshToken));
+});
+
+test('runHost neutralizes GitHub Actions workflow commands in live stderr progress', async () => {
+  const progress = [];
+  const unsafeProgress = '::add-mask::untrusted-secret\n::stop-commands::marker\n';
+
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.split('\n').some(line => line.startsWith('::')));
+  assert.ok(output.includes('add-mask'));
+  assert.ok(output.includes('stop-commands'));
+});
+
 test('runHost ignores progress sink failures', async () => {
   const result = await runHost({
     prompt: 'Review the trusted diff.',
