@@ -6,6 +6,7 @@ import {
   normalizeAntigravityModel,
   resolveBatchLimits,
   resolveModel,
+  resolvePrintTimeoutMs,
   resolveTimeoutMs,
   runHost,
   runThreadHost,
@@ -374,6 +375,96 @@ test('runHost does not retry on non-transient schema error', async () => {
   assert.equal(result.status, 'failed');
 });
 
+test('runHost falls back to the configured model after a capacity error', async () => {
+  const models = [];
+  const spawn = (_command, args) => {
+    models.push(args[3]);
+    if (models.length === 1) {
+      return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
+    }
+    return childFor(JSON.stringify(validReview));
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    model: 'gemini-3.8-flash-medium',
+    fallbackModel: 'claude-opus-4-6-thinking',
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.deepEqual(models, ['gemini-3.8-flash-medium', 'claude-opus-4-6-thinking']);
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost falls back after a stalled primary host without retrying it', async () => {
+  let attempts = 0;
+  const spawn = (_command, args) => {
+    attempts++;
+    if (args[3] === 'gemini-3.8-flash-medium') {
+      return childFor(undefined, { delayMs: 50 });
+    }
+    return childFor(JSON.stringify(validReview));
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    fallbackModel: 'claude-opus-4-6-thinking',
+    timeoutMs: 5,
+    printTimeoutMs: 5,
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost does not retry a capacity failure after the fallback model also fails', async () => {
+  let attempts = 0;
+  const spawn = () => {
+    attempts++;
+    return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    fallbackModel: 'claude-opus-4-6-thinking',
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(attempts, 2);
+  assert.equal(result.status, 'failed');
+});
+
+test('runHost ignores a fallback model that normalizes to the primary model', async () => {
+  let attempts = 0;
+  const spawn = () => {
+    attempts++;
+    return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    model: 'gemini-3.8-flash',
+    fallbackModel: 'gemini-3.8-flash-medium',
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(attempts, 1);
+  assert.equal(result.status, 'failed');
+});
+
 test('normalizeAntigravityModel handles effort suffix and fallbacks', () => {
   assert.equal(normalizeAntigravityModel(''), 'gemini-3.8-flash-medium');
   assert.equal(normalizeAntigravityModel(undefined), 'gemini-3.8-flash-medium');
@@ -388,6 +479,12 @@ test('resolveModel prioritizes OCR_LLM_MODEL over ANTIGRAVITY_MODEL and defaults
   assert.equal(resolveModel({ ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'claude-sonnet-4-6');
   assert.equal(resolveModel({ OCR_LLM_MODEL: 'gemini-3.8-flash-high', ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'gemini-3.8-flash-high');
   assert.equal(resolveModel({}), 'gemini-3.8-flash-medium');
+});
+
+test('resolvePrintTimeoutMs defaults independently of the host timeout', () => {
+  assert.equal(resolvePrintTimeoutMs({}), 300_000);
+  assert.equal(resolvePrintTimeoutMs({ ANTIGRAVITY_PRINT_TIMEOUT_MS: '600000' }), 600_000);
+  assert.equal(resolvePrintTimeoutMs({ ANTIGRAVITY_PRINT_TIMEOUT_MS: '2000000' }), 1_800_000);
 });
 
 test('runHost passes --model flag to agy spawn args', async () => {
@@ -429,7 +526,7 @@ test('runHost adds the trusted cwd as an absolute agy workspace', async () => {
   assert.deepEqual(capturedArgs.slice(0, 2), ['--add-dir', '/tmp/trusted']);
 });
 
-test('runHost passes the configured timeout to agy print mode', async () => {
+test('runHost keeps the agy print timeout below the host timeout by default', async () => {
   let capturedArgs = null;
   const spawn = (_cmd, args) => {
     capturedArgs = args;
@@ -453,6 +550,6 @@ test('runHost passes the configured timeout to agy print mode', async () => {
     '--output-format',
     'json',
     '--print-timeout',
-    '600000ms',
+    '300000ms',
   ]);
 });
