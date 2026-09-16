@@ -91,7 +91,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.12.2
+          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.12.4
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
@@ -189,6 +189,9 @@ jobs:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           ANTIGRAVITY_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_TIMEOUT_MS || '' }}
+          ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
+          ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
+          ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || '' }}
         run: |
           node --input-type=module - <<'EOF'
@@ -207,6 +210,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           RESOLVE_LLM_MODEL: ${{ vars.RESOLVE_LLM_MODEL || '' }}
+          ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
+          ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
+          ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || '' }}
         run: |
           node self-repo/.github/workflows/scripts/resolve-threads.mjs \

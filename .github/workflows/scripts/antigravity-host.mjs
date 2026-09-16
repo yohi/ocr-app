@@ -6,12 +6,17 @@ const REVIEW_MODE = 'review';
 const THREAD_MODE = 'thread';
 const SEVERITIES = new Set(['low', 'medium', 'high', 'critical']);
 const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_PRINT_TIMEOUT_MS = 300_000;
 const MAX_OUTPUT_CHARS = 1_000_000;
 const KILL_GRACE_PERIOD_MS = 25;
 const MAX_TIMEOUT_MS = 1_800_000;
 
 export function resolveTimeoutMs(env = process.env, fallback = DEFAULT_TIMEOUT_MS) {
   return parsePositiveInteger(env?.ANTIGRAVITY_TIMEOUT_MS, fallback, MAX_TIMEOUT_MS);
+}
+
+export function resolvePrintTimeoutMs(env = process.env, fallback = DEFAULT_PRINT_TIMEOUT_MS) {
+  return parsePositiveInteger(env?.ANTIGRAVITY_PRINT_TIMEOUT_MS, fallback, MAX_TIMEOUT_MS);
 }
 
 export function normalizeAntigravityModel(model) {
@@ -159,7 +164,7 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, spawn, mode, model }) {
+function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model }) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -171,7 +176,7 @@ function readChild({ prompt, cwd, timeoutMs, spawn, mode, model }) {
       '--model', effectiveModel,
       '-p', prompt,
       '--output-format', 'json',
-      '--print-timeout', `${timeoutMs}ms`,
+      '--print-timeout', `${printTimeoutMs}ms`,
     ], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -242,6 +247,10 @@ function isTransientError(errorMessage) {
   return /context canceled|resource has been exhausted|rate limit|quota|503|502|500|econnreset|etimedout|required the ["']command["'] permission that headless mode cannot prompt for.*auto-denied/i.test(errorMessage);
 }
 
+function isFallbackError(errorMessage) {
+  return /no capacity|temporarily unavailable|service unavailable|host timed out|print timed out|resource has been exhausted|rate limit|quota|503|502|500|econnreset|etimedout/i.test(errorMessage);
+}
+
 
 async function runMode({
   prompt,
@@ -251,47 +260,86 @@ async function runMode({
   mode,
   env = process.env,
   model,
+  fallbackModel,
   maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
+  printTimeoutMs,
 }) {
   if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
   if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
+  const effectivePrintTimeoutMs = typeof printTimeoutMs === 'number' && Number.isFinite(printTimeoutMs) && printTimeoutMs > 0
+    ? printTimeoutMs
+    : resolvePrintTimeoutMs(env);
   const effectiveModel = model ? normalizeAntigravityModel(model) : resolveModel(env);
+  const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
+  const models = [effectiveModel, configuredFallbackModel ? normalizeAntigravityModel(configuredFallbackModel) : null]
+    .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
 
   const attempts = Math.max(1, maxRetries + 1);
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    let childResult;
-    try {
-      childResult = await readChild({ prompt, cwd, timeoutMs: effectiveTimeoutMs, spawn, mode, model: effectiveModel });
-    } catch (error) {
-      if (attempt < attempts && isTransientError(error.message)) {
-        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
-        continue;
+  for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
+    const currentModel = models[modelIndex];
+    let shouldFallback = false;
+
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      let childResult;
+      try {
+        childResult = await readChild({
+          prompt,
+          cwd,
+          timeoutMs: effectiveTimeoutMs,
+          printTimeoutMs: effectivePrintTimeoutMs,
+          spawn,
+          mode,
+          model: currentModel,
+        });
+      } catch (error) {
+        if (isFallbackError(error.message)) {
+          if (modelIndex < models.length - 1) {
+            shouldFallback = true;
+            break;
+          }
+          return failure(mode, error.message);
+        }
+        if (attempt < attempts && isTransientError(error.message)) {
+          await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+          continue;
+        }
+        return failure(mode, error.message);
       }
-      return failure(mode, error.message);
+
+      if (childResult.error) {
+        if (isFallbackError(childResult.error.message)) {
+          if (modelIndex < models.length - 1) {
+            shouldFallback = true;
+            break;
+          }
+          return failure(mode, childResult.error.message);
+        }
+        if (attempt < attempts && isTransientError(childResult.error.message)) {
+          await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+          continue;
+        }
+        return failure(mode, childResult.error.message);
+      }
+
+      try {
+        if (mode === THREAD_MODE) {
+          const data = validateThread(childResult.parsed);
+          return { ...data, status: 'success', message: '' };
+        }
+        return validateReview(childResult.parsed);
+      } catch (error) {
+        return failure(mode, error.message);
+      }
     }
 
-    if (childResult.error) {
-      if (attempt < attempts && isTransientError(childResult.error.message)) {
-        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
-        continue;
-      }
-      return failure(mode, childResult.error.message);
-    }
-
-    try {
-      if (mode === THREAD_MODE) {
-        const data = validateThread(childResult.parsed);
-        return { ...data, status: 'success', message: '' };
-      }
-      return validateReview(childResult.parsed);
-    } catch (error) {
-      return failure(mode, error.message);
-    }
+    if (shouldFallback) continue;
   }
+
+  return failure(mode, 'Antigravity host failed without a response');
 }
 
 export function runHost(options) {
