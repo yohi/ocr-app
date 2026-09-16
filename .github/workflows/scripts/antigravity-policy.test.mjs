@@ -37,7 +37,7 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.2/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --ignore-scripts /);
-  assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/ocr-delegate/);
+  assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/open-code-review-delegate/);
   assert.match(workflow, /ANTIGRAVITY_OAUTH_JSON/);
   assert.match(workflow, /printf '%s' "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /echo "\$ANTIGRAVITY_OAUTH_JSON"/);
@@ -51,10 +51,10 @@ test('workflow registers and explicitly invokes the trusted delegate skill', () 
 
   assert.match(
     skillStep,
-    /SKILL\.md" <<'EOF'\n---\nname: ocr-delegate\n/,
+    /skills\/open-code-review-delegate\/SKILL\.md" <<'EOF'\n---\nname: open-code-review-delegate\n/,
     'delegate skill must include valid frontmatter',
   );
-  assert.match(reviewStep, /prompt: `\/ocr-delegate\b/);
+  assert.match(reviewStep, /prompt: `\/open-code-review-delegate\b/);
 });
 
 test('trusted markdown rules select only the configured documentation paths', () => {
