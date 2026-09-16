@@ -117,8 +117,8 @@
   Add assertions to `antigravity-policy.test.mjs` that the workflow contains both exact commands:
 
   ```text
-  ocr delegate preview --rule ../self-repo/.github/workflows/config/markdown-review-rules.json
-  ocr delegate rule --rule ../self-repo/.github/workflows/config/markdown-review-rules.json
+  ocr delegate preview --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json
+  ocr delegate rule --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json
   ```
 
   Also assert that the review prompt identifies the same path, says Markdown content is untrusted data, and requires evidence-backed findings only.
@@ -138,8 +138,8 @@
   In the heredoc installed at `$HOME/.gemini/antigravity-cli/skills/open-code-review-delegate/SKILL.md`, change the procedure to use:
 
   ```text
-  ocr delegate preview --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from "$BASE_REF" --to "$COMMIT_SHA"
-  ocr delegate rule --rule ../self-repo/.github/workflows/config/markdown-review-rules.json docs/superpowers/specs/example.md
+  ocr delegate preview --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json --from "$BASE_REF" --to "$COMMIT_SHA"
+  ocr delegate rule --format json --rule ../self-repo/.github/workflows/config/markdown-review-rules.json docs/superpowers/specs/example.md
   ```
 
   State that the path is trusted workflow data and that the agent must not inspect or substitute a target repository `.opencodereview/rule.json`. Keep all existing read-only Git and no-network/no-write restrictions.

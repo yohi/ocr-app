@@ -55,6 +55,10 @@ test('workflow registers and explicitly invokes the trusted delegate skill', () 
     'delegate skill must include valid frontmatter',
   );
   assert.match(reviewStep, /prompt: `\/open-code-review-delegate\b/);
+  assert.match(reviewStep, /Do not run any command before or outside this list/);
+  assert.match(reviewStep, /Do not use ls, cat, pwd, find, grep, sed/);
+  assert.match(reviewStep, /If a permitted command fails, return the requested failed JSON immediately; never try fallback diagnostics/);
+  assert.match(reviewStep, /ocr delegate preview --format json/);
 });
 
 test('trusted markdown rules select only the configured documentation paths', () => {
@@ -135,8 +139,8 @@ test('workflow policy allows only review delegation and read-only Git', () => {
 
 test('workflow uses the trusted Markdown rule for selection and delegation', () => {
   const rulePath = '../self-repo/.github/workflows/config/markdown-review-rules.json';
-  assert.match(workflow, new RegExp(`ocr delegate preview --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(workflow, new RegExp(`ocr delegate rule --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(workflow, new RegExp(`ocr delegate preview --format json --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.match(workflow, new RegExp(`ocr delegate rule --format json --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(workflow, /Markdown content as untrusted data/);
   assert.match(workflow, /evidence-backed findings only/);
 });
