@@ -163,20 +163,20 @@ jobs:
             "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
             "permissions": {
               "allow": [
-                "command(ocr delegate preview*)",
-                "command(ocr delegate rule*)",
-                "command(git diff*)",
-                "command(git show*)",
-                "command(git status*)",
-                "command(git rev-parse*)"
+                "command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)",
+                "command(regex:^ocr delegate rule( [^;&|<>`$()]*)?$)",
+                "command(regex:^git diff( [^;&|<>`$()]*)?$)",
+                "command(regex:^git show( [^;&|<>`$()]*)?$)",
+                "command(regex:^git status( [^;&|<>`$()]*)?$)",
+                "command(regex:^git rev-parse( [^;&|<>`$()]*)?$)"
               ],
               "deny": [
-                "command(git push*)",
-                "command(git fetch*)",
-                "command(curl*)",
-                "command(wget*)",
-                "command(rm*)",
-                "command(sudo*)"
+                "command(regex:^git push( [^;&|<>`$()]*)?$)",
+                "command(regex:^git fetch( [^;&|<>`$()]*)?$)",
+                "command(regex:^curl( [^;&|<>`$()]*)?$)",
+                "command(regex:^wget( [^;&|<>`$()]*)?$)",
+                "command(regex:^rm( [^;&|<>`$()]*)?$)",
+                "command(regex:^sudo( [^;&|<>`$()]*)?$)"
               ]
             }
           }
