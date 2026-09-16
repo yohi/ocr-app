@@ -73,6 +73,58 @@ test('runHost forwards live stderr progress without changing the JSON result', a
   assert.deepEqual(result, validReview);
 });
 
+test('runHost sanitizes and bounds live stderr progress', async () => {
+  const progress = [];
+  const secret = 'ghp_dummy_oauth_token_1234567890';
+  const unsafeProgress = `\u001b]8;;https://attacker.invalid\u0007Bearer ${secret}\u001b]8;;\u0007\n`;
+  const excessiveProgress = `${'x'.repeat(1_000_001)}\n`;
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress.slice(0, 24), unsafeProgress.slice(24), excessiveProgress],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.includes(secret));
+  assert.ok(!output.includes('attacker.invalid'));
+  assert.ok(!output.includes('\u001b'));
+  assert.ok(output.length <= 1_000_000);
+});
+
+test('runHost ignores progress sink failures', async () => {
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: ['[ocr] reviewing files\n'],
+    }),
+    onProgress: () => {
+      throw new Error('Actions log is unavailable');
+    },
+  });
+
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost does not forward stderr emitted after timeout', async () => {
+  const progress = [];
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    timeoutMs: 5,
+    spawn: spawnWith(undefined, { stderrChunks: ['late progress\n'], delayMs: 50 }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(progress, []);
+});
+
 test('runHost accepts review result without top-level message and defaults to empty string', async () => {
   const { message, ...reviewWithoutMessage } = validReview;
   const result = await runHost({
