@@ -239,7 +239,7 @@ const DEFAULT_MAX_RETRIES = 2;
 const DEFAULT_RETRY_DELAY_MS = 3000;
 
 function isTransientError(errorMessage) {
-  return /context canceled|resource has been exhausted|rate limit|quota|503|502|500|econnreset|etimedout/i.test(errorMessage);
+  return /context canceled|resource has been exhausted|rate limit|quota|503|502|500|econnreset|etimedout|required the ["']command["'] permission that headless mode cannot prompt for.*auto-denied/i.test(errorMessage);
 }
 
 
