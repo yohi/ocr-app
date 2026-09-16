@@ -326,6 +326,35 @@ test('runHost retries on transient context canceled error and succeeds on subseq
   assert.deepEqual(result, validReview);
 });
 
+test('runHost retries when headless command permission denial leaves an empty response', async () => {
+  let attempts = 0;
+  const spawn = () => {
+    attempts++;
+    if (attempts === 1) {
+      return childFor(JSON.stringify({
+        conversation_id: '12345',
+        status: 'SUCCESS',
+        response: '',
+        denied_actions: [{ action: 'command', display_name: 'RunCommand' }],
+      }), {
+        stderr: 'jetski: no output produced — a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied.',
+      });
+    }
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  const result = await runHost({
+    prompt: 'Review the diff.',
+    cwd: '/tmp/trusted',
+    spawn,
+    maxRetries: 2,
+    retryDelayMs: 1,
+  });
+
+  assert.equal(attempts, 2);
+  assert.deepEqual(result, validReview);
+});
+
 test('runHost does not retry on non-transient schema error', async () => {
   let attempts = 0;
   const spawn = () => {
