@@ -58,6 +58,14 @@ test('workflow registers and explicitly invokes the trusted delegate skill', () 
   assert.match(reviewStep, /Do not run any command before or outside this list/);
   assert.match(reviewStep, /Do not use ls, cat, pwd, find, grep, sed/);
   assert.match(reviewStep, /If a permitted command fails, return the requested failed JSON immediately; never try fallback diagnostics/);
+  assert.match(workflow, /git diff command does not support -L/);
+  assert.match(workflow, /Never pass -L to git diff/);
+  assert.match(workflow, /git diff RANGE -- PATH/);
+  assert.match(workflow, /git show COMMIT:PATH/);
+  assert.match(reviewStep, /git diff command does not support -L/);
+  assert.match(reviewStep, /Never pass -L to git diff/);
+  assert.match(reviewStep, /git diff RANGE -- PATH/);
+  assert.match(reviewStep, /git show COMMIT:PATH/);
   assert.match(reviewStep, /ocr delegate preview --format json/);
   assert.match(workflow, /--from "origin\/\$BASE_REF"/);
   assert.match(reviewStep, /--from origin\/\$\{process\.env\.BASE_REF\}/);
@@ -105,11 +113,16 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.deepEqual(settings.permissions.allow, [
     'command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)',
     'command(regex:^ocr delegate rule( [^;&|<>`$()]*)?$)',
-    'command(regex:^git diff( [^;&|<>`$()]*)?$)',
+    'command(regex:^git diff(?!.*(?:^| )-L(?: |$))( [^;&|<>`$()]*)?$)',
     'command(regex:^git show( [^;&|<>`$()]*)?$)',
     'command(regex:^git status( [^;&|<>`$()]*)?$)',
     'command(regex:^git rev-parse( [^;&|<>`$()]*)?$)',
   ]);
+  const gitDiffPermission = settings.permissions.allow.find(command => command.startsWith('command(regex:^git diff'));
+  assert.ok(gitDiffPermission, 'git diff permission must be configured');
+  const gitDiffPattern = new RegExp(gitDiffPermission.slice('command(regex:'.length, -1));
+  assert.doesNotMatch('git diff -L 1,2:src/example.js', gitDiffPattern);
+  assert.match('git diff origin/master...HEAD -- src/example.js', gitDiffPattern);
   assert.deepEqual(settings.permissions.deny, [
     'command(regex:^git push( [^;&|<>`$()]*)?$)',
     'command(regex:^git fetch( [^;&|<>`$()]*)?$)',
