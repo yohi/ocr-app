@@ -168,7 +168,7 @@ jobs:
               "allow": [
                 "command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)",
                 "command(regex:^ocr delegate rule( [^;&|<>`$()]*)?$)",
-                "command(regex:^git diff( [^;&|<>`$()]*)?$)",
+                "command(regex:^git diff(?!.*(?:^| )-L(?: |$))( [^;&|<>`$()]*)?$)",
                 "command(regex:^git show( [^;&|<>`$()]*)?$)",
                 "command(regex:^git status( [^;&|<>`$()]*)?$)",
                 "command(regex:^git rev-parse( [^;&|<>`$()]*)?$)"
