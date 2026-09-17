@@ -12,7 +12,7 @@ import {
   runThreadHost,
 } from './antigravity-host.mjs';
 
-function childFor(output, { stderr = '', exitCode = 0, delayMs = 0 } = {}) {
+function childFor(output, { stderr = '', stderrChunks = [], exitCode = 0, delayMs = 0 } = {}) {
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
@@ -22,6 +22,7 @@ function childFor(output, { stderr = '', exitCode = 0, delayMs = 0 } = {}) {
   queueMicrotask(() => {
     setTimeout(() => {
       if (output !== undefined) child.stdout.emit('data', output);
+      for (const chunk of stderrChunks) child.stderr.emit('data', chunk);
       if (stderr) child.stderr.emit('data', stderr);
       child.emit('close', exitCode, null);
     }, delayMs);
@@ -55,6 +56,144 @@ test('runHost invokes agy and returns a validated review result', async () => {
   });
 
   assert.deepEqual(result, validReview);
+});
+
+test('runHost forwards live stderr progress without changing the JSON result', async () => {
+  const progress = [];
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: ['[ocr] reviewing files\n', '[ocr] checking findings\n'],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  assert.deepEqual(progress, ['[ocr] reviewing files\n', '[ocr] checking findings\n']);
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost sanitizes and bounds live stderr progress', async () => {
+  const progress = [];
+  const secret = 'ghp_dummy_oauth_token_1234567890';
+  const unsafeProgress = `\u001b]8;;https://attacker.invalid\u0007Bearer ${secret}\u001b]8;;\u0007\n`;
+  const excessiveProgress = `${'x'.repeat(1_000_001)}\n`;
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress.slice(0, 24), unsafeProgress.slice(24), excessiveProgress],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.includes(secret));
+  assert.ok(!output.includes('attacker.invalid'));
+  assert.ok(!output.includes('\u001b'));
+  assert.ok(output.length <= 1_000_000);
+});
+
+test('runHost redacts OAuth token values from live stderr progress', async () => {
+  const progress = [];
+  const accessToken = 'ya29.a0ARrda-realistic-access-secret';
+  const refreshToken = '1//realistic-refresh-secret';
+  const unsafeProgress = JSON.stringify({
+    access_token: accessToken,
+    refresh_token: refreshToken,
+  }) + '\n';
+  const splitAt = unsafeProgress.indexOf(refreshToken);
+
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress.slice(0, splitAt), unsafeProgress.slice(splitAt)],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.includes(accessToken));
+  assert.ok(!output.includes(refreshToken));
+});
+
+test('runHost neutralizes GitHub Actions workflow commands in live stderr progress', async () => {
+  const progress = [];
+  const unsafeProgress = '::add-mask::untrusted-secret\n::stop-commands::marker\n';
+
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: [unsafeProgress],
+    }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  const output = progress.join('');
+  assert.deepEqual(result, validReview);
+  assert.ok(!output.split('\n').some(line => line.startsWith('::')));
+  assert.ok(output.includes('add-mask'));
+  assert.ok(output.includes('stop-commands'));
+});
+
+test('runHost ignores progress sink failures', async () => {
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    spawn: spawnWith(JSON.stringify(validReview), {
+      stderrChunks: ['[ocr] reviewing files\n'],
+    }),
+    onProgress: () => {
+      throw new Error('Actions log is unavailable');
+    },
+  });
+
+  assert.deepEqual(result, validReview);
+});
+
+test('runHost does not forward stderr emitted after timeout', async () => {
+  const progress = [];
+  const result = await runHost({
+    prompt: 'Review the trusted diff.',
+    cwd: '/tmp/trusted',
+    timeoutMs: 5,
+    spawn: spawnWith(undefined, { stderrChunks: ['late progress\n'], delayMs: 50 }),
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 60));
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(progress, []);
+});
+
+test('runHost does not flush buffered stderr after timeout settlement', async () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.kill = () => {};
+  const progress = [];
+  const spawn = () => {
+    queueMicrotask(() => child.stderr.emit('data', 'partial stderr'));
+    setTimeout(() => child.emit('close', 0, null), 20);
+    return child;
+  };
+
+  const result = await runHost({
+    prompt: 'Review.',
+    cwd: '/tmp/trusted',
+    timeoutMs: 5,
+    maxRetries: 0,
+    spawn,
+    onProgress: chunk => progress.push(chunk),
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 35));
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(progress, []);
 });
 
 test('runHost accepts review result without top-level message and defaults to empty string', async () => {

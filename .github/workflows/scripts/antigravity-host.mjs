@@ -34,7 +34,20 @@ function sanitize(value) {
   return String(value ?? '')
     .replace(/(?:gh[pousr]|github_pat|sk-[a-z0-9_-]+|oauth)[a-z0-9._-]*/gi, '[REDACTED]')
     .replace(/bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
-    .replace(/(token|secret|password|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]');
+    .replace(/(token|secret|password|authorization)\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
+    .replace(/(["']?(?:access|refresh|id)[_-]?token["']?|oauth[_-]?token)\s*[:=]\s*["']?[^"'\s,;}]+["']?/gi, '$1=[REDACTED]')
+    .replace(/\bya29\.[a-z0-9._-]+\b/gi, '[REDACTED]')
+    .replace(/\b1\/\/[a-z0-9._~-]+\b/gi, '[REDACTED]');
+}
+
+function sanitizeProgress(value) {
+  const cleaned = String(value ?? '')
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)?/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[@-_]/g, '')
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '')
+    .replace(/^::/gm, ': :');
+  return sanitize(cleaned);
 }
 
 function failure(mode, message) {
@@ -164,10 +177,12 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model }) {
+function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress }) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
+    let progressBuffer = '';
+    let progressLength = 0;
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
     const workspace = resolvePath(cwd);
@@ -190,7 +205,35 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model 
       if (!settled) stdout = appendOutput(stdout, chunk);
     };
     const onStderr = chunk => {
-      if (!settled) stderr = appendOutput(stderr, chunk);
+      if (!settled) {
+        stderr = appendOutput(stderr, chunk);
+        if (typeof onProgress === 'function') {
+          progressBuffer = appendOutput(progressBuffer, chunk);
+          emitProgressLines();
+        }
+      }
+    };
+    const emitProgress = value => {
+      if (progressLength >= MAX_OUTPUT_CHARS) return;
+      const safeProgress = sanitizeProgress(value);
+      const remaining = MAX_OUTPUT_CHARS - progressLength;
+      const output = safeProgress.slice(0, remaining);
+      if (!output) return;
+      try {
+        onProgress(output);
+      } catch {
+        // Progress output is best-effort and must not change review results.
+      }
+      progressLength += output.length;
+    };
+    const emitProgressLines = () => {
+      const lines = progressBuffer.split('\n');
+      progressBuffer = lines.pop() ?? '';
+      for (const line of lines) emitProgress(`${line}\n`);
+    };
+    const flushProgress = () => {
+      if (progressBuffer) emitProgress(progressBuffer);
+      progressBuffer = '';
     };
     const removeOutputListeners = () => {
       child.stdout?.removeListener('data', onStdout);
@@ -222,8 +265,14 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model 
 
     child.stdout?.on('data', onStdout);
     child.stderr?.on('data', onStderr);
-    child.once('error', error => finish({ error }));
+    child.once('error', error => {
+      if (settled) return;
+      flushProgress();
+      finish({ error });
+    });
     child.once('close', (code, signal) => {
+      if (settled) return;
+      flushProgress();
       if (code !== 0) {
         const errorDetail = stderr.trim() ? `: ${stderr.trim()}` : '';
         finish({ error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`) });
@@ -264,6 +313,7 @@ async function runMode({
   maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   printTimeoutMs,
+  onProgress,
 }) {
   if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
   if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
@@ -294,6 +344,7 @@ async function runMode({
           spawn,
           mode,
           model: currentModel,
+          onProgress,
         });
       } catch (error) {
         if (isFallbackError(error.message)) {
