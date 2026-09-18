@@ -208,6 +208,13 @@ jobs:
           if (result.status === 'failed') process.exitCode = 1;
           EOF
 
+      - name: Filter known false-positive review findings
+        if: always() && steps.target.outputs.internal == 'true'
+        run: |
+          test -f /tmp/ocr-result.json
+          node self-repo/.github/workflows/scripts/filter-ocr-findings.mjs \
+            /tmp/ocr-result.json
+
       - name: Validate review result
         if: always() && steps.target.outputs.internal == 'true'
         run: |
