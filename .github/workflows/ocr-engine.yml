@@ -97,6 +97,26 @@ jobs:
           rm -f /tmp/install-agy.sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Validate deterministic review selection
+        if: steps.target.outputs.internal == 'true'
+        working-directory: target-repo
+        env:
+          BASE_REF: ${{ github.event.client_payload.base_ref }}
+          COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+        run: |
+          ocr delegate preview --format json \
+            --rule ../self-repo/.github/workflows/config/markdown-review-rules.json \
+            --from "origin/$BASE_REF" \
+            --to "$COMMIT_SHA" > /tmp/ocr-preview.json
+          node --input-type=module - <<'EOF'
+          import fs from 'node:fs';
+          import { countReviewableFiles } from '../self-repo/.github/workflows/scripts/validate-ocr-result.mjs';
+          const preview = JSON.parse(fs.readFileSync('/tmp/ocr-preview.json', 'utf8'));
+          const count = countReviewableFiles(preview);
+          fs.appendFileSync(process.env.GITHUB_ENV, `OCR_EXPECTED_REVIEWABLE_FILES=${count}\n`);
+          console.log(`OCR selected ${count} reviewable file(s)`);
+          EOF
+
       - name: Restore experimental Antigravity OAuth
         if: steps.target.outputs.internal == 'true'
         env:
@@ -164,6 +184,8 @@ jobs:
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
             "model": "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}",
+            "enableTerminalSandbox": true,
+            "toolPermission": "proceed-in-sandbox",
             "permissions": {
               "allow": [
                 "command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)",
@@ -210,6 +232,14 @@ jobs:
           console.error(`[OpenCodeReview] Review finished: ${result.status}`);
           if (result.status === 'failed') process.exitCode = 1;
           EOF
+
+      - name: Validate review result
+        if: always() && steps.target.outputs.internal == 'true'
+        run: |
+          test -f /tmp/ocr-result.json
+          node self-repo/.github/workflows/scripts/validate-ocr-result.mjs \
+            /tmp/ocr-result.json \
+            "$OCR_EXPECTED_REVIEWABLE_FILES"
 
       - name: Resolve fixed review threads
         if: always() && steps.target.outputs.internal == 'true'
