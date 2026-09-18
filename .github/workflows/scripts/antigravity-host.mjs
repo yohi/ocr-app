@@ -189,6 +189,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     const child = spawn('agy', [
       '--add-dir', workspace,
       '--sandbox',
+      '--disable-slash-commands',
       '--model', effectiveModel,
       '-p', prompt,
       '--output-format', 'json',
