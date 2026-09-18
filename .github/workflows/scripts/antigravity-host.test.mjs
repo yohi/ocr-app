@@ -517,7 +517,7 @@ test('runHost does not retry on non-transient schema error', async () => {
 test('runHost falls back to the configured model after a capacity error', async () => {
   const models = [];
   const spawn = (_command, args) => {
-    models.push(args[3]);
+    models.push(args[6]);
     if (models.length === 1) {
       return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
     }
@@ -542,7 +542,7 @@ test('runHost falls back after a stalled primary host without retrying it', asyn
   let attempts = 0;
   const spawn = (_command, args) => {
     attempts++;
-    if (args[3] === 'gemini-3.8-flash-medium') {
+    if (args[6] === 'gemini-3.8-flash-medium') {
       return childFor(undefined, { delayMs: 50 });
     }
     return childFor(JSON.stringify(validReview));
@@ -645,8 +645,8 @@ test('runHost passes --model flag to agy spawn args', async () => {
   assert.equal(capturedCmd, 'agy');
   assert.equal(capturedArgs[0], '--add-dir');
   assert.equal(capturedArgs[1], '/tmp/trusted');
-  assert.equal(capturedArgs[2], '--model');
-  assert.equal(capturedArgs[3], 'gemini-3.7-flash-medium');
+  assert.equal(capturedArgs[5], '--model');
+  assert.equal(capturedArgs[6], 'gemini-3.7-flash-medium');
 });
 
 test('runHost adds the trusted cwd as an absolute agy workspace', async () => {
@@ -682,6 +682,9 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
   assert.deepEqual(capturedArgs, [
     '--add-dir',
     '/tmp/trusted',
+    '--mode',
+    'plan',
+    '--dangerously-skip-permissions',
     '--model',
     'gemini-3.8-flash-medium',
     '-p',
@@ -691,4 +694,22 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
     '--print-timeout',
     '300000ms',
   ]);
+});
+
+test('runHost invokes agy in plan mode with non-interactive command approval', async () => {
+  let capturedArgs = null;
+  const spawn = (_cmd, args) => {
+    capturedArgs = args;
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  await runHost({
+    prompt: 'Review diff',
+    cwd: '/tmp/trusted',
+    spawn,
+  });
+
+  assert.ok(capturedArgs.includes('--mode'));
+  assert.equal(capturedArgs[capturedArgs.indexOf('--mode') + 1], 'plan');
+  assert.ok(capturedArgs.includes('--dangerously-skip-permissions'));
 });
