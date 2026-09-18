@@ -36,8 +36,6 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 
 > **注意**: Webhook の Secret と Worker の環境変数 `WEBHOOK_SECRET` には必ず同じ値を設定してください。
 
-<!-- Temporary OCR E2E probe; removed after workflow verification. -->
-
 ## GitHub Apps 経由の実行フロー
 
 GitHub App としてインストールされたリポジトリで PR が開かれると、
