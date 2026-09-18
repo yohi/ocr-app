@@ -5,13 +5,8 @@ import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 const FACTS_PATH = new URL('../config/known-review-facts.json', import.meta.url);
-const EXISTENCE_DENIALS = [
-  /\bdoes\s+not\s+exist\b/i,
-  /\bdoesn['’]t\s+exist\b/i,
-  /\bno\s+such\s+(?:github\s+actions\s+)?(?:hosted\s+)?runner(?:\s+label)?\b/i,
-  /\b(?:is|are)\s+not\s+(?:a\s+)?valid\s+(?:github\s+actions\s+)?(?:hosted\s+)?runner(?:\s+label)?\b/i,
-  /\b(?:invalid|unknown|unrecognized)\s+(?:github\s+actions\s+)?(?:hosted\s+)?runner(?:\s+label)?\b/i,
-];
+const RUNNER_CONTEXT = '(?:github\\s+actions\\s+)?(?:hosted\\s+)?runner(?:\\s+label)?';
+const RUNNER_LABEL_DENIAL = '(?:does\\s+not\\s+exist|doesn[\'’]t\\s+exist|is\\s+not\\s+(?:a\\s+)?valid|is\\s+(?:invalid|unknown|unrecognized))';
 
 function loadKnownRunnerLabels() {
   const facts = JSON.parse(fs.readFileSync(FACTS_PATH, 'utf8'));
@@ -37,12 +32,26 @@ function getFindingText(finding) {
     .join('\n');
 }
 
-function mentionsLabel(text, label) {
-  return new RegExp(`\\b${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text);
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function isExistenceDenial(text) {
-  return EXISTENCE_DENIALS.some(pattern => pattern.test(text));
+function mentionsLabel(text, label) {
+  return new RegExp(`\\b${escapeRegExp(label)}\\b`, 'i').test(text);
+}
+
+function isStandaloneRunnerLabelDenial(text, label) {
+  const normalized = text.trim().replace(/\s+/g, ' ');
+  const escapedLabel = escapeRegExp(label);
+  const quotedLabel = `(?:["'\\x60*]?${escapedLabel}["'\\x60*]?)`;
+  const patterns = [
+    new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+${RUNNER_LABEL_DENIAL}(?:\\s+as\\s+(?:a\\s+)?${RUNNER_CONTEXT})?[.!]?$`, 'i'),
+    new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+is\\s+not\\s+(?:a\\s+)?valid\\s+${RUNNER_CONTEXT}[.!]?$`, 'i'),
+    new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+${RUNNER_CONTEXT}\\s+${RUNNER_LABEL_DENIAL}[.!]?$`, 'i'),
+    new RegExp(`^(?:the\\s+)?${RUNNER_CONTEXT}\\s+${quotedLabel}\\s+${RUNNER_LABEL_DENIAL}[.!]?$`, 'i'),
+  ];
+
+  return patterns.some(pattern => pattern.test(normalized));
 }
 
 function suppressionId(label) {
@@ -52,7 +61,7 @@ function suppressionId(label) {
 function getSuppressionId(finding) {
   const text = getFindingText(finding);
   const label = KNOWN_RUNNER_LABELS.find(candidate => mentionsLabel(text, candidate));
-  return label && isExistenceDenial(text) ? suppressionId(label) : null;
+  return label && isStandaloneRunnerLabelDenial(text, label) ? suppressionId(label) : null;
 }
 
 export function filterKnownFalseFindings(result) {
@@ -97,7 +106,7 @@ function writeFilteredResult(resultPath) {
   fs.writeFileSync(resultPath, `${JSON.stringify(result)}\n`);
 
   if (suppressed.length > 0) {
-    console.log(`Suppressed known false-positive rule(s): ${suppressed.join(', ')}`);
+    console.log(`Suppressed ${suppressed.length} known false-positive rule(s): ${suppressed.join(', ')}`);
   }
 }
 

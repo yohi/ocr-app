@@ -67,6 +67,70 @@ test('keeps a generic unsupported claim because it may describe a real limitatio
   assert.deepEqual(suppressed, []);
 });
 
+test('keeps an existence denial about a container image', () => {
+  const { result, suppressed } = filterKnownFalseFindings({
+    status: 'success',
+    coverage: 1,
+    findings: [{
+      severity: 'medium',
+      path: '.github/workflows/ci.yml',
+      line: 4,
+      message: 'ubuntu-slim does not exist as a container image.',
+    }],
+  });
+
+  assert.equal(result.findings.length, 1);
+  assert.deepEqual(suppressed, []);
+});
+
+test('keeps an existence denial about repository runner-group eligibility', () => {
+  const { result, suppressed } = filterKnownFalseFindings({
+    status: 'success',
+    coverage: 1,
+    findings: [{
+      severity: 'medium',
+      path: '.github/workflows/ci.yml',
+      line: 4,
+      message: "ubuntu-slim does not exist in this repository's allowed runner group.",
+    }],
+  });
+
+  assert.equal(result.findings.length, 1);
+  assert.deepEqual(suppressed, []);
+});
+
+test('keeps a compound security finding that mentions the known label', () => {
+  const { result, suppressed } = filterKnownFalseFindings({
+    status: 'success',
+    coverage: 1,
+    findings: [{
+      severity: 'critical',
+      path: '.github/workflows/ci.yml',
+      line: 4,
+      message: 'Untrusted PR code can bypass isolation; ubuntu-slim does not exist as a runner.',
+    }],
+  });
+
+  assert.equal(result.findings.length, 1);
+  assert.deepEqual(suppressed, []);
+});
+
+test('suppresses a direct runner-label denial without requiring the full provider name', () => {
+  const { result, suppressed } = filterKnownFalseFindings({
+    status: 'success',
+    coverage: 1,
+    findings: [{
+      severity: 'high',
+      path: '.github/workflows/ci.yml',
+      line: 4,
+      message: 'The ubuntu-slim runner label is invalid.',
+    }],
+  });
+
+  assert.deepEqual(result.findings, []);
+  assert.deepEqual(suppressed, ['github-actions-runner-label:ubuntu-slim']);
+});
+
 test('keeps an existence denial for an unregistered runner label', () => {
   const { result, suppressed } = filterKnownFalseFindings({
     status: 'success',
