@@ -210,7 +210,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         run: |
-          npm install -g --ignore-scripts @alibaba-group/open-code-review@1.12.4
+          npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@1.12.4
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh

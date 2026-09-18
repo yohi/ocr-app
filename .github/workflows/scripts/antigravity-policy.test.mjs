@@ -36,13 +36,24 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
   assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.4/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
-  assert.match(workflow, /npm install -g --ignore-scripts /);
+  assert.match(workflow, /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /);
   assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/open-code-review-delegate/);
   assert.match(workflow, /ANTIGRAVITY_OAUTH_JSON/);
   assert.match(workflow, /printf '%s' "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /echo "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /OCR_LLM_AUTH_TOKEN/);
   assert.doesNotMatch(workflow, /OCR_LLM_URL/);
+});
+
+test('workflow installs OCR where the Antigravity shell can resolve it', () => {
+  const installStep = stepRun('Install pinned review tools');
+
+  assert.match(
+    installStep,
+    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.4/,
+    'OCR must share the Antigravity-visible bin directory',
+  );
+  assert.match(installStep, /echo "\$HOME\/\.local\/bin" >> "\$GITHUB_PATH"/);
 });
 
 test('workflow registers and explicitly invokes the trusted delegate skill', () => {
