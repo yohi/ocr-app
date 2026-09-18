@@ -517,7 +517,7 @@ test('runHost does not retry on non-transient schema error', async () => {
 test('runHost falls back to the configured model after a capacity error', async () => {
   const models = [];
   const spawn = (_command, args) => {
-    models.push(args[4]);
+    models.push(args[5]);
     if (models.length === 1) {
       return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
     }
@@ -542,7 +542,7 @@ test('runHost falls back after a stalled primary host without retrying it', asyn
   let attempts = 0;
   const spawn = (_command, args) => {
     attempts++;
-    if (args[4] === 'primary-test-model') {
+    if (args[5] === 'primary-test-model') {
       return childFor(undefined, { delayMs: 50 });
     }
     return childFor(JSON.stringify(validReview));
@@ -646,8 +646,8 @@ test('runHost passes --model flag to agy spawn args', async () => {
   assert.equal(capturedCmd, 'agy');
   assert.equal(capturedArgs[0], '--add-dir');
   assert.equal(capturedArgs[1], '/tmp/trusted');
-  assert.equal(capturedArgs[3], '--model');
-  assert.equal(capturedArgs[4], 'configured-test-model');
+  assert.equal(capturedArgs[4], '--model');
+  assert.equal(capturedArgs[5], 'configured-test-model');
 });
 
 test('runHost adds the trusted cwd as an absolute agy workspace', async () => {
@@ -684,6 +684,7 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
     '--add-dir',
     '/tmp/trusted',
     '--sandbox',
+    '--disable-slash-commands',
     '--model',
     'gemini-3.8-flash-medium',
     '-p',
@@ -709,5 +710,6 @@ test('runHost invokes agy in a sandbox with non-interactive command approval', a
   });
 
   assert.ok(capturedArgs.includes('--sandbox'));
+  assert.ok(capturedArgs.includes('--disable-slash-commands'));
   assert.ok(!capturedArgs.includes('--dangerously-skip-permissions'));
 });

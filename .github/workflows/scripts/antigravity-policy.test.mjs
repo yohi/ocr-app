@@ -37,7 +37,7 @@ test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.4/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /);
-  assert.match(workflow, /\.gemini\/antigravity-cli\/skills\/open-code-review-delegate/);
+  assert.match(workflow, /prepare-ocr-review-context\.mjs/);
   assert.match(workflow, /ANTIGRAVITY_OAUTH_JSON/);
   assert.match(workflow, /printf '%s' "\$ANTIGRAVITY_OAUTH_JSON"/);
   assert.doesNotMatch(workflow, /echo "\$ANTIGRAVITY_OAUTH_JSON"/);
@@ -56,30 +56,18 @@ test('workflow installs OCR where the Antigravity shell can resolve it', () => {
   assert.match(installStep, /echo "\$HOME\/\.local\/bin" >> "\$GITHUB_PATH"/);
 });
 
-test('workflow registers and explicitly invokes the trusted delegate skill', () => {
-  const skillStep = stepRun('Install trusted delegate skill');
+test('workflow prepares trusted review context before the context-only host', () => {
+  const contextStep = stepRun('Prepare trusted review context');
   const reviewStep = stepRun('Run Antigravity review host');
 
-  assert.match(
-    skillStep,
-    /skills\/open-code-review-delegate\/SKILL\.md" <<'EOF'\n---\nname: open-code-review-delegate\n/,
-    'delegate skill must include valid frontmatter',
-  );
-  assert.match(reviewStep, /prompt: `\/open-code-review-delegate\b/);
-  assert.match(reviewStep, /Do not run any command before or outside this list/);
-  assert.match(reviewStep, /Do not use ls, cat, pwd, find, grep, sed/);
-  assert.match(reviewStep, /If a permitted command fails, return the requested failed JSON immediately; never try fallback diagnostics/);
-  assert.match(workflow, /git diff command does not support -L/);
-  assert.match(workflow, /Never pass -L to git diff/);
-  assert.match(workflow, /git diff RANGE -- PATH/);
-  assert.match(workflow, /git show COMMIT:PATH/);
-  assert.match(reviewStep, /git diff command does not support -L/);
-  assert.match(reviewStep, /Never pass -L to git diff/);
-  assert.match(reviewStep, /git diff RANGE -- PATH/);
-  assert.match(reviewStep, /git show COMMIT:PATH/);
-  assert.match(reviewStep, /ocr delegate preview --format json/);
-  assert.match(workflow, /--from "origin\/\$BASE_REF"/);
-  assert.match(reviewStep, /--from origin\/\$\{process\.env\.BASE_REF\}/);
+  assert.match(contextStep, /prepare-ocr-review-context\.mjs/);
+  assert.match(workflow, /OCR_PREVIEW_PATH: \/tmp\/ocr-preview\.json/);
+  assert.match(workflow, /OCR_CONTEXT_PATH: \/tmp\/ocr-review-context\.json/);
+  assert.match(reviewStep, /ocr_review_context/);
+  assert.match(reviewStep, /Do not call tools, execute commands, read files, access URLs/);
+  assert.match(reviewStep, /evidence-backed/);
+  assert.doesNotMatch(reviewStep, /\/open-code-review-delegate/);
+  assert.doesNotMatch(workflow, /Install trusted delegate skill/);
 });
 
 test('trusted markdown rules select only the configured documentation paths', () => {
@@ -105,7 +93,7 @@ test('trusted markdown rules select only the configured documentation paths', ()
   }
 });
 
-test('workflow policy allows only review delegation and read-only Git', () => {
+test('workflow policy denies Antigravity tools after trusted context preparation', () => {
   assert.match(workflow, /concurrency:\n  group: ocr-engine-\$\{\{ github\.event\.client_payload\.target_repo \}\}-\$\{\{ github\.event\.client_payload\.pr_number \}\}\n  cancel-in-progress: false/);
   const settingsMatch = workflow.match(/settings\.json"?\s*<<'EOF'\n([\s\S]*?)\n\s*EOF/);
   assert.ok(settingsMatch, 'restrictive settings.json must be written by the workflow');
@@ -123,28 +111,16 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.equal(settings.model, "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}");
   assert.equal(settings.enableTerminalSandbox, true);
   assert.equal(settings.toolPermission, 'proceed-in-sandbox');
-  assert.deepEqual(settings.permissions.allow, [
-    'command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)',
-    'command(regex:^ocr delegate rule( [^;&|<>`$()]*)?$)',
-    'command(regex:^git diff(?!.*(?:^| )-L(?: |$))( [^;&|<>`$()]*)?$)',
-    'command(regex:^git show( [^;&|<>`$()]*)?$)',
-    'command(regex:^git status( [^;&|<>`$()]*)?$)',
-    'command(regex:^git rev-parse( [^;&|<>`$()]*)?$)',
-  ]);
-  const gitDiffPermission = settings.permissions.allow.find(command => command.startsWith('command(regex:^git diff'));
-  assert.ok(gitDiffPermission, 'git diff permission must be configured');
-  const gitDiffPattern = new RegExp(gitDiffPermission.slice('command(regex:'.length, -1));
-  assert.doesNotMatch('git diff -L 1,2:src/example.js', gitDiffPattern);
-  assert.match('git diff origin/master...HEAD -- src/example.js', gitDiffPattern);
+  assert.equal(settings.permissions.allow, undefined);
   assert.deepEqual(settings.permissions.deny, [
-    'command(regex:^git push( [^;&|<>`$()]*)?$)',
-    'command(regex:^git fetch( [^;&|<>`$()]*)?$)',
-    'command(regex:^curl( [^;&|<>`$()]*)?$)',
-    'command(regex:^wget( [^;&|<>`$()]*)?$)',
-    'command(regex:^rm( [^;&|<>`$()]*)?$)',
-    'command(regex:^sudo( [^;&|<>`$()]*)?$)',
+    'command(*)',
+    'unsandboxed(*)',
+    'read_file(*)',
+    'write_file(*)',
+    'read_url(*)',
+    'execute_url(*)',
+    'mcp(*)',
   ]);
-  assert.ok(settings.permissions.allow.every(command => !settings.permissions.deny.includes(command)));
   assert.ok(
     workflow.indexOf('Configure restrictive Antigravity policy') <
       workflow.indexOf('Run Antigravity review host'),
@@ -167,11 +143,11 @@ test('workflow policy allows only review delegation and read-only Git', () => {
 });
 
 test('workflow uses the trusted Markdown rule for selection and delegation', () => {
-  const rulePath = '../self-repo/.github/workflows/config/markdown-review-rules.json';
-  assert.match(workflow, new RegExp(`ocr delegate preview --format json --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(workflow, new RegExp(`ocr delegate rule --format json --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-  assert.match(workflow, /Markdown content as untrusted data/);
-  assert.match(workflow, /evidence-backed findings only/);
+  assert.match(workflow, /ocr delegate preview --format json/);
+  assert.match(workflow, /OCR_RULE_PATH: \.\.\/self-repo\/\.github\/workflows\/config\/markdown-review-rules\.json/);
+  assert.match(workflow, /prepare-ocr-review-context\.mjs/);
+  assert.match(workflow, /untrusted PR data/);
+  assert.match(workflow, /evidence-backed failures/);
 });
 
 test('workflow previews the checked out target repository and validates its result', () => {
