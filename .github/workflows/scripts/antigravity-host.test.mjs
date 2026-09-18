@@ -517,7 +517,7 @@ test('runHost does not retry on non-transient schema error', async () => {
 test('runHost falls back to the configured model after a capacity error', async () => {
   const models = [];
   const spawn = (_command, args) => {
-    models.push(args[3]);
+    models.push(args[4]);
     if (models.length === 1) {
       return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
     }
@@ -528,13 +528,13 @@ test('runHost falls back to the configured model after a capacity error', async 
     prompt: 'Review the diff.',
     cwd: '/tmp/trusted',
     spawn,
-    model: 'gemini-3.8-flash-medium',
-    fallbackModel: 'claude-opus-4-6-thinking',
+    model: 'primary-test-model',
+    fallbackModel: 'fallback-test-model',
     maxRetries: 2,
     retryDelayMs: 1,
   });
 
-  assert.deepEqual(models, ['gemini-3.8-flash-medium', 'claude-opus-4-6-thinking']);
+  assert.deepEqual(models, ['primary-test-model', 'fallback-test-model']);
   assert.deepEqual(result, validReview);
 });
 
@@ -542,7 +542,7 @@ test('runHost falls back after a stalled primary host without retrying it', asyn
   let attempts = 0;
   const spawn = (_command, args) => {
     attempts++;
-    if (args[3] === 'gemini-3.8-flash-medium') {
+    if (args[4] === 'primary-test-model') {
       return childFor(undefined, { delayMs: 50 });
     }
     return childFor(JSON.stringify(validReview));
@@ -552,7 +552,8 @@ test('runHost falls back after a stalled primary host without retrying it', asyn
     prompt: 'Review the diff.',
     cwd: '/tmp/trusted',
     spawn,
-    fallbackModel: 'claude-opus-4-6-thinking',
+    model: 'primary-test-model',
+    fallbackModel: 'fallback-test-model',
     timeoutMs: 5,
     printTimeoutMs: 5,
     maxRetries: 2,
@@ -574,7 +575,7 @@ test('runHost does not retry a capacity failure after the fallback model also fa
     prompt: 'Review the diff.',
     cwd: '/tmp/trusted',
     spawn,
-    fallbackModel: 'claude-opus-4-6-thinking',
+    fallbackModel: 'fallback-test-model',
     maxRetries: 2,
     retryDelayMs: 1,
   });
@@ -594,8 +595,8 @@ test('runHost ignores a fallback model that normalizes to the primary model', as
     prompt: 'Review the diff.',
     cwd: '/tmp/trusted',
     spawn,
-    model: 'gemini-3.8-flash',
-    fallbackModel: 'gemini-3.8-flash-medium',
+    model: 'primary-test-model',
+    fallbackModel: 'primary-test-model',
     maxRetries: 2,
     retryDelayMs: 1,
   });
@@ -614,9 +615,9 @@ test('normalizeAntigravityModel handles effort suffix and fallbacks', () => {
 });
 
 test('resolveModel prioritizes OCR_LLM_MODEL over ANTIGRAVITY_MODEL and defaults', () => {
-  assert.equal(resolveModel({ OCR_LLM_MODEL: 'gemini-3.7-flash' }), 'gemini-3.7-flash-medium');
-  assert.equal(resolveModel({ ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'claude-sonnet-4-6');
-  assert.equal(resolveModel({ OCR_LLM_MODEL: 'gemini-3.8-flash-high', ANTIGRAVITY_MODEL: 'claude-sonnet-4-6' }), 'gemini-3.8-flash-high');
+  assert.equal(resolveModel({ OCR_LLM_MODEL: 'configured-primary-model' }), 'configured-primary-model');
+  assert.equal(resolveModel({ ANTIGRAVITY_MODEL: 'legacy-configured-model' }), 'legacy-configured-model');
+  assert.equal(resolveModel({ OCR_LLM_MODEL: 'configured-primary-model', ANTIGRAVITY_MODEL: 'legacy-configured-model' }), 'configured-primary-model');
   assert.equal(resolveModel({}), 'gemini-3.8-flash-medium');
 });
 
@@ -639,14 +640,14 @@ test('runHost passes --model flag to agy spawn args', async () => {
     prompt: 'Review diff',
     cwd: '/tmp/trusted',
     spawn,
-    model: 'gemini-3.7-flash',
+    model: 'configured-test-model',
   });
 
   assert.equal(capturedCmd, 'agy');
   assert.equal(capturedArgs[0], '--add-dir');
   assert.equal(capturedArgs[1], '/tmp/trusted');
-  assert.equal(capturedArgs[2], '--model');
-  assert.equal(capturedArgs[3], 'gemini-3.7-flash-medium');
+  assert.equal(capturedArgs[3], '--model');
+  assert.equal(capturedArgs[4], 'configured-test-model');
 });
 
 test('runHost adds the trusted cwd as an absolute agy workspace', async () => {
@@ -682,6 +683,7 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
   assert.deepEqual(capturedArgs, [
     '--add-dir',
     '/tmp/trusted',
+    '--sandbox',
     '--model',
     'gemini-3.8-flash-medium',
     '-p',
@@ -691,4 +693,21 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
     '--print-timeout',
     '300000ms',
   ]);
+});
+
+test('runHost invokes agy in a sandbox with non-interactive command approval', async () => {
+  let capturedArgs = null;
+  const spawn = (_cmd, args) => {
+    capturedArgs = args;
+    return childFor(JSON.stringify(validReview), { exitCode: 0 });
+  };
+
+  await runHost({
+    prompt: 'Review diff',
+    cwd: '/tmp/trusted',
+    spawn,
+  });
+
+  assert.ok(capturedArgs.includes('--sandbox'));
+  assert.ok(!capturedArgs.includes('--dangerously-skip-permissions'));
 });

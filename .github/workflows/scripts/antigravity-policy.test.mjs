@@ -121,6 +121,8 @@ test('workflow policy allows only review delegation and read-only Git', () => {
   assert.doesNotMatch(reviewStep, /--dangerously-skip-permissions/);
 
   assert.equal(settings.model, "${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}");
+  assert.equal(settings.enableTerminalSandbox, true);
+  assert.equal(settings.toolPermission, 'proceed-in-sandbox');
   assert.deepEqual(settings.permissions.allow, [
     'command(regex:^ocr delegate preview( [^;&|<>`$()]*)?$)',
     'command(regex:^ocr delegate rule( [^;&|<>`$()]*)?$)',
@@ -170,6 +172,16 @@ test('workflow uses the trusted Markdown rule for selection and delegation', () 
   assert.match(workflow, new RegExp(`ocr delegate rule --format json --rule ${rulePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
   assert.match(workflow, /Markdown content as untrusted data/);
   assert.match(workflow, /evidence-backed findings only/);
+});
+
+test('workflow previews the checked out target repository and validates its result', () => {
+  assert.match(workflow, /- name: Validate deterministic review selection\n[\s\S]*?working-directory: target-repo/);
+  assert.match(workflow, /ocr delegate preview --format json/);
+  assert.match(workflow, /--rule \.\.\/self-repo\/\.github\/workflows\/config\/markdown-review-rules\.json/);
+  assert.match(workflow, /validate-ocr-result\.mjs/);
+  assert.match(workflow, /- name: Validate review result/);
+  assert.match(workflow, /OCR_EXPECTED_REVIEWABLE_FILES/);
+  assert.match(workflow, /validate-ocr-result\.mjs \\\n\s+\/tmp\/ocr-result\.json \\\n\s+"\$OCR_EXPECTED_REVIEWABLE_FILES"/);
 });
 
 test('external forks are checked before the app-token secret step', () => {

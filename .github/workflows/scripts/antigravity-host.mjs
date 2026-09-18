@@ -188,6 +188,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     const workspace = resolvePath(cwd);
     const child = spawn('agy', [
       '--add-dir', workspace,
+      '--sandbox',
       '--model', effectiveModel,
       '-p', prompt,
       '--output-format', 'json',
