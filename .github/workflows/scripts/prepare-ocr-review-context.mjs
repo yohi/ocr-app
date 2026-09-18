@@ -124,7 +124,7 @@ export async function main({ env = process.env } = {}) {
     baseRef: env.BASE_REF,
     commitSha: env.COMMIT_SHA,
     rulePath: env.OCR_RULE_PATH,
-    cwd: env.GITHUB_WORKSPACE || process.cwd(),
+    cwd: process.cwd(),
   });
   fs.writeFileSync(outputPath, JSON.stringify(context));
   console.log(`Prepared OCR review context for ${context.reviewable_files.length} file(s)`);
