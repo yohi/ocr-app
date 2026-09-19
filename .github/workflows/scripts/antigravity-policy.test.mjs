@@ -34,7 +34,7 @@ function topLevelPermissions() {
 
 test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.4/);
+  assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.7/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /);
   assert.match(workflow, /prepare-ocr-review-context\.mjs/);
@@ -50,7 +50,7 @@ test('workflow installs OCR where the Antigravity shell can resolve it', () => {
 
   assert.match(
     installStep,
-    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.4/,
+    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.7/,
     'OCR must share the Antigravity-visible bin directory',
   );
   assert.match(installStep, /echo "\$HOME\/\.local\/bin" >> "\$GITHUB_PATH"/);
