@@ -1,0 +1,9 @@
+{
+  "github_actions_runner_labels": [
+    {
+      "label": "ubuntu-slim",
+      "source": "https://docs.github.com/en/actions/reference/runners/github-hosted-runners",
+      "verified_at": "2026-09-18"
+    }
+  ]
+}
