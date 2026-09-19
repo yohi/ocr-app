@@ -45,7 +45,7 @@ function isStandaloneRunnerLabelDenial(text, label) {
   const escapedLabel = escapeRegExp(label);
   const quotedLabel = `(?:["'\\x60*]?${escapedLabel}["'\\x60*]?)`;
   const patterns = [
-    new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+${RUNNER_LABEL_DENIAL}(?:\\s+as\\s+(?:a\\s+)?${RUNNER_CONTEXT})?[.!]?$`, 'i'),
+    new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+${RUNNER_LABEL_DENIAL}(?:\\s+(?:as\\s+)?(?:a\\s+)?${RUNNER_CONTEXT})?[.!]?$`, 'i'),
     new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+is\\s+not\\s+(?:a\\s+)?valid\\s+${RUNNER_CONTEXT}[.!]?$`, 'i'),
     new RegExp(`^(?:the\\s+)?${quotedLabel}\\s+${RUNNER_CONTEXT}\\s+${RUNNER_LABEL_DENIAL}[.!]?$`, 'i'),
     new RegExp(`^(?:the\\s+)?${RUNNER_CONTEXT}\\s+${quotedLabel}\\s+${RUNNER_LABEL_DENIAL}[.!]?$`, 'i'),

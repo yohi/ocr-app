@@ -63,6 +63,22 @@ test('suppresses a validity denial for a registered GitHub Actions runner label'
   assert.deepEqual(suppressed, ['github-actions-runner-label:ubuntu-slim']);
 });
 
+test('suppresses a direct runner-context validity denial', () => {
+  const { result, suppressed } = filterKnownFalseFindings({
+    status: 'success',
+    coverage: 1,
+    findings: [{
+      severity: 'high',
+      path: '.github/workflows/ci.yml',
+      line: 4,
+      message: 'ubuntu-slim is invalid GitHub Actions runner label.',
+    }],
+  });
+
+  assert.deepEqual(result.findings, []);
+  assert.deepEqual(suppressed, ['github-actions-runner-label:ubuntu-slim']);
+});
+
 test('keeps a valid operational warning about the registered runner', () => {
   const { result, suppressed } = filterKnownFalseFindings({
     status: 'success',
