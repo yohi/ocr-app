@@ -1,7 +1,35 @@
+import { execFile as nodeExecFile } from 'node:child_process';
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { filterKnownFalseFindings } from './filter-ocr-findings.mjs';
+
+const execFile = promisify(nodeExecFile);
+const filterScriptPath = fileURLToPath(new URL('./filter-ocr-findings.mjs', import.meta.url));
+const temporaryDirectories = [];
+
+async function createTemporaryFile(content) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'filter-ocr-findings-'));
+  temporaryDirectories.push(directory);
+  const resultPath = path.join(directory, 'result.json');
+  await fs.writeFile(resultPath, content, 'utf8');
+  return resultPath;
+}
+
+async function createResultFile(result) {
+  return createTemporaryFile(JSON.stringify(result));
+}
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map(directory => (
+    fs.rm(directory, { force: true, recursive: true })
+  )));
+});
 
 test('suppresses an existence denial for a registered GitHub Actions runner label', () => {
   const { result, suppressed } = filterKnownFalseFindings({
@@ -188,4 +216,46 @@ test('returns an unchanged result when findings are absent', () => {
 
   assert.strictEqual(filtered.result, result);
   assert.deepEqual(filtered.suppressed, []);
+});
+
+test('CLI filters the result file in place and reports suppressed rules', async () => {
+  const resultPath = await createResultFile({
+    status: 'success',
+    coverage: 1,
+    findings: [
+      { message: 'ubuntu-slim does not exist as a GitHub Actions runner.' },
+      { message: 'ubuntu-slim has a 15-minute job timeout.' },
+    ],
+  });
+
+  const { stderr, stdout } = await execFile(process.execPath, [filterScriptPath, resultPath], {
+    encoding: 'utf8',
+  });
+
+  assert.equal(stderr, '');
+  assert.equal(
+    stdout,
+    'Suppressed 1 known false-positive rule(s): github-actions-runner-label:ubuntu-slim\n',
+  );
+  assert.deepEqual(JSON.parse(await fs.readFile(resultPath, 'utf8')), {
+    status: 'success',
+    coverage: 1,
+    findings: [{ message: 'ubuntu-slim has a 15-minute job timeout.' }],
+  });
+});
+
+test('CLI exits non-zero and preserves malformed input', async () => {
+  const malformedResult = '{"status":';
+  const resultPath = await createTemporaryFile(malformedResult);
+
+  await assert.rejects(
+    () => execFile(process.execPath, [filterScriptPath, resultPath], { encoding: 'utf8' }),
+    error => {
+      assert.equal(error.code, 1);
+      assert.equal(error.stdout, '');
+      assert.match(error.stderr, /Failed to parse result JSON file/);
+      return true;
+    },
+  );
+  assert.equal(await fs.readFile(resultPath, 'utf8'), malformedResult);
 });
