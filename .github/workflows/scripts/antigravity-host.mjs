@@ -171,6 +171,17 @@ export function extractPayload(raw) {
     return raw;
   }
   if (typeof raw === 'string') {
+    const streamResult = raw.split(/\r?\n/).filter(Boolean).map(line => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    }).find(event => event?.event === 'result');
+    if (streamResult) {
+      if (streamResult.result) return extractPayload(streamResult.result);
+      throw new Error(streamResult.error || streamResult.message || 'Antigravity stream returned no result');
+    }
     const parsed = parseJsonFromText(raw);
     return extractPayload(parsed);
   }
@@ -191,12 +202,12 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       '--sandbox',
       '--disable-slash-commands',
       '--model', effectiveModel,
-      '-p', prompt,
-      '--output-format', 'json',
+      '--input-format', 'stream-json',
+      '--output-format', 'stream-json',
       '--print-timeout', `${printTimeoutMs}ms`,
     ], {
       cwd,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       detached: true,
     });
     const appendOutput = (current, chunk) => {
@@ -288,6 +299,11 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
         finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`) });
       }
     });
+    child.stdin.once('error', error => {
+      if (!settled) finish({ error });
+    });
+    child.stdin.write(`${JSON.stringify({ event: 'user', message: { content: prompt } })}\n`);
+    child.stdin.end();
   });
 }
 

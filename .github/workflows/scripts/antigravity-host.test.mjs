@@ -16,6 +16,11 @@ function childFor(output, { stderr = '', stderrChunks = [], exitCode = 0, delayM
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
+  child.stdin = {
+    write: chunk => { child.input = (child.input || '') + chunk; },
+    once: () => {},
+    end: () => {},
+  };
   child.kill = () => {
     child.emit('close', null, 'SIGTERM');
   };
@@ -56,6 +61,40 @@ test('runHost invokes agy and returns a validated review result', async () => {
   });
 
   assert.deepEqual(result, validReview);
+});
+
+test('runHost sends large prompts through stdin instead of command arguments', async () => {
+  const prompt = 'Review the trusted diff.\n' + 'x'.repeat(200_000);
+  let command;
+  let args;
+  let child;
+  const result = await runHost({
+    prompt,
+    cwd: '/tmp/trusted',
+    spawn: (spawnCommand, spawnArgs) => {
+      command = spawnCommand;
+      args = spawnArgs;
+      child = childFor(JSON.stringify({
+        event: 'result',
+        result: { status: 'SUCCESS', response: JSON.stringify(validReview) },
+      }) + '\n');
+      return child;
+    },
+  });
+
+  assert.deepEqual(result, validReview);
+  assert.equal(command, 'agy');
+  assert.ok(!args.includes(prompt));
+  assert.deepEqual(args.slice(args.indexOf('--input-format'), args.indexOf('--input-format') + 2), [
+    '--input-format', 'stream-json',
+  ]);
+  assert.deepEqual(args.slice(args.indexOf('--output-format'), args.indexOf('--output-format') + 2), [
+    '--output-format', 'stream-json',
+  ]);
+  assert.deepEqual(JSON.parse(child.input), {
+    event: 'user',
+    message: { content: prompt },
+  });
 });
 
 test('runHost forwards live stderr progress without changing the JSON result', async () => {
@@ -174,6 +213,7 @@ test('runHost does not flush buffered stderr after timeout settlement', async ()
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
+  child.stdin = { write: () => {}, once: () => {}, end: () => {} };
   child.kill = () => {};
   const progress = [];
   const spawn = () => {
@@ -337,6 +377,7 @@ test('runHost stops collecting output and escalates termination for a child that
   const child = new EventEmitter();
   child.stdout = new EventEmitter();
   child.stderr = new EventEmitter();
+  child.stdin = { write: () => {}, once: () => {}, end: () => {} };
   const signals = [];
   child.kill = (signal) => {
     signals.push(signal);
@@ -352,7 +393,7 @@ test('runHost stops collecting output and escalates termination for a child that
 
   child.stdout.emit('data', 'still writing');
   child.stderr.emit('data', 'still writing');
-  await new Promise(resolve => setTimeout(resolve, 30));
+  await new Promise(resolve => setTimeout(resolve, 60));
 
   assert.equal(result.status, 'failed');
   assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
@@ -366,6 +407,7 @@ test('runHost sanitizes secrets from child errors and malformed output paths', a
     const child = new EventEmitter();
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
+    child.stdin = { write: () => {}, once: () => {}, end: () => {} };
     child.kill = () => {};
     queueMicrotask(() => {
       child.stderr.emit('data', `authorization=${secret}`);
@@ -687,10 +729,10 @@ test('runHost keeps the agy print timeout below the host timeout by default', as
     '--disable-slash-commands',
     '--model',
     'gemini-3.8-flash-medium',
-    '-p',
-    'Review diff',
+    '--input-format',
+    'stream-json',
     '--output-format',
-    'json',
+    'stream-json',
     '--print-timeout',
     '300000ms',
   ]);
