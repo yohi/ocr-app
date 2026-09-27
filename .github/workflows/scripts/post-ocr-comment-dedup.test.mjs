@@ -39,12 +39,35 @@ test('does not repost an equivalent OCR finding already in the PR review history
     user: { login: 'opencodereview-app[bot]' },
   };
   const outcomes = new Map([
-    ['GET /repos/owner/repo/pulls/123', { data: { head: { sha: 'head-sha' } }, status: 200 }],
+    ['GET /repos/owner/repo/pulls/123', { data: { head: { sha: 'head-sha' }, node_id: 'PR_node_id' }, status: 200 }],
     ['GET /repos/owner/repo/pulls/123/files?per_page=100&page=1', {
       data: [{ filename: 'Makefile', patch: '@@ -76 +76 @@\n+$(MAKE) cpu-power-agent-hint' }],
       status: 200,
     }],
-    ['GET /repos/owner/repo/pulls/123/comments?per_page=100&page=1', { data: [existingComment], status: 200 }],
+    ['POST /graphql', {
+      data: {
+        data: {
+          node: {
+            reviewThreads: {
+              nodes: [{
+                isResolved: false,
+                comments: {
+                  nodes: [{
+                    author: existingComment.user,
+                    body: existingComment.body,
+                    line: existingComment.line,
+                    outdated: false,
+                    path: existingComment.path,
+                  }],
+                },
+              }],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        },
+      },
+      status: 200,
+    }],
     ['GET /repos/owner/repo/issues/123/comments?per_page=100&page=1', { data: [], status: 200 }],
     ['POST /repos/owner/repo/issues/123/comments', { data: {}, status: 201 }],
   ]);

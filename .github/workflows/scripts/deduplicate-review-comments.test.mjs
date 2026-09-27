@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { filterDuplicateReviewComments } from './deduplicate-review-comments.mjs';
+import { fetchUniqueReviewComments } from './deduplicate-review-comments.mjs';
 
 test('filters paraphrased OCR findings already posted at the same changed location', () => {
   const existingComments = [{
@@ -118,4 +119,105 @@ test('does not deduplicate comments with conflicting boolean assertions', () => 
 
   assert.deepEqual(result.comments, comments);
   assert.equal(result.duplicateCount, 0);
+});
+
+test('does not deduplicate against comments in resolved or outdated review threads', async () => {
+  const comments = [{
+    body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` does not exist in this change.',
+    line: 40,
+    path: 'README.md',
+  }];
+  const calls = [];
+  const githubApi = async (method, path, body) => {
+    calls.push({ method, path, body });
+    return {
+      status: 200,
+      data: {
+        data: {
+          node: {
+            reviewThreads: {
+              nodes: [
+                {
+                  isResolved: true,
+                  comments: { nodes: [{
+                    author: { login: 'opencodereview-app[bot]' },
+                    body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` is missing.',
+                    line: 40,
+                    outdated: false,
+                    path: 'README.md',
+                  }] },
+                },
+                {
+                  isResolved: false,
+                  comments: { nodes: [{
+                    author: { login: 'opencodereview-app[bot]' },
+                    body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` is missing.',
+                    line: 40,
+                    outdated: true,
+                    path: 'README.md',
+                  }] },
+                },
+              ],
+              pageInfo: { hasNextPage: false, endCursor: null },
+            },
+          },
+        },
+      },
+    };
+  };
+
+  const result = await fetchUniqueReviewComments({
+    botLogin: 'opencodereview-app',
+    comments,
+    githubApi,
+    prNumber: 12,
+    pullRequestNodeId: 'PR_node_id',
+  });
+
+  assert.deepEqual(result.comments, comments);
+  assert.equal(result.duplicateCount, 0);
+  assert.equal(calls[0].path, '/graphql');
+  assert.match(calls[0].body.query, /isResolved/);
+  assert.match(calls[0].body.query, /outdated/);
+});
+
+test('deduplicates against a bot comment in an unresolved current diff thread', async () => {
+  const comment = {
+    body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` does not exist in this change.',
+    line: 40,
+    path: 'README.md',
+  };
+  const githubApi = async () => ({
+    status: 200,
+    data: {
+      data: {
+        node: {
+          reviewThreads: {
+            nodes: [{
+              isResolved: false,
+              comments: {
+                nodes: [{
+                  author: { login: 'opencodereview-app[bot]' },
+                  ...comment,
+                  outdated: false,
+                }],
+              },
+            }],
+            pageInfo: { hasNextPage: false, endCursor: null },
+          },
+        },
+      },
+    },
+  });
+
+  const result = await fetchUniqueReviewComments({
+    botLogin: 'opencodereview-app',
+    comments: [comment],
+    githubApi,
+    prNumber: 12,
+    pullRequestNodeId: 'PR_node_id',
+  });
+
+  assert.deepEqual(result.comments, []);
+  assert.equal(result.duplicateCount, 1);
 });

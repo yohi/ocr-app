@@ -281,7 +281,7 @@ function createGithubApi({ repo, token }) {
     return new Promise((resolveRequest, rejectRequest) => {
       const options = {
         hostname: 'api.github.com',
-        path: `/repos/${repo}${path}`,
+        path: path === '/graphql' ? path : `/repos/${repo}${path}`,
         method,
         headers: {
           'Authorization': `token ${token}`,
@@ -391,6 +391,7 @@ async function postReviewComments({ botLogin, comments, expectedSha, githubApi, 
     comments,
     githubApi,
     prNumber,
+    pullRequestNodeId: prData.data.node_id,
   });
   if (duplicateCount > 0) {
     console.log(`Skipped ${duplicateCount} duplicate review comment(s)`);

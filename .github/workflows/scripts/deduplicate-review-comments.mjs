@@ -73,15 +73,43 @@ export function filterDuplicateReviewComments({ botLogin, comments, existingComm
   return { comments: uniqueComments, duplicateCount };
 }
 
-export async function fetchUniqueReviewComments({ botLogin, comments, githubApi, prNumber }) {
+export async function fetchUniqueReviewComments({ botLogin, comments, githubApi, prNumber, pullRequestNodeId }) {
   const existingComments = [];
-  for (let page = 1; ; page++) {
-    const response = await githubApi('GET', `/pulls/${prNumber}/comments?per_page=100&page=${page}`);
-    if (response.status !== 200 || !Array.isArray(response.data)) {
-      throw new Error(`Failed to fetch existing review comments (page ${page})`);
+  for (let cursor = null; ; ) {
+    const response = await githubApi('POST', '/graphql', {
+      query: `query($pullRequestId: ID!, $cursor: String) {
+        node(id: $pullRequestId) {
+          ... on PullRequest {
+            reviewThreads(first: 100, after: $cursor) {
+              nodes {
+                isResolved
+                comments(first: 100) {
+                  nodes { author { login } body line outdated path }
+                }
+              }
+              pageInfo { hasNextPage endCursor }
+            }
+          }
+        }
+      }`,
+      variables: { cursor, pullRequestId: pullRequestNodeId },
+    });
+    const threadConnection = response.data?.data?.node?.reviewThreads;
+    if (response.status !== 200 || response.data?.errors || !threadConnection) {
+      throw new Error(`Failed to fetch existing review threads for pull request ${prNumber}`);
     }
-    existingComments.push(...response.data);
-    if (response.data.length < 100) break;
+    for (const thread of threadConnection.nodes) {
+      if (thread.isResolved !== false) continue;
+      for (const comment of thread.comments.nodes) {
+        if (comment.outdated !== false || !Number.isSafeInteger(comment.line) || comment.line <= 0) continue;
+        existingComments.push({
+          ...comment,
+          user: comment.author,
+        });
+      }
+    }
+    if (!threadConnection.pageInfo.hasNextPage) break;
+    cursor = threadConnection.pageInfo.endCursor;
   }
 
   return filterDuplicateReviewComments({ botLogin, comments, existingComments });

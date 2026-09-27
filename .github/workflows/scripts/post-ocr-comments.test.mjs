@@ -31,11 +31,39 @@ function installHttpsMock(outcomes, existingReviewComments = []) {
     request.end = () => {
       const isReviewCommentLookup = options.method === 'GET' &&
         /\/pulls\/\d+\/comments\?per_page=/.test(options.path);
+      const isReviewThreadLookup = options.method === 'POST' && options.path === '/graphql';
       const outcome = isReviewCommentLookup
         ? { data: existingReviewComments, status: 200 }
-        : outcomes.shift();
+        : isReviewThreadLookup
+          ? {
+            data: {
+              data: {
+                node: {
+                  reviewThreads: {
+                    nodes: existingReviewComments.length > 0
+                      ? [{
+                        isResolved: false,
+                        comments: {
+                          nodes: existingReviewComments.map(comment => ({
+                            author: comment.user,
+                            body: comment.body,
+                            line: comment.line,
+                            outdated: false,
+                            path: comment.path,
+                          })),
+                        },
+                      }]
+                      : [],
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                  },
+                },
+              },
+            },
+            status: 200,
+          }
+          : outcomes.shift();
       assert.ok(outcome, 'received an unexpected GitHub API request');
-      if (!(options.method === 'GET' && options.path.includes('/comments?per_page='))) {
+      if (!options.path.includes('/comments?per_page=') && !isReviewThreadLookup) {
         requests.push({
           body: requestBody ? JSON.parse(requestBody) : undefined,
           method: options.method,
@@ -72,7 +100,7 @@ function validComment(body = 'Review this line') {
 
 function reviewSetup(outcomes, summaryOutcome = { data: {}, status: 201 }) {
   return [
-    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: { head: { sha: 'head-sha' }, node_id: 'PR_node_id' }, status: 200 },
     {
       data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }],
       status: 200,
