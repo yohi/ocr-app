@@ -62,9 +62,9 @@ test('workflow prepares trusted review context before the context-only host', ()
   const reviewStep = stepRun('Run Antigravity review host');
 
   assert.match(contextStep, /prepare-ocr-review-context\.mjs/);
-  assert.match(validationStep, /\/tmp\/ocr-review-context\.json/);
-  assert.match(workflow, /OCR_PREVIEW_PATH: \/tmp\/ocr-preview\.json/);
-  assert.match(workflow, /OCR_CONTEXT_PATH: \/tmp\/ocr-review-context\.json/);
+  assert.match(validationStep, /RUNNER_TEMP.*ocr-review-context\.json/);
+  assert.match(workflow, /OCR_PREVIEW_PATH: \$\{\{ runner\.temp \}\}\/ocr-preview\.json/);
+  assert.match(workflow, /OCR_CONTEXT_PATH: \$\{\{ runner\.temp \}\}\/ocr-review-context\.json/);
   assert.match(reviewStep, /ocr_review_context/);
   assert.match(reviewStep, /Do not call tools, execute commands, read files, access URLs/);
   assert.match(reviewStep, /evidence-backed/);

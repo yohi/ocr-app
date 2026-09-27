@@ -131,8 +131,9 @@ export async function buildReviewContext({
 }
 
 export async function main({ env = process.env } = {}) {
-  const previewPath = env.OCR_PREVIEW_PATH || '/tmp/ocr-preview.json';
-  const outputPath = env.OCR_CONTEXT_PATH || '/tmp/ocr-review-context.json';
+  const previewPath = env.OCR_PREVIEW_PATH;
+  const outputPath = env.OCR_CONTEXT_PATH;
+  if (!previewPath || !outputPath) throw new Error('OCR preview and context paths are required');
   const preview = JSON.parse(fs.readFileSync(previewPath, 'utf8'));
   const context = await buildReviewContext({
     preview,

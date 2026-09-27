@@ -223,7 +223,7 @@ async function postSkipComment({ expectedSha, githubApi, prNumber, message }) {
     body: message,
   });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to post skip comment:', JSON.stringify(response.data));
+    console.error(`Failed to post skip comment (HTTP ${response.status})`);
     return 1;
   }
   console.log('Posted skip comment to PR');
@@ -236,7 +236,7 @@ async function postFailureComment({ expectedSha, githubApi, prNumber, message })
     body: message,
   });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to post failure comment:', JSON.stringify(response.data));
+    console.error(`Failed to post failure comment (HTTP ${response.status})`);
     return 1;
   }
   console.log('Posted failure comment to PR');
@@ -250,7 +250,7 @@ async function postSummaryComment({ botLogin, changedFiles, comments, expectedSh
   for (let page = 1; ; page++) {
     const response = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100&page=${page}`);
     if (response.status !== 200 || !Array.isArray(response.data)) {
-      console.error('Failed to fetch existing Summary comments:', JSON.stringify(response.data));
+      console.error(`Failed to fetch existing Summary comments (HTTP ${response.status})`);
       return 1;
     }
     existing.push(...response.data);
@@ -269,7 +269,7 @@ async function postSummaryComment({ botLogin, changedFiles, comments, expectedSh
     ? await githubApi('PATCH', `/issues/comments/${matchingComment.id}`, { body })
     : await githubApi('POST', `/issues/${prNumber}/comments`, { body });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to upsert Summary comment:', JSON.stringify(response.data));
+    console.error(`Failed to upsert Summary comment (HTTP ${response.status})`);
     return 1;
   }
   console.log(`${matchingComment ? 'Updated' : 'Posted'} Summary comment for ${comments.length} review comments`);
@@ -405,7 +405,7 @@ async function postReviewComments({ botLogin, comments, expectedSha, githubApi, 
       });
       if (response.status < 200 || response.status >= 300) {
         failureCount++;
-        console.error(`Failed to post individual review comment: ${JSON.stringify(response.data)}`);
+        console.error(`Failed to post individual review comment (HTTP ${response.status})`);
       }
     } catch (error) {
       failureCount++;

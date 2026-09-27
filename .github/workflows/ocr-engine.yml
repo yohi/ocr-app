@@ -107,11 +107,11 @@ jobs:
           ocr delegate preview --format json \
             --rule ../self-repo/.github/workflows/config/markdown-review-rules.json \
             --from "origin/$BASE_REF" \
-            --to "$COMMIT_SHA" > /tmp/ocr-preview.json
+            --to "$COMMIT_SHA" > "$RUNNER_TEMP/ocr-preview.json"
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
           import { countReviewableFiles } from '../self-repo/.github/workflows/scripts/validate-ocr-result.mjs';
-          const preview = JSON.parse(fs.readFileSync('/tmp/ocr-preview.json', 'utf8'));
+          const preview = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ocr-preview.json`, 'utf8'));
           const count = countReviewableFiles(preview);
           fs.appendFileSync(process.env.GITHUB_ENV, `OCR_EXPECTED_REVIEWABLE_FILES=${count}\n`);
           console.log(`OCR selected ${count} reviewable file(s)`);
@@ -124,8 +124,8 @@ jobs:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           OCR_RULE_PATH: ../self-repo/.github/workflows/config/markdown-review-rules.json
-          OCR_PREVIEW_PATH: /tmp/ocr-preview.json
-          OCR_CONTEXT_PATH: /tmp/ocr-review-context.json
+          OCR_PREVIEW_PATH: ${{ runner.temp }}/ocr-preview.json
+          OCR_CONTEXT_PATH: ${{ runner.temp }}/ocr-review-context.json
         run: |
           node ../self-repo/.github/workflows/scripts/prepare-ocr-review-context.mjs
 
@@ -184,7 +184,7 @@ jobs:
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
           import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
-          const context = JSON.parse(fs.readFileSync('/tmp/ocr-review-context.json', 'utf8'));
+          const context = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ocr-review-context.json`, 'utf8'));
           const contextJson = JSON.stringify(context);
           const prompt = [
             `Review the supplied deterministic OpenCodeReview context for pull request ${process.env.PR_NUMBER}.`,
@@ -224,7 +224,7 @@ jobs:
           node self-repo/.github/workflows/scripts/validate-ocr-result.mjs \
             /tmp/ocr-result.json \
             "$OCR_EXPECTED_REVIEWABLE_FILES" \
-            /tmp/ocr-review-context.json
+            "$RUNNER_TEMP/ocr-review-context.json"
 
       - name: Resolve fixed review threads
         if: always() && steps.target.outputs.internal == 'true'
