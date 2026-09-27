@@ -7,7 +7,7 @@ export function countReviewableFiles(preview) {
   return preview.reviewable_files.length;
 }
 
-export function validateReviewResult({ expectedReviewableFiles, expectedReviewablePaths, result }) {
+function validateResultFormat(expectedReviewableFiles, result) {
   if (!Number.isInteger(expectedReviewableFiles) || expectedReviewableFiles < 0) {
     throw new Error('Expected reviewable file count is invalid');
   }
@@ -24,13 +24,17 @@ export function validateReviewResult({ expectedReviewableFiles, expectedReviewab
     if (expectedReviewableFiles > 0) {
       throw new Error('OCR skipped despite reviewable files');
     }
-    return { status: 'skipped' };
+    return 'skipped';
   }
 
   if (result.status !== 'success') {
     throw new Error('OCR result status is invalid');
   }
 
+  return 'success';
+}
+
+function validateFindingPaths(expectedReviewablePaths, result) {
   if (Array.isArray(expectedReviewablePaths)) {
     const allowedPaths = new Set(expectedReviewablePaths);
     const findings = Array.isArray(result.findings)
@@ -42,6 +46,13 @@ export function validateReviewResult({ expectedReviewableFiles, expectedReviewab
       }
     }
   }
+}
+
+export function validateReviewResult({ expectedReviewableFiles, expectedReviewablePaths, result }) {
+  const status = validateResultFormat(expectedReviewableFiles, result);
+  if (status === 'skipped') return { status };
+
+  validateFindingPaths(expectedReviewablePaths, result);
 
   if (
     expectedReviewableFiles > 0 &&
@@ -50,7 +61,7 @@ export function validateReviewResult({ expectedReviewableFiles, expectedReviewab
     throw new Error('OCR review coverage is incomplete');
   }
 
-  return { status: 'success' };
+  return { status };
 }
 
 function readJson(path) {

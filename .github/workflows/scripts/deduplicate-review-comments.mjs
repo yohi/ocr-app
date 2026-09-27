@@ -7,7 +7,7 @@ function normalizeLogin(login) {
 }
 
 function getLocation(comment) {
-  return comment.line ?? comment.original_line ?? null;
+  return comment.line ?? null;
 }
 
 function getBodyTokens(body) {
@@ -23,8 +23,22 @@ function getBodyTokens(body) {
   return new Set(normalizedBody.match(/[\p{L}\p{N}_][\p{L}\p{N}./_-]*/gu) ?? []);
 }
 
+function getBooleanAssertions(body) {
+  const normalizedBody = typeof body === 'string' ? body.toLowerCase() : '';
+  return new Set([...normalizedBody.matchAll(/\b(?:return|returns|returned|be|is|are|should|must)\s+(true|false)\b/g)]
+    .map(([, assertion]) => assertion));
+}
+
+function hasConflictingAssertions(left, right) {
+  const leftAssertions = getBooleanAssertions(left.body);
+  const rightAssertions = getBooleanAssertions(right.body);
+  return leftAssertions.has('true') && rightAssertions.has('false') ||
+    leftAssertions.has('false') && rightAssertions.has('true');
+}
+
 function areSameFinding(left, right) {
   if (left.path !== right.path || getLocation(left) !== getLocation(right)) return false;
+  if (hasConflictingAssertions(left, right)) return false;
 
   const leftTokens = getBodyTokens(left.body);
   const rightTokens = getBodyTokens(right.body);
@@ -40,7 +54,8 @@ function areSameFinding(left, right) {
 export function filterDuplicateReviewComments({ botLogin, comments, existingComments }) {
   const normalizedBotLogin = normalizeLogin(botLogin);
   const priorComments = existingComments.filter(comment =>
-    normalizeLogin(comment.user?.login) === normalizedBotLogin,
+    normalizeLogin(comment.user?.login) === normalizedBotLogin &&
+    Number.isSafeInteger(comment.line) && comment.line > 0,
   );
   const uniqueComments = [];
   let duplicateCount = 0;

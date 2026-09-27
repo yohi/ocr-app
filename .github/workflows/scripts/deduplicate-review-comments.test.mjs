@@ -74,3 +74,48 @@ test('recognizes paraphrased local-link findings by their shared path and locati
   assert.deepEqual(result.comments, []);
   assert.equal(result.duplicateCount, 1);
 });
+
+test('does not deduplicate comments from an outdated diff using original_line', () => {
+  const comments = [{
+    body: 'The cpu-power-agent-hint target is missing from setup-system.',
+    line: 76,
+    path: 'Makefile',
+  }];
+
+  const result = filterDuplicateReviewComments({
+    botLogin: 'opencodereview-app',
+    comments,
+    existingComments: [{
+      body: 'The cpu-power-agent-hint target is missing from setup-system.',
+      line: null,
+      original_line: 76,
+      path: 'Makefile',
+      user: { login: 'opencodereview-app[bot]' },
+    }],
+  });
+
+  assert.deepEqual(result.comments, comments);
+  assert.equal(result.duplicateCount, 0);
+});
+
+test('does not deduplicate comments with conflicting boolean assertions', () => {
+  const comments = [{
+    body: 'The cpu-power-agent-hint must return true when setup-system completes.',
+    line: 76,
+    path: 'Makefile',
+  }];
+
+  const result = filterDuplicateReviewComments({
+    botLogin: 'opencodereview-app',
+    comments,
+    existingComments: [{
+      body: 'The cpu-power-agent-hint must return false when setup-system completes.',
+      line: 76,
+      path: 'Makefile',
+      user: { login: 'opencodereview-app[bot]' },
+    }],
+  });
+
+  assert.deepEqual(result.comments, comments);
+  assert.equal(result.duplicateCount, 0);
+});
