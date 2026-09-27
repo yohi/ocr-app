@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { filterDuplicateReviewComments } from './deduplicate-review-comments.mjs';
+
+test('filters paraphrased OCR findings already posted at the same changed location', () => {
+  const existingComments = [{
+    body: "The target 'cpu-power-agent-hint' is invoked in 'setup-system', but neither Makefile nor any included makefile defines it. Running make setup will fail with no rule to make target.",
+    line: 76,
+    path: 'Makefile',
+    user: { login: 'opencodereview-app[bot]' },
+  }];
+  const comments = [
+    {
+      body: 'Target `cpu-power-agent-hint` is invoked during `setup-system`, but it is not defined in Makefile or any included .mk files. Running make setup fails because there is no rule for the target.',
+      line: 76,
+      path: 'Makefile',
+    },
+    {
+      body: 'The shell command on this line masks failures from the preceding system-setup target.',
+      line: 76,
+      path: 'Makefile',
+    },
+  ];
+
+  const result = filterDuplicateReviewComments({
+    botLogin: 'opencodereview-app',
+    comments,
+    existingComments,
+  });
+
+  assert.deepEqual(result.comments, [comments[1]]);
+  assert.equal(result.duplicateCount, 1);
+});
+
+test('does not suppress a similar comment from a different review bot', () => {
+  const comments = [{
+    body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` does not exist in the pull request.',
+    line: 40,
+    path: 'README.md',
+  }];
+
+  const result = filterDuplicateReviewComments({
+    botLogin: 'opencodereview-app',
+    comments,
+    existingComments: [{
+      body: 'The link target `_docs/bios-power-and-fan-settings.ja.md` does not exist in the pull request.',
+      line: 40,
+      path: 'README.md',
+      user: { login: 'coderabbitai[bot]' },
+    }],
+  });
+
+  assert.deepEqual(result.comments, comments);
+  assert.equal(result.duplicateCount, 0);
+});
+
+test('recognizes paraphrased local-link findings by their shared path and location', () => {
+  const result = filterDuplicateReviewComments({
+    botLogin: 'opencodereview-app',
+    comments: [{
+      body: 'The documentation link `_docs/bios-power-and-fan-settings.ja.md` points to a file that does not exist in the repository or this pull request.',
+      line: 40,
+      path: 'README.md',
+    }],
+    existingComments: [{
+      body: 'The link references `_docs/bios-power-and-fan-settings.ja.md`, but this file does not exist in the repository or in this pull request, resulting in a broken link.',
+      line: 40,
+      path: 'README.md',
+      user: { login: 'opencodereview-app[bot]' },
+    }],
+  });
+
+  assert.deepEqual(result.comments, []);
+  assert.equal(result.duplicateCount, 1);
+});

@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fetchUniqueReviewComments } from './deduplicate-review-comments.mjs';
 
 class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
@@ -332,7 +333,7 @@ async function fetchAllPrFiles(githubApi, prNumber) {
   return filesMap;
 }
 
-async function postReviewComments({ comments, expectedSha, githubApi, prNumber }) {
+async function postReviewComments({ botLogin, comments, expectedSha, githubApi, prNumber }) {
   if (comments.length === 0) {
     console.log('No comments to post');
     return { exitCode: 0, filesMap: new Map() };
@@ -345,8 +346,22 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
 
   const headSha = prData.data.head.sha;
   const filesMap = await fetchAllPrFiles(githubApi, prNumber);
+  const { comments: uniqueComments, duplicateCount } = await fetchUniqueReviewComments({
+    botLogin,
+    comments,
+    githubApi,
+    prNumber,
+  });
+  if (duplicateCount > 0) {
+    console.log(`Skipped ${duplicateCount} duplicate review comment(s)`);
+  }
+  if (uniqueComments.length === 0) {
+    console.log('No new review comments to post');
+    return { exitCode: 0, filesMap };
+  }
+
   const reviewComments = [];
-  for (const comment of comments) {
+  for (const comment of uniqueComments) {
     const position = findDiffPosition(comment, filesMap);
     if (position) {
       reviewComments.push({
@@ -478,7 +493,13 @@ export async function run({
 
   let changedFiles = [];
   if (comments.length > 0) {
-    const reviewResult = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
+    const reviewResult = await postReviewComments({
+      botLogin,
+      comments,
+      expectedSha,
+      githubApi,
+      prNumber: config.prNumber,
+    });
     if (reviewResult.exitCode !== 0) {
       return reviewResult.exitCode;
     }

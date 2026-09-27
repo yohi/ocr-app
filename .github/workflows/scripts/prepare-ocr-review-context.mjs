@@ -37,10 +37,24 @@ function normalizeReviewableFiles(preview) {
   });
 }
 
+function normalizeExcludedFiles(preview) {
+  if (!Array.isArray(preview?.excluded_files)) return [];
+
+  return preview.excluded_files.map(file => {
+    const path = file?.path;
+    if (!isSafeReviewPath(path)) throw new Error(`Unsafe excluded path: ${String(path)}`);
+    return {
+      path,
+      status: typeof file.status === 'string' ? file.status : 'modified',
+      exclude_reason: typeof file.exclude_reason === 'string' ? file.exclude_reason : 'unspecified',
+    };
+  });
+}
+
 async function executeCommand(command, args, { cwd }) {
   const { stdout } = await execFile(command, args, {
     cwd,
-    maxBuffer: DEFAULT_MAX_DIFF_CHARS * 2,
+    maxBuffer: DEFAULT_MAX_DIFF_CHARS * 4,
   });
   return stdout;
 }
@@ -68,6 +82,7 @@ export async function buildReviewContext({
   maxDiffChars = DEFAULT_MAX_DIFF_CHARS,
 }) {
   const reviewableFiles = normalizeReviewableFiles(preview);
+  const excludedFiles = normalizeExcludedFiles(preview);
   if (!isSafeBaseRef(baseRef)) throw new Error('Base ref is invalid');
   if (!isCommitSha(commitSha)) throw new Error('Commit SHA is invalid');
   if (typeof rulePath !== 'string' || rulePath.length === 0) throw new Error('Rule path is required');
@@ -78,6 +93,7 @@ export async function buildReviewContext({
       base_ref: baseRef,
       commit_sha: commitSha,
       reviewable_files: [],
+      excluded_files: excludedFiles,
       rules: { schema_version: '1', groups: [] },
       diff: '',
     };
@@ -99,8 +115,6 @@ export async function buildReviewContext({
     '--no-color',
     `--unified=${DIFF_CONTEXT_LINES}`,
     `origin/${baseRef}...${commitSha}`,
-    '--',
-    ...paths,
   ], { cwd });
 
   if (typeof diff !== 'string') throw new Error('Git diff output is invalid');
@@ -110,6 +124,7 @@ export async function buildReviewContext({
     base_ref: baseRef,
     commit_sha: commitSha,
     reviewable_files: reviewableFiles,
+    excluded_files: excludedFiles,
     rules: parseRules(ruleOutput),
     diff,
   };

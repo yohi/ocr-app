@@ -29,7 +29,11 @@ function installHttpsMock(outcomes) {
       requestBody += chunk;
     };
     request.end = () => {
-      const outcome = outcomes.shift();
+      const isReviewCommentLookup = options.method === 'GET' &&
+        /\/pulls\/\d+\/comments\?per_page=/.test(options.path);
+      const outcome = isReviewCommentLookup
+        ? { data: [], status: 200 }
+        : outcomes.shift();
       assert.ok(outcome, 'received an unexpected GitHub API request');
       if (!(options.method === 'GET' && options.path.includes('/comments?per_page='))) {
         requests.push({

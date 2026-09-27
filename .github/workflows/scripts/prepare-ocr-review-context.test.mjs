@@ -19,6 +19,9 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
         { path: 'README.md', status: 'modified' },
         { path: 'docs/example.md', status: 'added' },
       ],
+      excluded_files: [
+        { path: '_mk/system.mk', status: 'modified', exclude_reason: 'unsupported_ext' },
+      ],
     },
     baseRef: 'master',
     commitSha,
@@ -29,7 +32,10 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
       if (command === 'ocr') {
         return JSON.stringify({ schema_version: '1', groups: [{ group_id: 1, rule: 'review' }] });
       }
-      return 'diff --git a/README.md b/README.md\n+changed';
+      return [
+        'diff --git a/README.md b/README.md\n+changed',
+        'diff --git a/_mk/system.mk b/_mk/system.mk\n+cpu-power-agent-hint:',
+      ].join('\n');
     },
   });
 
@@ -40,8 +46,14 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
       { path: 'README.md', status: 'modified' },
       { path: 'docs/example.md', status: 'added' },
     ],
+    excluded_files: [
+      { path: '_mk/system.mk', status: 'modified', exclude_reason: 'unsupported_ext' },
+    ],
     rules: { schema_version: '1', groups: [{ group_id: 1, rule: 'review' }] },
-    diff: 'diff --git a/README.md b/README.md\n+changed',
+    diff: [
+      'diff --git a/README.md b/README.md\n+changed',
+      'diff --git a/_mk/system.mk b/_mk/system.mk\n+cpu-power-agent-hint:',
+    ].join('\n'),
   });
   assert.deepEqual(calls, [
     {
@@ -66,9 +78,6 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
         '--no-color',
         '--unified=80',
         `origin/master...${commitSha}`,
-        '--',
-        'README.md',
-        'docs/example.md',
       ],
       options: { cwd: 'target-repo' },
     },
@@ -94,6 +103,7 @@ test('buildReviewContext does not invoke tools when no files are reviewable', as
     base_ref: 'master',
     commit_sha: commitSha,
     reviewable_files: [],
+    excluded_files: [],
     rules: { schema_version: '1', groups: [] },
     diff: '',
   });

@@ -7,7 +7,7 @@ export function countReviewableFiles(preview) {
   return preview.reviewable_files.length;
 }
 
-export function validateReviewResult({ expectedReviewableFiles, result }) {
+export function validateReviewResult({ expectedReviewableFiles, expectedReviewablePaths, result }) {
   if (!Number.isInteger(expectedReviewableFiles) || expectedReviewableFiles < 0) {
     throw new Error('Expected reviewable file count is invalid');
   }
@@ -31,6 +31,18 @@ export function validateReviewResult({ expectedReviewableFiles, result }) {
     throw new Error('OCR result status is invalid');
   }
 
+  if (Array.isArray(expectedReviewablePaths)) {
+    const allowedPaths = new Set(expectedReviewablePaths);
+    const findings = Array.isArray(result.findings)
+      ? result.findings
+      : (Array.isArray(result.comments) ? result.comments : []);
+    for (const finding of findings) {
+      if (typeof finding?.path !== 'string' || !allowedPaths.has(finding.path)) {
+        throw new Error(`Finding path is not reviewable: ${String(finding?.path)}`);
+      }
+    }
+  }
+
   if (
     expectedReviewableFiles > 0 &&
     (typeof result.coverage !== 'number' || !Number.isFinite(result.coverage) || result.coverage < 1)
@@ -46,10 +58,16 @@ function readJson(path) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [resultPath, expectedFiles] = process.argv.slice(2);
+  const [resultPath, expectedFiles, contextPath] = process.argv.slice(2);
   try {
+    if (!contextPath) throw new Error('OCR review context path is required');
+    const context = readJson(contextPath);
+    if (!Array.isArray(context?.reviewable_files)) {
+      throw new Error('OCR review context has no reviewable file list');
+    }
     validateReviewResult({
       expectedReviewableFiles: Number.parseInt(expectedFiles, 10),
+      expectedReviewablePaths: context.reviewable_files.map(file => file.path),
       result: readJson(resultPath),
     });
   } catch (error) {

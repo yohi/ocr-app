@@ -41,6 +41,21 @@ test('accepts a successful result covering all previewed files', () => {
   );
 });
 
+test('rejects findings on files that are only present as supporting context', () => {
+  assert.throws(
+    () => validateReviewResult({
+      expectedReviewableFiles: 1,
+      expectedReviewablePaths: ['README.md'],
+      result: {
+        coverage: 1,
+        findings: [{ body: 'Finding on context-only file', line: 3, path: '_mk/system.mk' }],
+        status: 'success',
+      },
+    }),
+    /not reviewable/i,
+  );
+});
+
 test('accepts a skipped result when the preview selected no files', () => {
   assert.deepEqual(
     validateReviewResult({
