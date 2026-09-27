@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import https from 'node:https';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { fetchUniqueReviewComments } from './deduplicate-review-comments.mjs';
 
 class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
@@ -222,7 +223,7 @@ async function postSkipComment({ expectedSha, githubApi, prNumber, message }) {
     body: message,
   });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to post skip comment:', JSON.stringify(response.data));
+    console.error(`Failed to post skip comment (HTTP ${response.status})`);
     return 1;
   }
   console.log('Posted skip comment to PR');
@@ -235,7 +236,7 @@ async function postFailureComment({ expectedSha, githubApi, prNumber, message })
     body: message,
   });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to post failure comment:', JSON.stringify(response.data));
+    console.error(`Failed to post failure comment (HTTP ${response.status})`);
     return 1;
   }
   console.log('Posted failure comment to PR');
@@ -249,7 +250,7 @@ async function postSummaryComment({ botLogin, changedFiles, comments, expectedSh
   for (let page = 1; ; page++) {
     const response = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100&page=${page}`);
     if (response.status !== 200 || !Array.isArray(response.data)) {
-      console.error('Failed to fetch existing Summary comments:', JSON.stringify(response.data));
+      console.error(`Failed to fetch existing Summary comments (HTTP ${response.status})`);
       return 1;
     }
     existing.push(...response.data);
@@ -268,7 +269,7 @@ async function postSummaryComment({ botLogin, changedFiles, comments, expectedSh
     ? await githubApi('PATCH', `/issues/comments/${matchingComment.id}`, { body })
     : await githubApi('POST', `/issues/${prNumber}/comments`, { body });
   if (response.status < 200 || response.status >= 300) {
-    console.error('Failed to upsert Summary comment:', JSON.stringify(response.data));
+    console.error(`Failed to upsert Summary comment (HTTP ${response.status})`);
     return 1;
   }
   console.log(`${matchingComment ? 'Updated' : 'Posted'} Summary comment for ${comments.length} review comments`);
@@ -280,7 +281,7 @@ function createGithubApi({ repo, token }) {
     return new Promise((resolveRequest, rejectRequest) => {
       const options = {
         hostname: 'api.github.com',
-        path: `/repos/${repo}${path}`,
+        path: path === '/graphql' ? path : `/repos/${repo}${path}`,
         method,
         headers: {
           'Authorization': `token ${token}`,
@@ -332,19 +333,7 @@ async function fetchAllPrFiles(githubApi, prNumber) {
   return filesMap;
 }
 
-async function postReviewComments({ comments, expectedSha, githubApi, prNumber }) {
-  if (comments.length === 0) {
-    console.log('No comments to post');
-    return { exitCode: 0, filesMap: new Map() };
-  }
-
-  const prData = await githubApi('GET', `/pulls/${prNumber}`);
-  if (prData.status !== 200) {
-    throw new CliError('Failed to fetch PR data');
-  }
-
-  const headSha = prData.data.head.sha;
-  const filesMap = await fetchAllPrFiles(githubApi, prNumber);
+function buildReviewComments(comments, filesMap) {
   const reviewComments = [];
   for (const comment of comments) {
     const position = findDiffPosition(comment, filesMap);
@@ -357,10 +346,66 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
       });
     }
   }
+  return reviewComments;
+}
+
+async function postReviewCommentsIndividually({ comments, expectedSha, githubApi, headSha, prNumber }) {
+  let failureCount = 0;
+  for (const comment of comments) {
+    try {
+      await assertExpectedHead({ expectedSha, githubApi, prNumber });
+      const response = await githubApi('POST', `/pulls/${prNumber}/comments`, {
+        commit_id: headSha,
+        path: comment.path,
+        line: comment.line,
+        side: comment.side,
+        body: comment.body,
+      });
+      if (response.status < 200 || response.status >= 300) {
+        failureCount++;
+        console.error(`Failed to post individual review comment (HTTP ${response.status})`);
+      }
+    } catch (error) {
+      failureCount++;
+      console.error('Failed to post individual review comment:', error);
+    }
+  }
+  return failureCount;
+}
+
+async function postReviewComments({ botLogin, comments, expectedSha, githubApi, prNumber }) {
+  if (comments.length === 0) {
+    console.log('No comments to post');
+    return { comments: [], exitCode: 0, filesMap: new Map() };
+  }
+
+  const prData = await githubApi('GET', `/pulls/${prNumber}`);
+  if (prData.status !== 200) {
+    throw new CliError('Failed to fetch PR data');
+  }
+
+  const headSha = prData.data.head.sha;
+  const filesMap = await fetchAllPrFiles(githubApi, prNumber);
+  const { comments: uniqueComments, duplicateCount } = await fetchUniqueReviewComments({
+    botLogin,
+    comments,
+    githubApi,
+    prNumber,
+    pullRequestNodeId: prData.data.node_id,
+  });
+  if (duplicateCount > 0) {
+    console.log(`Skipped ${duplicateCount} duplicate review comment(s)`);
+  }
+  if (uniqueComments.length === 0) {
+    console.log('No new review comments to post');
+    return { comments: uniqueComments, exitCode: 0, filesMap };
+  }
+
+  const reviewComments = buildReviewComments(uniqueComments, filesMap);
 
   if (reviewComments.length === 0) {
     console.log('No valid positions found for comments');
-    return { exitCode: 0, filesMap };
+    return { comments: uniqueComments, exitCode: 0, filesMap };
   }
 
   await assertExpectedHead({ expectedSha, githubApi, prNumber });
@@ -373,38 +418,25 @@ async function postReviewComments({ comments, expectedSha, githubApi, prNumber }
 
   if (review.status >= 200 && review.status < 300) {
     console.log(`Posted ${reviewComments.length} review comments`);
-    return { exitCode: 0, filesMap };
+    return { comments: uniqueComments, exitCode: 0, filesMap };
   }
 
   console.warn(`Batch review failed; posting ${reviewComments.length} comments individually`);
-  let failureCount = 0;
-  for (const comment of reviewComments) {
-    try {
-      await assertExpectedHead({ expectedSha, githubApi, prNumber });
-      const response = await githubApi('POST', `/pulls/${prNumber}/comments`, {
-        commit_id: headSha,
-        path: comment.path,
-        line: comment.line,
-        side: comment.side,
-        body: comment.body,
-      });
-      if (response.status < 200 || response.status >= 300) {
-        failureCount++;
-        console.error(`Failed to post individual review comment: ${JSON.stringify(response.data)}`);
-      }
-    } catch (error) {
-      failureCount++;
-      console.error('Failed to post individual review comment:', error);
-    }
-  }
+  const failureCount = await postReviewCommentsIndividually({
+    comments: reviewComments,
+    expectedSha,
+    githubApi,
+    headSha,
+    prNumber,
+  });
 
   if (failureCount > 0) {
     console.error(`Failed to post ${failureCount} individual review comments`);
-    return { exitCode: 1, filesMap };
+    return { comments: uniqueComments, exitCode: 1, filesMap };
   }
 
   console.log(`Posted ${reviewComments.length} review comments individually`);
-  return { exitCode: 0, filesMap };
+  return { comments: uniqueComments, exitCode: 0, filesMap };
 }
 
 function findDiffPosition(comment, filesMap) {
@@ -477,11 +509,19 @@ export async function run({
   }
 
   let changedFiles = [];
+  let summaryComments = comments;
   if (comments.length > 0) {
-    const reviewResult = await postReviewComments({ comments, expectedSha, githubApi, prNumber: config.prNumber });
+    const reviewResult = await postReviewComments({
+      botLogin,
+      comments,
+      expectedSha,
+      githubApi,
+      prNumber: config.prNumber,
+    });
     if (reviewResult.exitCode !== 0) {
       return reviewResult.exitCode;
     }
+    summaryComments = reviewResult.comments;
     changedFiles = [...reviewResult.filesMap.keys()];
   } else {
     const filesMap = await fetchAllPrFiles(githubApi, config.prNumber);
@@ -491,7 +531,7 @@ export async function run({
   return postSummaryComment({
     botLogin,
     changedFiles,
-    comments,
+    comments: summaryComments,
     expectedSha,
     githubApi,
     reviewMetadata: {

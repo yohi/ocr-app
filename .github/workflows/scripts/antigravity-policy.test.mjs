@@ -34,7 +34,7 @@ function topLevelPermissions() {
 
 test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.7/);
+  assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.9/);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /);
   assert.match(workflow, /prepare-ocr-review-context\.mjs/);
@@ -50,7 +50,7 @@ test('workflow installs OCR where the Antigravity shell can resolve it', () => {
 
   assert.match(
     installStep,
-    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.7/,
+    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.9/,
     'OCR must share the Antigravity-visible bin directory',
   );
   assert.match(installStep, /echo "\$HOME\/\.local\/bin" >> "\$GITHUB_PATH"/);
@@ -58,11 +58,13 @@ test('workflow installs OCR where the Antigravity shell can resolve it', () => {
 
 test('workflow prepares trusted review context before the context-only host', () => {
   const contextStep = stepRun('Prepare trusted review context');
+  const validationStep = stepRun('Validate review result');
   const reviewStep = stepRun('Run Antigravity review host');
 
   assert.match(contextStep, /prepare-ocr-review-context\.mjs/);
-  assert.match(workflow, /OCR_PREVIEW_PATH: \/tmp\/ocr-preview\.json/);
-  assert.match(workflow, /OCR_CONTEXT_PATH: \/tmp\/ocr-review-context\.json/);
+  assert.match(validationStep, /RUNNER_TEMP.*ocr-review-context\.json/);
+  assert.match(workflow, /OCR_PREVIEW_PATH: \$\{\{ runner\.temp \}\}\/ocr-preview\.json/);
+  assert.match(workflow, /OCR_CONTEXT_PATH: \$\{\{ runner\.temp \}\}\/ocr-review-context\.json/);
   assert.match(reviewStep, /ocr_review_context/);
   assert.match(reviewStep, /Do not call tools, execute commands, read files, access URLs/);
   assert.match(reviewStep, /evidence-backed/);

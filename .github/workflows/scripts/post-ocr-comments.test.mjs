@@ -18,7 +18,7 @@ async function createResultFile(content) {
   return resultPath;
 }
 
-function installHttpsMock(outcomes) {
+function installHttpsMock(outcomes, existingReviewComments = []) {
   const requests = [];
 
   mock.method(https, 'request', (options, callback) => {
@@ -29,9 +29,41 @@ function installHttpsMock(outcomes) {
       requestBody += chunk;
     };
     request.end = () => {
-      const outcome = outcomes.shift();
+      const isReviewCommentLookup = options.method === 'GET' &&
+        /\/pulls\/\d+\/comments\?per_page=/.test(options.path);
+      const isReviewThreadLookup = options.method === 'POST' && options.path === '/graphql';
+      const outcome = isReviewCommentLookup
+        ? { data: existingReviewComments, status: 200 }
+        : isReviewThreadLookup
+          ? {
+            data: {
+              data: {
+                node: {
+                  reviewThreads: {
+                    nodes: existingReviewComments.length > 0
+                      ? [{
+                        isResolved: false,
+                        comments: {
+                          nodes: existingReviewComments.map(comment => ({
+                            author: comment.user,
+                            body: comment.body,
+                            line: comment.line,
+                            outdated: false,
+                            path: comment.path,
+                          })),
+                        },
+                      }]
+                      : [],
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                  },
+                },
+              },
+            },
+            status: 200,
+          }
+          : outcomes.shift();
       assert.ok(outcome, 'received an unexpected GitHub API request');
-      if (!(options.method === 'GET' && options.path.includes('/comments?per_page='))) {
+      if (!options.path.includes('/comments?per_page=') && !isReviewThreadLookup) {
         requests.push({
           body: requestBody ? JSON.parse(requestBody) : undefined,
           method: options.method,
@@ -68,7 +100,7 @@ function validComment(body = 'Review this line') {
 
 function reviewSetup(outcomes, summaryOutcome = { data: {}, status: 201 }) {
   return [
-    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: { head: { sha: 'head-sha' }, node_id: 'PR_node_id' }, status: 200 },
     {
       data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }],
       status: 200,
@@ -382,9 +414,9 @@ test('skips OCR-format comments with invalid end_line or start_line', async () =
   assert.equal(warn.mock.calls.length, 2);
 });
 
-async function runWithResult(result, outcomes) {
+async function runWithResult(result, outcomes, existingReviewComments = []) {
   const resultPath = await createResultFile(result);
-  const requests = installHttpsMock(outcomes);
+  const requests = installHttpsMock(outcomes, existingReviewComments);
   const exitCode = await run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
@@ -429,6 +461,50 @@ test('posts one Summary issue comment with generated counts and all valid findin
       body: '## 📋 OpenCodeReview Summary\n<!-- antigravity-ocr-summary -->\n\n2 件のコメント / 2 ファイル / 所要時間: 1m2s\n\n| ファイル | コメント数 |\n| --- | --- |\n| `src/alpha.js` | 1 |\n| `src/beta.js` | 1 |\n\n```text\n[src/alpha.js:2]\nFirst finding\n\n[src/beta.js:4]\nSecond finding\n```\n\n---\n*Posted by OpenCodeReview*',
     },
   });
+});
+
+test('posts a zero-finding Summary when every finding was already posted', async () => {
+  const duplicate = validComment('The cpu-power-agent-hint is missing.');
+
+  const { exitCode, requests } = await runWithResult(
+    { comments: [duplicate], coverage: 1 },
+    reviewSetup([]),
+    [{
+      body: `\`\`\`\n${duplicate.body}\n\`\`\`\n\n---\n*Posted by OpenCodeReview*`,
+      line: duplicate.line,
+      path: duplicate.path,
+      user: { login: 'opencodereview-app[bot]' },
+    }],
+  );
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 3);
+  assert.match(requests[2].body.body, /0 件のコメント \/ 0 ファイル/);
+  assert.match(requests[2].body.body, /レビュー結果: 指摘なし/);
+  assert.doesNotMatch(requests[2].body.body, /cpu-power-agent-hint/);
+});
+
+test('summarizes only findings that remain after duplicate filtering', async () => {
+  const duplicate = validComment('The cpu-power-agent-hint is missing.');
+  const unique = validComment('A different finding on this line.');
+
+  const { exitCode, requests } = await runWithResult(
+    { comments: [duplicate, unique] },
+    reviewSetup([{ data: {}, status: 201 }]),
+    [{
+      body: `\`\`\`\n${duplicate.body}\n\`\`\`\n\n---\n*Posted by OpenCodeReview*`,
+      line: duplicate.line,
+      path: duplicate.path,
+      user: { login: 'opencodereview-app[bot]' },
+    }],
+  );
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests[2].body.comments.length, 1);
+  assert.match(requests[2].body.comments[0].body, /different finding/);
+  assert.match(requests[3].body.body, /1 件のコメント \/ 1 ファイル/);
+  assert.match(requests[3].body.body, /different finding/);
+  assert.doesNotMatch(requests[3].body.body, /cpu-power-agent-hint/);
 });
 
 test('sorts Summary file rows by UTF-16 code unit regardless of input order', async () => {
