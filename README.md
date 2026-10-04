@@ -126,7 +126,7 @@ sequenceDiagram
    - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
      最新の `head.sha` と `base.ref` を取得します。
    - 取得した `head.sha` を使って `POST /repos/{owner}/{repo}/check-runs` で
-     queued 状態の check run を作成します。初期リンクは対象PRを指し、実行開始後は該当する Actions 実行へ更新されます。
+     queued 状態の check run を作成します。初期リンクは `CHECK_RUN_DETAILS_URL` が未設定の場合に対象PRを指し、実行開始後は該当する Actions 実行へ更新されます。
      check run 名は `CHECK_RUN_NAME`（未設定時は `OpenCodeReview`）です。
    - 取得した `base.ref` は `base_ref` として `repository_dispatch` の payload に含まれます。
    - 作成した check run の ID は `check_run_id` として payload に含まれ、

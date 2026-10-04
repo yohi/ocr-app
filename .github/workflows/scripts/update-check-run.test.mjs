@@ -33,4 +33,17 @@ describe('buildCheckRunUpdate', () => {
     assert.match(update.output.summary, /LLM request timed out/);
     assert.match(update.output.summary, /owner\/repo\/pull\/42/);
   });
+
+  it('marks skipped review results as neutral', () => {
+    const update = buildCheckRunUpdate({
+      conclusion: 'success',
+      targetRepo: 'owner/repo',
+      prNumber: '42',
+      detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123',
+      result: { status: 'skipped' },
+    });
+
+    assert.equal(update.conclusion, 'neutral');
+    assert.equal(update.output.title, 'OpenCodeReview skipped');
+  });
 });
