@@ -20,7 +20,7 @@ GitHub App (Zero-YAML 構成) として提供するための専用バックエ�
 | `TARGET_DISPATCH_REPO` | いいえ | dispatch 先リポジトリ。未設定時は `yohi/ocr-app` |
 | `GITHUB_APP_SLUG` | はい | GitHub App の slug。mention 検出に使用。例: `opencodereview-app` |
 | `CHECK_RUN_NAME` | いいえ | PR Checks 欄に表示する check run 名。未設定時は `OpenCodeReview` |
-| `CHECK_RUN_DETAILS_URL` | いいえ | check run の詳細リンク。未設定時は対象リポジトリの Actions ページ |
+| `CHECK_RUN_DETAILS_URL` | いいえ | check run の詳細リンク。未設定時は対象PR |
 | `REQUIRED_LABEL` | いいえ | 自動レビュー発火に必要な PR ラベル名。未設定時は `review` |
 
 ### Webhook と GitHub App
@@ -126,11 +126,11 @@ sequenceDiagram
    - GitHub API で `GET /repos/{owner}/{repo}/pulls/{number}` を呼び出し、
      最新の `head.sha` と `base.ref` を取得します。
    - 取得した `head.sha` を使って `POST /repos/{owner}/{repo}/check-runs` で
-     queued 状態の check run を作成します。
+     queued 状態の check run を作成します。初期リンクは対象PRを指し、実行開始後は該当する Actions 実行へ更新されます。
      check run 名は `CHECK_RUN_NAME`（未設定時は `OpenCodeReview`）です。
    - 取得した `base.ref` は `base_ref` として `repository_dispatch` の payload に含まれます。
    - 作成した check run の ID は `check_run_id` として payload に含まれ、
-     `ocr-engine.yml` により in_progress → completed に更新されます。
+     `ocr-engine.yml` により in_progress → completed に更新されます。完了時にはレビュー概要・失敗理由とPR上のレビューコメントへのリンクも表示します。
 4. **`repository_dispatch` の送信**
    - `check_run_id` も含めて `open_code_review_trigger` タイプの dispatch を送信します。
    - 以降のフローは「GitHub Apps 経由の実行フロー」の Step 3 以降と同じです。

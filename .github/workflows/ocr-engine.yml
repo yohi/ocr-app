@@ -252,6 +252,7 @@ jobs:
           node self-repo/.github/workflows/scripts/check-pr-head.mjs
 
       - name: Post review comments
+        id: post-review
         if: always() && steps.target.outputs.internal == 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -279,12 +280,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           CHECK_RUN_ID: ${{ github.event.client_payload.check_run_id }}
           CONCLUSION: ${{ job.status == 'success' && 'success' || 'failure' }}
           DETAILS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REVIEW_URL: ${{ steps.post-review.outputs.review_url }}
+          RESULT_PATH: /tmp/ocr-result.json
         run: |
-          curl --fail-with-body -sS -X PATCH \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/$TARGET_REPO/check-runs/$CHECK_RUN_ID" \
-            -d "{\"status\":\"completed\",\"conclusion\":\"$CONCLUSION\",\"details_url\":\"$DETAILS_URL\"}"
+          node self-repo/.github/workflows/scripts/update-check-run.mjs
