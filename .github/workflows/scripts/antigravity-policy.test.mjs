@@ -7,6 +7,7 @@ const markdownRules = JSON.parse(fs.readFileSync(
   new URL('../config/markdown-review-rules.json', import.meta.url),
   'utf8',
 ));
+const pinnedOcrPackagePattern = /@alibaba-group\/open-code-review@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+)(?:\.(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?=\s|$)/;
 
 function stepRun(name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -34,7 +35,7 @@ function topLevelPermissions() {
 
 test('workflow executes only trusted workflow code and pinned tools', () => {
   assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
-  assert.match(workflow, /@alibaba-group\/open-code-review@1\.12\.9/);
+  assert.match(workflow, pinnedOcrPackagePattern);
   assert.match(workflow, /https:\/\/antigravity\.google\/cli\/install\.sh/);
   assert.match(workflow, /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /);
   assert.match(workflow, /prepare-ocr-review-context\.mjs/);
@@ -50,10 +51,19 @@ test('workflow installs OCR where the Antigravity shell can resolve it', () => {
 
   assert.match(
     installStep,
-    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts @alibaba-group\/open-code-review@1\.12\.9/,
+    /npm install -g --prefix "\$HOME\/\.local" --ignore-scripts /,
     'OCR must share the Antigravity-visible bin directory',
   );
+  assert.match(installStep, pinnedOcrPackagePattern);
   assert.match(installStep, /echo "\$HOME\/\.local\/bin" >> "\$GITHUB_PATH"/);
+});
+
+test('pinned OCR package pattern accepts valid SemVer and rejects malformed versions', () => {
+  assert.match('@alibaba-group/open-code-review@1.2.3-alpha.1+build.7', pinnedOcrPackagePattern);
+  assert.doesNotMatch('@alibaba-group/open-code-review@1.2.3trailing', pinnedOcrPackagePattern);
+  assert.doesNotMatch('@alibaba-group/open-code-review@1.2.3-alpha..1', pinnedOcrPackagePattern);
+  assert.doesNotMatch('@alibaba-group/open-code-review@01.2.3', pinnedOcrPackagePattern);
+  assert.doesNotMatch('@alibaba-group/open-code-review@1.2.3-alpha.01', pinnedOcrPackagePattern);
 });
 
 test('workflow prepares trusted review context before the context-only host', () => {

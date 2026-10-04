@@ -414,16 +414,35 @@ test('skips OCR-format comments with invalid end_line or start_line', async () =
   assert.equal(warn.mock.calls.length, 2);
 });
 
-async function runWithResult(result, outcomes, existingReviewComments = []) {
+async function runWithResult(result, outcomes, existingReviewComments = [], outputPath) {
   const resultPath = await createResultFile(result);
   const requests = installHttpsMock(outcomes, existingReviewComments);
   const exitCode = await run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
+    outputPath,
   });
 
   return { exitCode, requests };
 }
+
+test('exports the PR summary comment URL for the Check Run output', async () => {
+  // Given
+  const outputPath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'ocr-check-output-')), 'github-output');
+  temporaryDirectories.push(path.dirname(outputPath));
+  const outcomes = [
+    { data: [{ filename: 'src/example.js' }], status: 200 },
+    { data: [], status: 200 },
+    { data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-456' }, status: 201 },
+  ];
+
+  // When
+  const { exitCode } = await runWithResult({ status: 'success', findings: [] }, outcomes, [], outputPath);
+
+  // Then
+  assert.equal(exitCode, 0);
+  assert.equal(await fs.readFile(outputPath, 'utf8'), 'review_url=https://github.com/owner/repo/pull/123#issuecomment-456\n');
+});
 
 test('posts one Summary issue comment with generated counts and all valid findings', async () => {
   // Given

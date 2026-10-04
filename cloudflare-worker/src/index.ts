@@ -287,6 +287,7 @@ async function createCheckRun(
   token: string,
   repoOwner: string,
   repoName: string,
+  prNumber: number,
   headSha: string,
 ): Promise<number | null> {
   const abortController = new AbortController();
@@ -307,7 +308,7 @@ async function createCheckRun(
           name: env.CHECK_RUN_NAME || "OpenCodeReview",
           head_sha: headSha,
           status: "queued",
-          details_url: env.CHECK_RUN_DETAILS_URL || `https://github.com/${repoOwner}/${repoName}/actions`,
+          details_url: env.CHECK_RUN_DETAILS_URL || `https://github.com/${repoOwner}/${repoName}/pull/${prNumber}`,
         }),
         signal: abortController.signal,
       },
@@ -338,9 +339,10 @@ async function createCheckRunWithWarn(
   token: string,
   repoOwner: string,
   repoName: string,
+  prNumber: number,
   headSha: string,
 ): Promise<number | null> {
-  const checkRunId = await createCheckRun(env, token, repoOwner, repoName, headSha);
+  const checkRunId = await createCheckRun(env, token, repoOwner, repoName, prNumber, headSha);
   if (checkRunId === null) {
     console.warn("Proceeding without a progress check run because createCheckRun returned null");
   }
@@ -533,6 +535,7 @@ export default {
             token,
             repoOwner,
             repoName,
+            prNumber,
             payload.pull_request.head.sha,
           );
           const dispatchResponse = await sendRepositoryDispatch(env, token, {
@@ -616,6 +619,7 @@ export default {
             token,
             repoOwner,
             repoName,
+            prNumber,
             pullRequestPayload.head.sha,
           );
 

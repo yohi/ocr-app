@@ -24,7 +24,7 @@ function getArg(args, key) {
   return index >= 0 ? args[index + 1] : null;
 }
 
-function createConfig(args, token) {
+function createConfig(args, token, outputPath) {
   const repo = getArg(args, 'repo');
   const prNumber = getArg(args, 'pr');
   const resultPath = getArg(args, 'result');
@@ -37,7 +37,14 @@ function createConfig(args, token) {
     throw new CliError('GITHUB_TOKEN environment variable is required');
   }
 
-  return { prNumber, repo, resultPath, token };
+  return { outputPath, prNumber, repo, resultPath, token };
+}
+
+function writeReviewUrl(outputPath, response) {
+  const url = response.data?.html_url;
+  if (outputPath && typeof url === 'string' && !/[\r\n]/.test(url)) {
+    fs.appendFileSync(outputPath, `review_url=${url}\n`);
+  }
 }
 
 function readResult(resultPath) {
@@ -217,7 +224,7 @@ async function assertExpectedHead({ expectedSha, githubApi, prNumber }) {
   }
 }
 
-async function postSkipComment({ expectedSha, githubApi, prNumber, message }) {
+async function postSkipComment({ expectedSha, githubApi, outputPath, prNumber, message }) {
   await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
@@ -226,11 +233,12 @@ async function postSkipComment({ expectedSha, githubApi, prNumber, message }) {
     console.error(`Failed to post skip comment (HTTP ${response.status})`);
     return 1;
   }
+  writeReviewUrl(outputPath, response);
   console.log('Posted skip comment to PR');
   return 0;
 }
 
-async function postFailureComment({ expectedSha, githubApi, prNumber, message }) {
+async function postFailureComment({ expectedSha, githubApi, outputPath, prNumber, message }) {
   await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
@@ -239,12 +247,13 @@ async function postFailureComment({ expectedSha, githubApi, prNumber, message })
     console.error(`Failed to post failure comment (HTTP ${response.status})`);
     return 1;
   }
+  writeReviewUrl(outputPath, response);
   console.log('Posted failure comment to PR');
   return 0;
 }
 
 
-async function postSummaryComment({ botLogin, changedFiles, comments, expectedSha, githubApi, reviewMetadata, prNumber }) {
+async function postSummaryComment({ botLogin, changedFiles, comments, expectedSha, githubApi, outputPath, reviewMetadata, prNumber }) {
   const body = buildSummaryBody(comments, reviewMetadata, changedFiles);
   const existing = [];
   for (let page = 1; ; page++) {
@@ -272,6 +281,7 @@ async function postSummaryComment({ botLogin, changedFiles, comments, expectedSh
     console.error(`Failed to upsert Summary comment (HTTP ${response.status})`);
     return 1;
   }
+  writeReviewUrl(outputPath, response);
   console.log(`${matchingComment ? 'Updated' : 'Posted'} Summary comment for ${comments.length} review comments`);
   return 0;
 }
@@ -472,8 +482,9 @@ export async function run({
   token = process.env.GITHUB_TOKEN,
   botLogin = process.env.GH_APP_SLUG || 'opencodereview-app',
   expectedSha = process.env.EXPECTED_SHA,
+  outputPath = process.env.GITHUB_OUTPUT,
 } = {}) {
-  const config = createConfig(args, token);
+  const config = createConfig(args, token, outputPath);
   const result = readResult(config.resultPath);
   const githubApi = createGithubApi(config);
 
@@ -481,14 +492,14 @@ export async function run({
     const skipMessage = result.message
       ? `\u23ED\uFE0F OpenCodeReview skipped: ${result.message}`
       : '\u23ED\uFE0F OpenCodeReview skipped: No supported files changed.';
-    return postSkipComment({ expectedSha, githubApi, prNumber: config.prNumber, message: skipMessage });
+    return postSkipComment({ expectedSha, githubApi, outputPath, prNumber: config.prNumber, message: skipMessage });
   }
 
   if (result.status === 'failed') {
     const failureMessage = result.message || 'OpenCodeReview failed to complete the review.';
     const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n` +
       `If this persists, please check your LLM configuration and API key.`;
-    const exitCode = await postFailureComment({ expectedSha, githubApi, prNumber: config.prNumber, message: commentBody });
+    const exitCode = await postFailureComment({ expectedSha, githubApi, outputPath, prNumber: config.prNumber, message: commentBody });
     if (exitCode !== 0) {
       return exitCode;
     }
@@ -534,6 +545,7 @@ export async function run({
     comments: summaryComments,
     expectedSha,
     githubApi,
+    outputPath,
     reviewMetadata: {
       coverage: result.coverage,
       elapsed: result.summary?.elapsed,

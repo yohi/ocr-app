@@ -165,6 +165,7 @@ describe("issue_comment mention flow", () => {
     const checkRunBody = JSON.parse((checkRunCall[1] as RequestInit | undefined)?.body as string);
     expect(checkRunBody.status).toBe("queued");
     expect(checkRunBody.head_sha).toBe("abc123");
+    expect(checkRunBody.details_url).toBe("https://github.com/owner/repo/pull/1");
     expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
     expect((checkRunCall[1] as RequestInit | undefined)?.method).toBe("POST");
     expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
@@ -351,6 +352,8 @@ describe("pull_request opened flow", () => {
     expect(checkRunCall[0]).toBe("https://api.github.com/repos/owner/repo/check-runs");
     expect((checkRunCall[1] as RequestInit | undefined)?.method).toBe("POST");
     expect((checkRunCall[1] as RequestInit | undefined)?.body).toContain("queued");
+    const checkRunBody = JSON.parse((checkRunCall[1] as RequestInit | undefined)?.body as string);
+    expect(checkRunBody.details_url).toBe("https://github.com/owner/repo/pull/1");
     expect(dispatchCall[0]).toBe("https://api.github.com/repos/yohi/ocr-app/dispatches");
     const dispatchBody = JSON.parse((dispatchCall[1] as RequestInit | undefined)?.body as string);
     expect(dispatchBody.event_type).toBe("open_code_review_trigger");
