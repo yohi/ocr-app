@@ -198,19 +198,32 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
     const workspace = resolvePath(cwd);
-    const child = spawn('agy', [
-      '--add-dir', workspace,
-      '--sandbox',
-      '--disable-slash-commands',
-      '--model', effectiveModel,
-      '--input-format', 'stream-json',
-      '--output-format', 'stream-json',
-      '--print-timeout', `${printTimeoutMs}ms`,
-    ], {
-      cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: true,
-    });
+    let timer;
+    const earlyFinish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    let child;
+    try {
+      child = spawn('agy', [
+        '--add-dir', workspace,
+        '--sandbox',
+        '--disable-slash-commands',
+        '--model', effectiveModel,
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--print-timeout', `${printTimeoutMs}ms`,
+      ], {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
+      });
+    } catch (error) {
+      earlyFinish({ error, failureKind: 'spawn_failed' });
+      return;
+    }
     const appendOutput = (current, chunk) => {
       if (current.length >= MAX_OUTPUT_CHARS) return current;
       return current + String(chunk).slice(0, MAX_OUTPUT_CHARS - current.length);
@@ -250,8 +263,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       progressBuffer = '';
     };
     const removeOutputListeners = () => {
-      child.stdout?.removeListener('data', onStdout);
-      child.stderr?.removeListener('data', onStderr);
+      child?.stdout?.removeListener('data', onStdout);
+      child?.stderr?.removeListener('data', onStderr);
     };
     const killProcessTree = signal => {
       try {
@@ -271,8 +284,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       removeOutputListeners();
       resolve(result);
     };
-    const timer = setTimeout(() => {
-      finish({ error: new Error('Antigravity host timed out') });
+    timer = setTimeout(() => {
+      finish({ error: new Error('Antigravity host timed out'), failureKind: 'timeout' });
       killProcessTree('SIGTERM');
       setTimeout(() => killProcessTree('SIGKILL'), KILL_GRACE_PERIOD_MS);
     }, timeoutMs);
@@ -282,7 +295,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     child.once('error', error => {
       if (settled) return;
       flushProgress();
-      finish({ error });
+      finish({ error, failureKind: 'spawn_failed' });
     });
     child.once('close', (code, signal) => {
       if (settled) return;
@@ -297,7 +310,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
         finish({ parsed });
       } catch (err) {
         const errorDetail = stderr.trim() ? ` (stderr: ${stderr.trim()})` : '';
-        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`) });
+        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`), failureKind: 'invalid_output' });
       }
     });
     child.stdin.once('error', error => {
@@ -375,8 +388,8 @@ async function runMode({
   };
   const fixedFailure = code => complete(failure(mode, code));
 
-  if (typeof prompt !== 'string' || prompt.length === 0) return fixedFailure(enforce ? 'INVALID_FALLBACK_MODELS' : 'Prompt is required');
-  if (typeof cwd !== 'string' || cwd.length === 0) return fixedFailure(enforce ? 'INVALID_FALLBACK_MODELS' : 'Trusted working directory is required');
+  if (typeof prompt !== 'string' || prompt.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Prompt is required');
+  if (typeof cwd !== 'string' || cwd.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Trusted working directory is required');
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
@@ -396,11 +409,13 @@ async function runMode({
         typeof onAttemptEvent !== 'function' || !eligible(primary)) {
       return fixedFailure('INVALID_FALLBACK_MODELS');
     }
+    const allowedFallbacks = new Set(primary.allowed_fallbacks ?? []);
     const seen = new Set([effectiveModel]);
     fallbackCandidates = [];
     for (const id of fallbackModels) {
       const entry = typeof id === 'string' ? byId.get(id) : null;
-      if (!entry || !eligible(entry) || seen.has(id) || rank[entry.capability_tier] < rank[primary.capability_tier]) {
+      if (!entry || !eligible(entry) || seen.has(id) || !allowedFallbacks.has(id) ||
+          rank[entry.capability_tier] < rank[primary.capability_tier]) {
         return fixedFailure('INVALID_FALLBACK_MODELS');
       }
       seen.add(id);
@@ -445,8 +460,15 @@ async function runMode({
       let validatedResult;
       let validationMessage;
       if (childResult.error) {
-        const message = childResult.error.message;
-        attemptResult = isFallbackError(message) ? 'model_reported_failure' : /timed out/i.test(message) ? 'timeout' : /malformed JSON|JSON|payload/i.test(message) ? 'invalid_output' : 'transport_error';
+        if (childResult.failureKind === 'spawn_failed') attemptResult = 'spawn_failed';
+        else if (childResult.failureKind === 'timeout') attemptResult = 'timeout';
+        else {
+          const message = childResult.error.message;
+          if (isFallbackError(message)) attemptResult = 'model_reported_failure';
+          else if (/timed out|etimedout/i.test(message)) attemptResult = 'timeout';
+          else if (childResult.failureKind === 'invalid_output' || /malformed JSON|JSON|payload|Invalid payload/i.test(message)) attemptResult = 'invalid_output';
+          else attemptResult = 'transport_error';
+        }
       } else {
         try {
           if (mode === THREAD_MODE) {
