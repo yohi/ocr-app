@@ -22,7 +22,7 @@ function validExpectedBinding(binding) {
 }
 
 function validGrant(grant, binding) {
-  if (!grant || typeof grant !== 'object' || grant.allowed !== true || grant.destination !== 'openrouter-decisions') return false;
+  if (!grant || typeof grant !== 'object' || grant.schema_version !== '1' || grant.allowed !== true || grant.destination !== 'openrouter-decisions') return false;
   try {
     assertSerializedRunBindingMatches(binding, grant);
     return true;
@@ -76,10 +76,12 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
   if (typeof fetchImpl !== 'function' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return result('decision_unavailable', REASONS.invalid);
 
   const started = Date.now();
+  let response;
   try {
-    const response = await fetchImpl(URL, {
+    response = await fetchImpl(URL, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      redirect: 'error',
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
         model: 'inception/mercury-decide:free',
@@ -91,11 +93,21 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
         } },
       }),
     });
-    if (!response?.ok) return result('decision_unavailable', REASONS.http, { latencyMs: Date.now() - started });
-    const text = await readBoundedText(response);
-    const normalized = parseAnswer(JSON.parse(text));
-    return result('decision_available', null, { ...normalized, latencyMs: Date.now() - started });
   } catch {
     return result('decision_unavailable', REASONS.request, { latencyMs: Date.now() - started });
+  }
+  if (!response?.ok) return result('decision_unavailable', REASONS.http, { latencyMs: Date.now() - started });
+  let payload;
+  try {
+    const text = await readBoundedText(response);
+    payload = JSON.parse(text);
+  } catch {
+    return result('invalid_response', REASONS.response, { latencyMs: Date.now() - started });
+  }
+  try {
+    const normalized = parseAnswer(payload);
+    return result('decision_available', null, { ...normalized, latencyMs: Date.now() - started });
+  } catch {
+    return result('invalid_response', REASONS.response, { latencyMs: Date.now() - started });
   }
 }
