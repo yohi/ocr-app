@@ -10,14 +10,15 @@ import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunB
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
 
 const ROUTE_KEYS = Object.freeze([
-  'schema_version', 'effective_mode', 'workflow_run_id', 'run_attempt', 'head_sha',
-  'selected_strategy', 'proposed_strategy', 'selected_review_model', 'proposed_review_model',
-  'fallback_models', 'route_source', 'decision_status', 'decision_latency_ms', 'decision_api_cost',
+  'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status',
+  'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id',
+  'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
 ]);
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
 const STRATEGIES = ['fast', 'deep', null];
 const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid_response'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
+const ROUTE_STATUSES = ['prepared', 'no_reviewable_files', 'degraded', 'blocked'];
 const writtenRoutes = new Set();
 
 function routeError() { throw new Error('ROUTE_SCHEMA_INVALID'); }
@@ -25,23 +26,29 @@ function plainRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+function modelId(value, nullable = false) {
+  if (nullable && value === null) return;
+  if (typeof value !== 'string' || value.length > 128 || !MODEL_ID.test(value) || /[\r\n]/.test(value)) routeError();
+}
+
 function validateRoute(value) {
   if (!plainRecord(value)) routeError();
   const keys = Reflect.ownKeys(value);
   if (keys.length !== ROUTE_KEYS.length || keys.some(key => typeof key !== 'string' || !ROUTE_KEYS.includes(key) || value[key] === undefined)) routeError();
-  if (value.schema_version !== '1' || !['shadow', 'enforce'].includes(value.effective_mode) ||
+  if (value.schema_version !== '1' || !['shadow', 'enforce'].includes(value.effective_mode) || !ROUTE_STATUSES.includes(value.status) ||
       !/^[1-9][0-9]{0,31}$/.test(value.workflow_run_id) || !Number.isSafeInteger(value.run_attempt) || value.run_attempt < 1 ||
-      !/^[0-9a-f]{40}$/.test(value.head_sha) || !STRATEGIES.includes(value.selected_strategy) || !STRATEGIES.includes(value.proposed_strategy) ||
+      !/^[0-9a-f]{40}$/.test(value.head_sha) || !Number.isSafeInteger(value.reviewable_file_count) || value.reviewable_file_count < 0 ||
+      !STRATEGIES.includes(value.selected_strategy) || !STRATEGIES.includes(value.proposed_strategy) ||
       !DECISION_STATUSES.includes(value.decision_status) || !ROUTE_SOURCES.includes(value.route_source)) routeError();
-  for (const key of ['selected_review_model', 'proposed_review_model']) {
-    const model = value[key];
-    if (model !== null && (typeof model !== 'string' || model.length > 128 || !MODEL_ID.test(model) || /[\r\n]/.test(model))) routeError();
+  modelId(value.selected_model_id, true);
+  if (!Array.isArray(value.fallback_models) || value.fallback_models.length > 16 || new Set(value.fallback_models).size !== value.fallback_models.length) routeError();
+  for (const fallback of value.fallback_models) modelId(fallback);
+  for (const key of ['policy_version', 'model_catalog_version']) {
+    if (typeof value[key] !== 'string' || value[key].length < 1 || value[key].length > 128 || /[\r\n]/.test(value[key])) routeError();
   }
-  if (value.fallback_models !== null && value.fallback_models !== undefined &&
-      (!Array.isArray(value.fallback_models) || value.fallback_models.length > 16 || value.fallback_models.some(model => typeof model !== 'string' || model.length > 128 || !MODEL_ID.test(model) || /[\r\n]/.test(model)) || new Set(value.fallback_models).size !== value.fallback_models.length)) routeError();
-  for (const key of ['decision_latency_ms', 'decision_api_cost']) {
-    if (value[key] !== null && (typeof value[key] !== 'number' || !Number.isFinite(value[key]) || value[key] < 0)) routeError();
-  }
+  if (value.effective_mode === 'shadow' && (value.selected_model_id !== null || value.fallback_models.length !== 0 || value.selected_strategy !== null)) routeError();
+  if (value.status === 'no_reviewable_files' && value.reviewable_file_count !== 0) routeError();
+  if (value.route_source === 'not_requested' && value.reviewable_file_count !== 0) routeError();
   return value;
 }
 
@@ -58,24 +65,42 @@ export function loadRouteFromFile(path, fileSystem = fs) {
   return Object.freeze({ ...route, fallback_models: route.fallback_models === null || route.fallback_models === undefined ? route.fallback_models : Object.freeze([...route.fallback_models]) });
 }
 
+export function serializeSelectedReviewRoute({ route, runBinding, policyVersions }) {
+  assertRunBindingValid(runBinding);
+  if (!plainRecord(route) || !plainRecord(policyVersions)) routeError();
+  const serialized = {
+    schema_version: '1',
+    workflow_run_id: runBinding.workflowRunId,
+    run_attempt: runBinding.runAttempt,
+    head_sha: runBinding.headSha,
+    effective_mode: runBinding.mode,
+    status: route.status,
+    reviewable_file_count: route.reviewableCount,
+    proposed_strategy: route.proposedStrategy,
+    selected_strategy: route.selectedStrategy,
+    selected_model_id: route.selectedModelId ?? route.selectedReviewModel ?? null,
+    fallback_models: runBinding.mode === 'shadow' ? [] : [...route.fallbackModels],
+    route_source: route.routeSource,
+    decision_status: route.decisionStatus,
+    policy_version: policyVersions.policyVersion,
+    model_catalog_version: policyVersions.modelCatalogVersion,
+  };
+  validateRoute(serialized);
+  return Object.freeze({ ...serialized, fallback_models: Object.freeze([...serialized.fallback_models]) });
+}
+
 export function readSelectedReviewRoute({ runBinding, runTemp, fs: fileSystem = fs }) {
   assertRunBindingValid(runBinding);
-  const route = loadRouteFromFile(join(runTemp, 'ocr-routing', 'route.json'), fileSystem);
+  const route = loadRouteFromFile(join(runTemp, 'ocr-selected-route.json'), fileSystem);
   assertSerializedRunBindingMatches(runBinding, route);
   assertRunBindingEquals(runBinding, { workflowRunId: route.workflow_run_id, runAttempt: route.run_attempt, headSha: route.head_sha, mode: route.effective_mode });
   return route;
 }
 
-export function writeSelectedReviewRoute({ runTemp, route, runBinding, fs: fileSystem = fs }) {
-  validateRoute(route);
-  assertRunBindingValid(runBinding);
-  assertSerializedRunBindingMatches(runBinding, route);
-  assertRunBindingEquals(runBinding, { workflowRunId: route.workflow_run_id, runAttempt: route.run_attempt, headSha: route.head_sha, mode: route.effective_mode });
-  const directory = join(runTemp, 'ocr-routing');
-  const path = join(directory, 'route.json');
+export function writeSelectedReviewRoute({ runTemp, result, fs: fileSystem = fs }) {
+  const route = serializeSelectedReviewRoute(result);
+  const path = join(runTemp, 'ocr-selected-route.json');
   if (writtenRoutes.has(path)) throw new Error('ROUTE_ALREADY_WRITTEN');
-  fileSystem.mkdirSync(directory, { recursive: true, mode: 0o700 });
-  fileSystem.chmodSync(directory, 0o700);
   fileSystem.writeFileSync(path, `${JSON.stringify(route)}\n`, { mode: 0o600, flag: 'wx' });
   fileSystem.chmodSync(path, 0o600);
   writtenRoutes.add(path);
@@ -98,20 +123,21 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: { ...binding, destination: 'openrouter-decisions' }, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
   }
   const resolved = selectReviewRoute({ mode: binding.mode, features, decision, certifiedCatalog: catalog, runBinding: binding });
-  const route = validateRoute({
-    schema_version: '1', effective_mode: binding.mode, workflow_run_id: binding.workflowRunId,
-    run_attempt: binding.runAttempt, head_sha: binding.headSha,
-    selected_strategy: resolved.selectedStrategy, proposed_strategy: resolved.proposedStrategy,
-    selected_review_model: resolved.selectedReviewModel, proposed_review_model: resolved.proposedReviewModel,
-    fallback_models: resolved.fallbackModels, route_source: resolved.routeSource,
-    decision_status: resolved.decisionStatus === 'egress_denied' ? 'unavailable' : resolved.decisionStatus,
-    decision_latency_ms: decision.latencyMs ?? null, decision_api_cost: decision.cost ?? null,
-  });
-  const auditRoute = { ...resolved, decisionStatus: route.decision_status };
+  const normalizedDecisionStatus = resolved.decisionStatus === 'egress_denied' ? 'unavailable' : resolved.decisionStatus;
+  const auditRoute = { ...resolved, decisionStatus: normalizedDecisionStatus };
   const record = createRoutingDecisionRecord({ runBinding: binding, features, decision, egressStatus, route: auditRoute, policyVersions: { policyVersion: policy.policy_version, modelCatalogVersion: catalog.catalog_version } });
+  const policyVersions = { policyVersion: policy.policy_version, modelCatalogVersion: catalog.catalog_version };
+  const routeResult = {
+    ...resolved,
+    status: features.reviewable_file_count === 0 ? 'no_reviewable_files' : normalizedDecisionStatus === 'succeeded' ? 'prepared' : 'degraded',
+    decisionStatus: normalizedDecisionStatus,
+    reviewableCount: features.reviewable_file_count,
+    selectedModelId: resolved.selectedReviewModel,
+  };
+  const serializedRoute = serializeSelectedReviewRoute({ route: routeResult, runBinding: binding, policyVersions });
   writeRoutingDecision({ runTemp: env.RUNNER_TEMP, record });
-  writeSelectedReviewRoute({ runTemp: env.RUNNER_TEMP, route, runBinding: binding, fs: fileSystem });
-  fileSystem.writeFileSync(join(env.RUNNER_TEMP, 'ocr-routing-state.json'), `${JSON.stringify({ review_scope_gap: features.review_scope_gap, features_incomplete: features.features_incomplete })}\n`, { mode: 0o600, flag: 'wx' });
+  writeSelectedReviewRoute({ runTemp: env.RUNNER_TEMP, result: { route: routeResult, runBinding: binding, policyVersions }, fs: fileSystem });
+  fileSystem.writeFileSync(join(env.RUNNER_TEMP, 'ocr-routing-state.json'), `${JSON.stringify({ review_scope_gap: features.review_scope_gap, features_incomplete: features.features_incomplete, owner_approval_ref: grant.approval_ref })}\n`, { mode: 0o600, flag: 'wx' });
   fileSystem.chmodSync(join(env.RUNNER_TEMP, 'ocr-routing-state.json'), 0o600);
-  return { route, decisionRecord: record, egressStatus };
+  return { route: serializedRoute, decisionRecord: record, egressStatus };
 }

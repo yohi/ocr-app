@@ -10,6 +10,9 @@ test('workflow preserves off mode and confines routing dependency and secret set
   assert.match(workflow, /secrets\.DECISION_OPENROUTER_API_KEY/);
   assert.match(workflow, /name: Prepare dynamic routing/);
   assert.match(workflow, /DECISION_ROUTING_MODE.*==.*off/);
+  const host = workflow.split('- name: Run Antigravity review host')[1]?.split('- name:')[0] ?? '';
+  assert.doesNotMatch(host, /import .*prepare-review-routing\.mjs/);
+  assert.match(host, /await import\('\.\/self-repo\/\.github\/workflows\/scripts\/prepare-review-routing\.mjs'\)/);
 });
 
 test('host has an independent run-binding guard before any spawn', () => {
@@ -18,6 +21,7 @@ test('host has an independent run-binding guard before any spawn', () => {
   assert.match(host, /readSelectedReviewRoute/);
   assert.ok(host.indexOf('readSelectedReviewRoute') < host.indexOf('runHost('));
   assert.match(host, /fallbackModels/);
+  assert.match(host, /runAttemptId: recorder\.runAttemptId/);
 });
 
 test('enforce publication requires a successful audit artifact gate and fresh HEAD check', () => {
@@ -48,7 +52,7 @@ test('mode branches retain the exact legacy host call in off mode', () => {
   const host = workflow.split('- name: Run Antigravity review host')[1]?.split('- name:')[0] ?? '';
   assert.match(host, /mode === 'off'.*runHost\(\{ cwd: 'target-repo', prompt, onProgress: chunk => process\.stderr\.write\(chunk\) \}\)/s);
   assert.match(host, /mode === 'shadow' && !route/);
-  assert.match(host, /mode === 'enforce' \? \{ model: route\.selected_review_model, fallbackModels: route\.fallback_models/);
+  assert.match(host, /mode === 'enforce' \? \{ model: route\.selected_model_id, fallbackModels: route\.fallback_models/);
 });
 
 test('shadow route absence keeps best-effort legacy review without consuming route data', () => {
@@ -56,4 +60,28 @@ test('shadow route absence keeps best-effort legacy review without consuming rou
   assert.match(host, /mode === 'shadow' && !route/);
   assert.match(host, /if \(route \|\| mode === 'enforce' \|\| mode === 'shadow'\)/);
   assert.match(host, /assertSerializedRunBindingMatches\(binding, decisionRecord\)/);
+});
+
+test('host guard failure prevents shadow resolver and poster mutations', () => {
+  const host = workflow.split('- name: Run Antigravity review host')[1]?.split('- name:')[0] ?? '';
+  const resolver = workflow.split('- name: Resolve fixed review threads')[1]?.split('- name:')[0] ?? '';
+  const poster = workflow.split('- name: Post review comments')[1]?.split('- name:')[0] ?? '';
+  assert.match(host, /ROUTE_GUARD_FAILED=true/);
+  assert.match(resolver, /steps\.host-review\.outputs\.ROUTE_GUARD_FAILED != 'true'/);
+  assert.match(poster, /steps\.host-review\.outputs\.ROUTE_GUARD_FAILED != 'true'/);
+});
+
+test('routing dependencies are limited to explicit shadow and enforce modes', () => {
+  assert.match(workflow, /name: Validate decision routing mode/);
+  const routing = workflow.split('- name: Prepare dynamic routing')[1]?.split('- name:')[0] ?? '';
+  assert.match(routing, /env\.DECISION_ROUTING_MODE == 'shadow'.*env\.DECISION_ROUTING_MODE == 'enforce'/);
+  assert.doesNotMatch(routing, /DECISION_ROUTING_MODE != 'off'/);
+});
+
+test('audit finalizer gets model IDs from the canonical route and approval from validated egress state', () => {
+  const finalizer = workflow.split('- name: Finalize routing audit')[1]?.split('- name:')[0] ?? '';
+  assert.match(finalizer, /readSelectedReviewRoute/);
+  assert.match(finalizer, /ownerApprovalRef: routingState\.owner_approval_ref/);
+  assert.match(finalizer, /selectedReviewModel/);
+  assert.match(finalizer, /proposedReviewModel/);
 });

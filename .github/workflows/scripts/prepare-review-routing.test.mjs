@@ -1,15 +1,21 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
   createRunBindingFromEnv, loadRouteFromFile, readSelectedReviewRoute,
-  writeSelectedReviewRoute, prepareRoutingStep,
+  serializeSelectedReviewRoute, writeSelectedReviewRoute, prepareRoutingStep,
 } from './prepare-review-routing.mjs';
 
 const env = mode => ({ GITHUB_RUN_ID: '9007199254740993', GITHUB_RUN_ATTEMPT: '2', COMMIT_SHA: 'a'.repeat(40), DECISION_ROUTING_MODE: mode });
-const route = () => ({ schema_version: '1', effective_mode: 'shadow', workflow_run_id: '9007199254740993', run_attempt: 2, head_sha: 'a'.repeat(40), selected_strategy: null, proposed_strategy: 'deep', selected_review_model: null, proposed_review_model: 'claude-opus-4-6-thinking', fallback_models: [], route_source: 'deterministic_fallback', decision_status: 'unavailable', decision_latency_ms: null, decision_api_cost: null });
+const binding = () => createRunBindingFromEnv(env('shadow'));
+const preparation = () => ({
+  route: { status: 'degraded', reviewableCount: 2, selectedStrategy: null, proposedStrategy: 'deep', selectedReviewModel: null, fallbackModels: [], routeSource: 'deterministic_fallback', decisionStatus: 'unavailable' },
+  runBinding: binding(),
+  policyVersions: { policyVersion: '1.0.0', modelCatalogVersion: '1.2.0' },
+});
+const route = () => serializeSelectedReviewRoute(preparation());
 
 test('run binding keeps canonical run ID and freezes runner identity', () => {
   const binding = createRunBindingFromEnv(env('shadow'));
@@ -18,25 +24,39 @@ test('run binding keeps canonical run ID and freezes runner identity', () => {
   assert.equal(Object.isFrozen(binding), true);
 });
 
-test('route writer and reader enforce exact schema, binding, and private permissions', () => {
+test('route serializer emits the exact 15-key contract and writer seals the standalone route privately', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-'));
   try {
-    writeSelectedReviewRoute({ runTemp, route: route(), runBinding: createRunBindingFromEnv(env('shadow')) });
-    const path = join(runTemp, 'ocr-routing', 'route.json');
-    assert.equal(statSync(join(runTemp, 'ocr-routing')).mode & 0o777, 0o700);
+    const serialized = route();
+    assert.deepEqual(Object.keys(serialized), ['schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status', 'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id', 'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version']);
+    const path = join(runTemp, 'ocr-selected-route.json');
+    writeSelectedReviewRoute({ runTemp, result: preparation() });
     assert.equal(statSync(path).mode & 0o777, 0o600);
-    assert.deepEqual(readSelectedReviewRoute({ runBinding: createRunBindingFromEnv(env('shadow')), runTemp }), route());
-    assert.throws(() => writeSelectedReviewRoute({ runTemp, route: route(), runBinding: createRunBindingFromEnv(env('shadow')) }));
+    assert.deepEqual(readSelectedReviewRoute({ runBinding: binding(), runTemp }), serialized);
+    assert.throws(() => writeSelectedReviewRoute({ runTemp, result: preparation() }));
     const invalid = { ...route(), extra: 'no' };
     assert.throws(() => loadRouteFromFile(path, { readFileSync: () => JSON.stringify(invalid) }));
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
+});
+
+test('enforce route carries only selected certified execution fields', () => {
+  const routeInput = {
+    route: { status: 'prepared', reviewableCount: 1, selectedStrategy: 'deep', proposedStrategy: 'deep', selectedReviewModel: 'model/deep', fallbackModels: ['model/deep-fallback'], routeSource: 'deterministic_fallback', decisionStatus: 'unavailable' },
+    runBinding: createRunBindingFromEnv(env('enforce')),
+    policyVersions: { policyVersion: '1.0.0', modelCatalogVersion: '1.2.0' },
+  };
+  const serialized = serializeSelectedReviewRoute(routeInput);
+  assert.equal(serialized.selected_model_id, 'model/deep');
+  assert.deepEqual(serialized.fallback_models, ['model/deep-fallback']);
+  assert.equal(Object.hasOwn(serialized, 'decision_latency_ms'), false);
+  assert.equal(Object.hasOwn(serialized, 'selected_review_model'), false);
 });
 
 test('saved route binding mismatch fails before a caller can spawn Host', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-mismatch-'));
   let spawnCount = 0;
   try {
-    writeSelectedReviewRoute({ runTemp, route: route(), runBinding: createRunBindingFromEnv(env('shadow')) });
+    writeSelectedReviewRoute({ runTemp, result: preparation() });
     assert.throws(() => {
       readSelectedReviewRoute({ runBinding: createRunBindingFromEnv({ ...env('shadow'), GITHUB_RUN_ATTEMPT: '3' }), runTemp });
       spawnCount++;
@@ -75,10 +95,11 @@ for (const mode of ['shadow', 'enforce']) {
       assert.equal(networkCalls, 1);
       assert.equal(result.route.decision_status, 'not_requested');
       assert.equal(result.decisionRecord.effective_mode, mode);
-      assert.equal(existsSync(join(runTemp, 'ocr-routing', 'route.json')), true);
+      assert.equal(existsSync(join(runTemp, 'ocr-selected-route.json')), true);
       assert.equal(existsSync(join(runTemp, 'ocr-routing', 'decision.json')), true);
-      assert.equal(statSync(join(runTemp, 'ocr-routing', 'route.json')).mode & 0o777, 0o600);
+      assert.equal(statSync(join(runTemp, 'ocr-selected-route.json')).mode & 0o777, 0o600);
       assert.equal(statSync(join(runTemp, 'ocr-routing', 'decision.json')).mode & 0o777, 0o600);
+      assert.equal(JSON.parse(readFileSync(join(runTemp, 'ocr-routing-state.json'), 'utf8')).owner_approval_ref, null);
     } finally { rmSync(runTemp, { recursive: true, force: true }); }
   });
 }
