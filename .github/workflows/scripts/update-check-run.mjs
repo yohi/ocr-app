@@ -1,5 +1,13 @@
 import fs from 'node:fs';
 
+const ROUTING_FAILURE_REASONS = new Set([
+  'REVIEW_EXECUTION_FAILED', 'HOST_TIMEOUT', 'INVALID_REVIEW_OUTPUT', 'ROUTING_AUDIT_MISSING',
+  'ARTIFACT_UPLOAD_FAILED', 'MISSING_ARTIFACT_ID', 'AUDIT_INCOMPLETE', 'AUDIT_NOT_SEALED',
+  'REVIEW_VALIDATION_FAILED', 'HEAD_VALIDATION_FAILED', 'HEAD_MISMATCH', 'HEAD_CHANGED',
+  'REVIEW_SCOPE_GAP_BLOCKED', 'MODEL_NOT_CERTIFIED', 'EGRESS_NOT_APPROVED',
+  'CHECK_RUN_MISSING', 'PUBLISH_FAILED', 'RUN_BINDING_INVALID', 'RUN_BINDING_MISMATCH',
+]);
+
 function failureDetails(result) {
   if (typeof result?.message !== 'string' || result.message.length === 0) return '';
   const runs = result.message.match(/`+/g) || [];
@@ -7,7 +15,7 @@ function failureDetails(result) {
   return `\n\nFailure details:\n${fence}\n${result.message}\n${fence}`;
 }
 
-export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result }) {
+export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result, enforce = false, routingFailureReason = null }) {
   const pullRequestUrl = `https://github.com/${targetRepo}/pull/${prNumber}`;
   const resultUrl = reviewUrl || pullRequestUrl;
   const isFailure = conclusion === 'failure' || result?.status === 'failed';
@@ -18,14 +26,17 @@ export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUr
       ? 'OpenCodeReview skipped'
       : 'OpenCodeReview completed';
   const status = isFailure ? 'failure' : isSkipped ? 'neutral' : 'success';
+  const safeReason = ROUTING_FAILURE_REASONS.has(routingFailureReason) ? routingFailureReason : 'REVIEW_EXECUTION_FAILED';
   const summary = [
-    isFailure
+    enforce && isFailure
+      ? `レビューを完了できませんでした。理由: ${safeReason}.`
+      : isFailure
       ? `レビューを完了できませんでした。[PRの失敗コメントを確認](<${resultUrl}>).`
       : isSkipped
         ? `レビューはスキップされました。[PRを確認](<${pullRequestUrl}>).`
         : `レビューが完了しました。[レビュー概要とコメントを確認](<${resultUrl}>).`,
     `[この実行のログを確認](<${detailsUrl}>)`,
-    failureDetails(result),
+    enforce ? '' : failureDetails(result),
   ].filter(Boolean).join('\n\n');
 
   return {
@@ -47,6 +58,8 @@ export async function updateCheckRun({ env = process.env, fetchImpl = fetch } = 
     reviewUrl: env.REVIEW_URL,
     detailsUrl: env.DETAILS_URL,
     result,
+    enforce: env.DECISION_ROUTING_MODE === 'enforce',
+    routingFailureReason: env.ROUTING_FAILURE_REASON ?? null,
   });
   const response = await fetchImpl(
     `${env.GITHUB_API_URL || 'https://api.github.com'}/repos/${env.TARGET_REPO}/check-runs/${env.CHECK_RUN_ID}`,
@@ -66,7 +79,7 @@ export async function updateCheckRun({ env = process.env, fetchImpl = fetch } = 
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   updateCheckRun().catch((error) => {
-    console.error(error.message);
+    console.error(process.env.DECISION_ROUTING_MODE === 'enforce' ? 'Check Run update failed' : error.message);
     process.exitCode = 1;
   });
 }
