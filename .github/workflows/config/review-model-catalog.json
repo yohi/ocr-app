@@ -1,0 +1,33 @@
+{
+  "schema_version": "1",
+  "catalog_version": "1.0.0",
+  "models": [
+    {
+      "model_id": "gemini-3.8-flash-medium",
+      "capability_tier": "fast",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [
+        "claude-opus-4-6-thinking"
+      ],
+      "catalog_version": "1.0.0"
+    },
+    {
+      "model_id": "claude-opus-4-6-thinking",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.0"
+    }
+  ],
+  "strategies": {
+    "fast": {
+      "preferred_model_id": "gemini-3.8-flash-medium"
+    },
+    "deep": {
+      "preferred_model_id": "claude-opus-4-6-thinking"
+    }
+  },
+  "unknown_risk_strategy": "deep"
+}
