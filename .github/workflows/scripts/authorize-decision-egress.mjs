@@ -54,7 +54,7 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRep
   const entry = policyEntries(policy).find(item => item && typeof item === 'object' && item.id === body?.id && item.full_name === body?.full_name && approvalValid(item.approval_ref, policy?.approval_reference_format));
   const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && checkoutName(checkoutRepo) === target.toLowerCase() && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
   return {
-    schema_version: '1', allowed, reason: allowed ? REASONS.authorized : apiValid && visibility === VISIBILITY.unknown ? 'visibility_unknown' : REASONS.denied, visibility,
+    schema_version: '1', allowed, reason: allowed ? REASONS.authorized : REASONS.denied, visibility,
     repo_id: apiValid ? body.id : 0, full_name: apiValid ? body.full_name : target,
     head_sha: typeof headSha === 'string' ? headSha : '', workflow_run_id: typeof runBinding?.workflowRunId === 'string' ? runBinding.workflowRunId : '',
     run_attempt: typeof runBinding?.runAttempt === 'number' ? runBinding.runAttempt : 0, destination: DESTINATION,

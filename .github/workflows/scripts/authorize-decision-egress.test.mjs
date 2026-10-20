@@ -25,7 +25,7 @@ for (const [name, body] of [['private', { ...repo, private: true, visibility: 'p
 test('denies contradictory visibility as unknown', async () => {
   const grant = await execute({ ...repo, private: false, visibility: 'private' });
   assert.equal(grant.visibility, 'visibility_unknown');
-  assert.equal(grant.reason, 'visibility_unknown');
+  assert.equal(grant.reason, 'egress_denied');
   assert.equal(grant.allowed, false);
 });
 

@@ -29,3 +29,10 @@ Implemented and committed with message `feat(ocr): リポジトリ単位で決�
 - Added regression tests for grant-shaped bindings, empty/incomplete bindings, invalid modes and identifiers, contradictory visibility, policy-format mismatches, malformed policy and a hanging fetch.
 - `node --test .github/workflows/scripts/ocr-run-binding.test.mjs .github/workflows/scripts/authorize-decision-egress.test.mjs` — PASS, 33/33.
 - `node --test .github/workflows/scripts/*.test.mjs` — PASS, 217/217.
+
+## Fix round 2/5
+
+- Standardized every denied authorization result to `reason: 'egress_denied'`; `visibility: 'visibility_unknown'` remains available as a separate classification.
+- Updated the contradictory-visibility regression assertion. Other denial cases continue to assert `egress_denied`.
+- `node --test .github/workflows/scripts/ocr-run-binding.test.mjs .github/workflows/scripts/authorize-decision-egress.test.mjs` — PASS, 33/33.
+- `node --test .github/workflows/scripts/*.test.mjs` — PASS, 217/217.
