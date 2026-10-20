@@ -105,15 +105,15 @@ test('keeps Task 3 classification fail-closed and derives families and areas fro
 test('missing raw mode or numstat is incomplete and remains deep risk', async () => {
   const head = 'b'.repeat(40);
   const base = 'a'.repeat(40);
-  const runWith = (rawMode, numstat = nul('1\t0\tx.bin')) => {
-    const outputs = [Buffer.from(`${head}\n`), Buffer.from(`${base}\n`), nul('M', 'x.bin'), numstat, rawMode];
+  const runWith = (rawMode, numstat = nul('1\t0\tx.bin'), nameStatus = nul('M', 'x.bin')) => {
+    const outputs = [Buffer.from(`${head}\n`), Buffer.from(`${base}\n`), nameStatus, numstat, rawMode];
     return extractPRFeatures({ cwd: '.', baseRef: 'main', headSha: head, preview: { reviewable_files: [] }, runGit: async () => outputs.shift() });
   };
   const absentRaw = await runWith(Buffer.alloc(0));
   assert.equal(absentRaw.features_incomplete, true);
   assert.equal(absentRaw.classification_status, 'incomplete');
   assert.equal(absentRaw.risk_floor, 'deep');
-  const missingStat = await runWith(Buffer.from(`:100644 100644 ${base} ${head} R100\0old\0new\0`), Buffer.alloc(0));
+  const missingStat = await runWith(Buffer.from(`:100644 100644 ${base} ${head} M\0x.bin\0`), Buffer.alloc(0));
   assert.equal(missingStat.features_incomplete, true);
   assert.equal(missingStat.risk_floor, 'deep');
   const modeOnly = await runWith(Buffer.from(`:100644 100755 ${base} ${head} M\0x.bin\0`), nul('0\t0\tx.bin'));
@@ -127,7 +127,7 @@ test('missing raw mode or numstat is incomplete and remains deep risk', async ()
   assert.equal(missingModeChangeStat.features_incomplete, true);
   assert.equal(missingModeChangeStat.classification_status, 'incomplete');
   assert.equal(missingModeChangeStat.risk_floor, 'deep');
-  const missingAdditionStat = await runWith(Buffer.from(`:000000 100644 ${base} ${head} A\0new.bin\0`), Buffer.alloc(0));
+  const missingAdditionStat = await runWith(Buffer.from(`:000000 100644 ${base} ${head} A\0new.bin\0`), Buffer.alloc(0), nul('A', 'new.bin'));
   assert.equal(missingAdditionStat.features_incomplete, true);
   assert.equal(missingAdditionStat.risk_floor, 'deep');
 });
@@ -161,10 +161,11 @@ test('invalid refs, missing merge-base, and output overflow fail closed', async 
   });
   await t.test('missing merge-base yields incomplete deep-risk features', async () => {
     let call = 0;
-    const features = await extractPRFeatures({ ...valid, runGit: async () => { call++; if (call === 1) return Buffer.from(`${'a'.repeat(40)}\n`); if (call === 2) return Buffer.alloc(0); return Buffer.alloc(0); } });
+    const features = await extractPRFeatures({ ...valid, runGit: async () => { call++; if (call === 1) return Buffer.from(`${valid.headSha}\n`); if (call === 2) return Buffer.alloc(0); return Buffer.alloc(0); } });
     assert.equal(features.features_incomplete, true);
     assert.equal(features.classification_status, 'incomplete');
     assert.equal(features.risk_floor, 'deep');
+    assert.equal(call, 2);
   });
   await t.test('caps output size and fails closed', async () => {
     const features = await extractPRFeatures({ ...valid, maxOutputBytes: 8, runGit: async () => Buffer.alloc(64, 65) });

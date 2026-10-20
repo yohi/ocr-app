@@ -33,11 +33,7 @@ function isNormalTextChange(file) {
     file.additions !== null && file.deletions !== null && file.oldPath === undefined;
 }
 
-export function classifyPRRisk(features, trustedRiskPolicy) {
-  validPolicy(trustedRiskPolicy);
-  if (!features || typeof features !== 'object') throw new Error('Features must be an object');
-  const files = features.all_changed_files;
-  if (!Array.isArray(files)) return { ...features, classification_status: 'incomplete', risk_floor: 'deep' };
+function collectFileSummary(files) {
   const paths = [];
   let validRecords = files.length > 0;
   let code = false;
@@ -52,13 +48,20 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
     known &&= isKnownStatus(file.status);
     normalText &&= isNormalTextChange(file);
   }
-  const validCount = value => Number.isSafeInteger(value) && value >= 0;
   const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || file.oldMode !== file.mode));
-  const incomplete = features.features_incomplete !== false || !validRecords ||
+  return { paths, validRecords, code, known, normalText, unsafeMode };
+}
+
+function isIncomplete(features, files, validRecords) {
+  const validCount = value => Number.isSafeInteger(value) && value >= 0;
+  return features.features_incomplete !== false || !validRecords ||
     !validCount(features.all_changed_file_count) || features.all_changed_file_count !== files.length ||
     !validCount(features.reviewable_file_count) || !validCount(features.excluded_file_count) ||
     !validCount(features.additions) || !validCount(features.deletions) ||
     typeof features.review_scope_gap !== 'boolean' || !Array.isArray(features.ocr_reviewable_paths);
+}
+
+function decideStatus(features, { paths, code, known, normalText, unsafeMode }, incomplete, trustedRiskPolicy) {
   const signalsKnown = ['metadata_positive', 'metadata_not_observed', 'unassessable'].includes(features.security_signal) && ['metadata_positive', 'metadata_not_observed', 'unassessable'].includes(features.migration_signal);
   let classification_status;
   if (incomplete) classification_status = 'incomplete';
@@ -67,8 +70,19 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
   else if (unsafeMode) classification_status = 'unclassified_other';
   else if (code) classification_status = 'unclassified_code';
   else if (!known || paths.some(path => !pathsMatch([path], trustedRiskPolicy.allow_paths)) || pathsMatch(paths, trustedRiskPolicy.deny_paths)) classification_status = 'unclassified_other';
-  else if (files.every(file => normalText) && features.security_signal === 'metadata_not_observed' && features.migration_signal === 'metadata_not_observed' && features.features_incomplete === false && features.review_scope_gap === false) classification_status = 'allowlisted_docs_only';
+  else if (normalText && features.security_signal === 'metadata_not_observed' && features.migration_signal === 'metadata_not_observed' && features.features_incomplete === false && features.review_scope_gap === false) classification_status = 'allowlisted_docs_only';
   else classification_status = 'unclassified_other';
   if (!CLASSES.has(classification_status)) throw new Error('Risk classification failed');
+  return classification_status;
+}
+
+export function classifyPRRisk(features, trustedRiskPolicy) {
+  validPolicy(trustedRiskPolicy);
+  if (!features || typeof features !== 'object') throw new Error('Features must be an object');
+  const files = features.all_changed_files;
+  if (!Array.isArray(files)) return { ...features, classification_status: 'incomplete', risk_floor: 'deep' };
+  const summary = collectFileSummary(files);
+  const incomplete = isIncomplete(features, files, summary.validRecords);
+  const classification_status = decideStatus(features, summary, incomplete, trustedRiskPolicy);
   return { ...features, classification_status, risk_floor: classification_status === 'allowlisted_docs_only' ? 'fast' : 'deep' };
 }
