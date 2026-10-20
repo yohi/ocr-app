@@ -21,3 +21,11 @@ Implemented and committed with message `feat(ocr): リポジトリ単位で決�
 
 - No Owner-approved repositories are enabled; authorization correctly denies all repositories until trusted policy configuration is populated.
 - Approval references use the documented `OWNER-<approval-id>` syntax and do not represent an actual approval by themselves.
+
+## Fix round 1/5
+
+- `assertSerializedRunBindingMatches` now validates the three required grant binding fields and validates `effective_mode` strictly only when it is present; local binding validators reject malformed or incomplete inputs.
+- Egress authorization validates RunBinding/v1 before granting, rejects contradictory visibility as `visibility_unknown`, validates Owner references using the policy's configured format, tolerates malformed allowlist configuration by denying, and aborts a hanging GitHub API call after 10 seconds.
+- Added regression tests for grant-shaped bindings, empty/incomplete bindings, invalid modes and identifiers, contradictory visibility, policy-format mismatches, malformed policy and a hanging fetch.
+- `node --test .github/workflows/scripts/ocr-run-binding.test.mjs .github/workflows/scripts/authorize-decision-egress.test.mjs` — PASS, 33/33.
+- `node --test .github/workflows/scripts/*.test.mjs` — PASS, 217/217.

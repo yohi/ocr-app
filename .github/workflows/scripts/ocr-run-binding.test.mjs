@@ -35,9 +35,24 @@ test('rejects mismatched serialized numeric types without coercion', () => {
   assert.throws(() => assertSerializedRunBindingMatches(binding, { workflow_run_id: binding.workflowRunId, run_attempt: '2', head_sha: binding.headSha, effective_mode: binding.mode }), { code: 'RUN_BINDING_MISMATCH' });
 });
 
+test('accepts serialized grant fields without mode but validates mode when present', () => {
+  const binding = createRunBindingFromEnv(env());
+  const record = { workflow_run_id: binding.workflowRunId, run_attempt: binding.runAttempt, head_sha: binding.headSha };
+  assert.doesNotThrow(() => assertSerializedRunBindingMatches(binding, record));
+  assert.throws(() => assertSerializedRunBindingMatches(binding, { ...record, effective_mode: 'enforce' }), { code: 'RUN_BINDING_MISMATCH' });
+});
+
 test('rejects differences in each run binding field', () => {
   const binding = createRunBindingFromEnv(env());
   for (const difference of [{ headSha: 'b'.repeat(40) }, { mode: 'enforce' }, { workflowRunId: '9' }, { runAttempt: 1 }, { runAttempt: '2' }]) {
     assert.throws(() => assertRunBindingEquals(binding, { ...binding, ...difference }), { code: 'RUN_BINDING_MISMATCH' });
   }
+});
+
+test('rejects empty and incomplete bindings', () => {
+  assert.throws(() => assertRunBindingEquals({}, {}), { code: 'RUN_BINDING_INVALID' });
+  assert.throws(() => assertSerializedRunBindingMatches({}, {}), { code: 'RUN_BINDING_INVALID' });
+  const binding = createRunBindingFromEnv(env());
+  assert.throws(() => assertRunBindingEquals(binding, { ...binding, runAttempt: '2' }), { code: 'RUN_BINDING_MISMATCH' });
+  assert.throws(() => assertSerializedRunBindingMatches(binding, { workflow_run_id: binding.workflowRunId, head_sha: binding.headSha }), { code: 'RUN_BINDING_MISMATCH' });
 });
