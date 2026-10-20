@@ -39,6 +39,16 @@ function spawnWith(output, options = {}) {
   return () => childFor(output, options);
 }
 
+const certifiedCatalog = {
+  models: [
+    { model_id: 'cert-primary', certification_status: 'certified', capability_tier: 'deep' },
+    { model_id: 'cert-fallback-a', certification_status: 'certified', capability_tier: 'deep' },
+    { model_id: 'cert-fallback-b', certification_status: 'certified', capability_tier: 'deep' },
+    { model_id: 'uncertified', certification_status: 'uncertified', capability_tier: 'deep' },
+    { model_id: 'lower-tier', certification_status: 'certified', capability_tier: 'fast' },
+  ],
+};
+
 const validReview = {
   schema_version: '1.0',
   mode: 'review',
@@ -645,6 +655,107 @@ test('runHost ignores a fallback model that normalizes to the primary model', as
 
   assert.equal(attempts, 1);
   assert.equal(result.status, 'failed');
+});
+
+test('enforce requires explicit valid fallbackModels before spawning', async () => {
+  for (const fallbackModels of [null, undefined, 'fallback', ['cert-fallback-a', 'cert-fallback-a'], ['cert-primary'], ['unknown'], ['uncertified'], ['lower-tier'], [42]]) {
+    let spawnCount = 0;
+    const result = await runHost({
+      prompt: 'Review.',
+      cwd: '/tmp/trusted',
+      routingMode: 'enforce',
+      model: 'cert-primary',
+      modelCatalog: certifiedCatalog,
+      fallbackModels,
+      onAttemptEvent: () => {},
+      spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+    });
+    assert.equal(spawnCount, 0);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
+  }
+
+  let spawnCount = 0;
+  const absent = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    modelCatalog: certifiedCatalog,
+    onAttemptEvent: () => {},
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(spawnCount, 0);
+  assert.equal(absent.message, 'INVALID_FALLBACK_MODELS');
+});
+
+test('enforce fallbackModels array controls ordered fallback attempts and empty disables fallback', async () => {
+  for (const [fallbackModels, expected] of [[[], ['cert-primary']], [['cert-fallback-b', 'cert-fallback-a'], ['cert-primary', 'cert-fallback-b']]]) {
+    const seenModels = [];
+    const result = await runHost({
+      prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+      modelCatalog: certifiedCatalog, fallbackModels, maxRetries: 0, onAttemptEvent: () => {},
+      spawn: (_command, args) => {
+        const actual = args[args.indexOf('--model') + 1];
+        seenModels.push(actual);
+        return childFor(seenModels.length === 1
+          ? JSON.stringify({ error: 'No capacity available' })
+          : JSON.stringify(validReview));
+      },
+    });
+    assert.deepEqual(seenModels, expected);
+    assert.equal(result.status, expected.length === 1 ? 'failed' : 'success');
+  }
+});
+
+test('attempt observer emits sanitized ordered events with exact CLI model arguments', async () => {
+  const events = [];
+  const prompt = 'sensitive prompt';
+  const result = await runHost({
+    prompt, cwd: '/tmp/trusted', routingMode: 'shadow', model: 'legacy-not-in-catalog',
+    runAttemptId: 'a'.repeat(32), onAttemptEvent: event => events.push(event),
+    spawn: (_command, args) => childFor(JSON.stringify(validReview)),
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(events.map(event => event.event), ['attempt_started', 'attempt_completed', 'host_completed']);
+  assert.deepEqual(events.map(event => event.model), ['legacy-not-in-catalog', 'legacy-not-in-catalog', null]);
+  assert.ok(events.every(event => event.run_attempt_id === 'a'.repeat(32)));
+  assert.equal(events[1].result, 'host_validated_success');
+  assert.equal(events[2].host_status, 'success');
+  assert.equal(events[0].attempt_index, 1);
+  assert.equal(events[1].attempt_index, 1);
+  assert.match(events[0].timestamp, /^\d{4}-\d\d-\d\dT.*Z$/);
+  assert.ok(events.every(event => !JSON.stringify(event).includes(prompt)));
+  assert.deepEqual(Object.keys(events[0]).sort(), ['schema_version', 'run_attempt_id', 'attempt_index', 'event', 'model', 'result', 'timestamp', 'duration_ms', 'host_status'].sort());
+});
+
+test('shadow observer errors are ignored and enforce observer errors fail closed', async () => {
+  const shadow = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'shadow',
+    onAttemptEvent: () => { throw new Error('private observer failure'); },
+    spawn: spawnWith(JSON.stringify(validReview)),
+  });
+  assert.equal(shadow.status, 'success');
+
+  const enforce = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    modelCatalog: certifiedCatalog, fallbackModels: [],
+    onAttemptEvent: () => { throw new Error('private observer failure'); },
+    spawn: spawnWith(JSON.stringify(validReview)),
+  });
+  assert.equal(enforce.status, 'failed');
+  assert.equal(enforce.message, 'AUDIT_INCOMPLETE');
+});
+
+test('legacy mode retains environment fallback when fallbackModels is absent', async () => {
+  const attempted = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', model: 'legacy-primary', env: { ANTIGRAVITY_FALLBACK_MODEL: 'legacy-fallback' },
+    maxRetries: 0,
+    spawn: (_command, args) => {
+      attempted.push(args[args.indexOf('--model') + 1]);
+      return childFor(attempted.length === 1 ? JSON.stringify({ error: 'No capacity available' }) : JSON.stringify(validReview));
+    },
+  });
+  assert.deepEqual(attempted, ['legacy-primary', 'legacy-fallback']);
+  assert.equal(result.status, 'success');
 });
 
 test('normalizeAntigravityModel handles effort suffix and fallbacks', () => {
