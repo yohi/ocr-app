@@ -4,14 +4,14 @@
 - **対象**：[yohi/ocr-app](https://github.com/yohi/ocr-app)
 - **厳密な参照ベースライン**：`68c5739c2570039fc62a4ed4814684ac65584791`（R2/R3と同一。新HEADへ自動追従しない）
 - **入力正本**：`ocr-app-pr-dynamic-llm-routing-superpowers-design-r3-20261020.md`／R4限定是正指示
-- **成果物**：本R4 Design Specと別冊R4 G0 Review Handoff。**Implementation Planは未作成**。
+- **成果物（R4初版当時）**：本R4 Design Specと別冊R4 G0 Review Handoff。**Implementation Planは未作成（当時）**。
 - **種別**：Architectural design / Document-only limited correction
-- **状態**：`R4_CORRECTIONS_PROPOSED / G0_PENDING_OWNER / NOT_IMPLEMENTED / NOT_RUNTIME_VERIFIED`
+- **状態（R4初版当時）**：`R4_CORRECTIONS_PROPOSED / G0_PENDING_OWNER / NOT_IMPLEMENTED / NOT_RUNTIME_VERIFIED`
 - **強制制約**：DO NOT MODIFY SOURCE CODE / DO NOT IMPLEMENT / DO NOT WRITE GITHUB / DO NOT CALL DECISION API / DO NOT ACTIVATE SHADOW OR ENFORCE。
 - **凍結する判定**：R2 A〜D、R2-FND-001/003/005は`RESOLVED_IN_PROPOSAL`を維持。R3-FND-001/002、R2-FND-004残余、R2-FND-002残余のみ本改訂対象。
-- **Owner Decision**：G0-D01〜D07は全件`PENDING_OWNER`。技術的な提案是正はOwner承認・モデル認定・API許可・実行認可を意味しない。
+- **Owner Decision（R4初版当時）**：G0-D01〜D07は全件`PENDING_OWNER`。技術的な提案是正はOwner承認・モデル認定・API許可・実行認可を意味しない。
 
-> **RG-R1設計・計画整合性の限定追補（2026-10-20、原R4を履歴として保存）**：本書のR4初版に記された`G0-D01..D07=PENDING_OWNER`／`IMPLEMENTATION_PLAN=NOT_CREATED`／`DESIGN_PLAN_CONSISTENCY=NOT_REVIEWED`は**R4初版作成時点のスナップショット**である。現在の実効状態は§15.2の追補を**優先**して読む。Human Ownerはチャット上で7件の**基本方針のみ承認**、Implementation Planは既に作成済み。ただし個別repo egress grant、モデル認定、Secret設定、監査削除・事故保全等の運用認可、実装／起動、G1〜G4、および独立Design↔Plan PASSは**いずれも未成立**。今回のRG-R1限定修正はレビュー対象ドキュメントだけを対象とし、GitHubへの反映は実施しない。
+> **RG-R1設計・計画整合性の限定追補（2026-10-20、原R4を履歴として保存）**：本書のR4初版に記された`G0-D01..D07=PENDING_OWNER`／`IMPLEMENTATION_PLAN=NOT_CREATED`／`DESIGN_PLAN_CONSISTENCY=NOT_REVIEWED`は**R4初版作成時点のスナップショット**である。現在の実効状態は§15.2の追補を**優先**して読む。Human Ownerはチャット上で7件の**基本方針のみ承認**、Implementation Planは既に作成済み。ただし個別repo egress grant、モデル認定、Secret設定、監査削除・事故保全等の運用認可、実装／起動、G1〜G4、および独立Design↔Plan PASSは**いずれも未成立**。RG-R1**文書作成の時点**ではGitHubへの反映を実施しなかったが、その後2文書は`4df169ffa5fa5da33bb4b0d21d2580afb1d1c8e7`としてpushされた。現在のRG-R2限定改訂はローカルのみでGitHubへは反映しない（§15.2）。
 
 ## 変更管理とスコープ固定
 
@@ -217,11 +217,28 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 - **照合者**：`authorizeDecisionEgress`（trusted policy engine）。GitHubから取得した`id`＋正規化`full_name`と、検証済みdispatch対象・実際のcheckoutリポジトリを整合照合する。`private=false && visibility=public`の両立時のみ`public`と認定。`private=true`または`visibility=private/internal`はrestricted。不一致・欠損・未知visibilityは`visibility_unknown`。
 - **allowlistのOwner**：**Human Owner**が送信先（OpenRouter Decisions API）、対象repoのGitHub数値IDとfull_name、対象範囲、使用目的・許可versionを決裁する。trusted中央`ocr-app` checkout内の`.github/workflows/config/decision-egress-policy.json`を許可設定の唯一のソースとし、PR/head checkoutからの上書きを禁止する。Ownerの承認証跡IDは内部監査に記載し、許可されていないwildcardやパターン一致を使わない。
 - **default-deny**：private/internalは**完全一致allowlistがある場合のみ**送信可。publicもG0-D02で許可されたtrusted public egress policyと全schema検証に合格した場合に限り送信可。属性取得が403/404/5xx/timeout、認証失敗、値矛盾、allowlist読み込み不良、Owner record不明なら**送信0回**。
-- **Providerに渡す認可結果（ローカルのみ）**：`EgressAuthorization/v1` = `{schema_version:"1", allowed:boolean, reason:enum, visibility:enum, repo_id:number, full_name:string, head_sha:hex40, workflow_run_id:integer, run_attempt:integer, destination:"openrouter-decisions", policy_version:string, approval_ref:string|null, checked_at:ISO8601}`。このオブジェクトはtrusted stepで生成・全項目検証し、PRヘッドと実行runに拘束する。**HTTP bodyにもログにも含めない**。Providerは`allowed===true`、宛先・run_id/run_attempt/head・versionの一致とDecisionState厳密検証が揃った場合のみPOST可能。
+- **Providerに渡す認可結果（ローカルのみ）**：`EgressAuthorization/v1` = `{schema_version:"1", allowed:boolean, reason:enum, visibility:enum, repo_id:number, full_name:string, head_sha:hex40, workflow_run_id:canonical_decimal_string, run_attempt:positive_safe_integer, destination:"openrouter-decisions", policy_version:string, approval_ref:string|null, checked_at:ISO8601}`。このオブジェクトはtrusted stepで生成・全項目検証し、PRヘッドと実行runに拘束する。**HTTP bodyにもログにも含めない**。Providerは`allowed===true`、宛先・`workflow_run_id`/`run_attempt`/`head_sha`・versionの厳密一致とDecisionState厳密検証が揃った場合のみPOST可能。変換と一致判定は§6.1.1に従う。
 - **Providerへの最小受渡し**：`decision-provider.mjs`は`DecisionState/v1`、trusted`questions`、この**非送信grant**のみを受け取る。生のPR情報やGitHub eventを受け取らない。`allowed=false`なら`egress_denied`（理由enum）を返し通信しない。Decision失敗とは区別して内部監査。
 - `shadow/enforce`に限り必要な属性取得を行い、`off`では**新規属性取得・allowlist判定・Decision通信は一切行わない**。API不達なら`enforce`はローカルのrisk floorを使う（`deep`実行不可ならレビュー失敗）、`shadow`は従来レビューを継続。
 
 責任境界：GitHubはvisibility/idの権威、Human Ownerは送信許可の権威、trusted runnerは照合の実行者、Decision Providerは**認可後の推論担当であって認可者ではない**。公開範囲の認定と外部送信許可を同一概念にしない。
+
+### 6.1.1 RG-R2-001 — RunBinding/v1の単一正規契約（§8.4 / §11.2 / §11.5 / Plan Tasks 4/5/8/9に優先）
+
+**権威と型**：trusted GitHub Actions runner環境の`GITHUB_RUN_ID`、`GITHUB_RUN_ATTEMPT`、検証済み`COMMIT_SHA`、trusted設定`DECISION_ROUTING_MODE`のみから、一回のentrypoint初期化で`RunBinding/v1`を生成する。PR由来payload、`GITHUB_OUTPUT`、routeファイル、Artifact、Provider応答、外部から渡された`runId`で上書きしない。`off`では新routingのbindingやHost route照合を行わない。
+
+| 正規項目（JSON/wire表記） | trusted入力→変換（Node ESM） | 型・厳密validation |
+|---|---|---|
+| `workflow_run_id` | `GITHUB_RUN_ID`を**数値化せず**そのまま受領。JS名`workflowRunId`、DeliveryのJS名`runId`は同じ文字列の別名 | 非空のASCII 10進文字列 `^[1-9][0-9]*$`、先頭0・空白・小数点・符号・指数表記不可、最大32桁。`Number()`/`parseInt()`/JSON numberへの変換禁止（精度落ち回避） |
+| `run_attempt` | `GITHUB_RUN_ATTEMPT`が上記と同じ正規10進形式であることを先に検証し、`Number`へ一回変換。JS名`runAttempt` | `Number.isSafeInteger(n) && n >= 1`。ゼロ、負数、先頭0、非整数、unsafe integer、文字列のまま保存は拒否 |
+| `head_sha` | trusted checkoutと照合済み`COMMIT_SHA`をASCII lowercaseへ正規化。JS名`headSha` | `^[0-9a-f]{40}$`。route/decision/auditのすべてでバイト一致 |
+| `effective_mode` | trusted mode validation後の`DECISION_ROUTING_MODE`、JS名`mode` | `shadow`または`enforce`のみ。`off`は新routing/監査なし、未知modeは失敗 |
+
+**共通binding**：ローカルの`RunBinding/v1`は `{workflowRunId:string,runAttempt:number,headSha:string,mode:'shadow'|'enforce'}`（これ以外のキー不可）とする。JS→保存JSONではそれぞれ`workflow_run_id`、`run_attempt`、`head_sha`、`effective_mode`へ**フィールドごとに転写**する。`createRunBindingFromEnv(env)`が生成、`assertRunBindingEquals(expected,actual)`がローカル4値の厳密一致を、`assertSerializedRunBindingMatches(expected,record)`が任意の保存JSON/grantの該当snake_case値（存在しないmode等は比較要求対象外）を厳密検証（`'123' !== 123`、`1 !== '1'`）。不正値・曖昧な形式・同じ実行を指すように見える非正規表現も`RUN_BINDING_INVALID`または`RUN_BINDING_MISMATCH`としてfail closedにする。`GITHUB_RUN_ID`がJS安全整数を超えても、有効な10進文字列として正確に保存する。
+
+**契約間の追跡**：`EgressAuthorization/v1`（§6.1）と`RoutingDecisionRecord/v1`（§11.5）には`workflow_run_id:string`・`run_attempt:number`・`head_sha`を保存し、後者と`RoutingAudit/v2`（§11.2）は`effective_mode`も保存する。`RoutingPreparationResult`と専用`SelectedReviewRoute/v1`（§8.4）は4値すべてを保持する。`AuditDeliveryOutcome/v1`は既存契約の`runId:string`・`runAttempt:number`（同値のエイリアス）とArtifact outcome/idを用い、HEAD/modeは`final.json`/expected bindingと突き合わせる（Deliveryに未定義のフィールドを追加しない）。最終Gateでは**trusted expected binding**とgrant→decision→selected route→final audit→deliveryの該当4値/3値/2値をそれぞれ厳密比較し、欠落・矛盾・型差・別run_attempt・別HEAD・別modeなら公開禁止。`ReviewAttemptEvent/v1.run_attempt_id`はHost試行系列に共通の不透明IDであり、GitHubの`run_attempt`ではない。イベント系列を`RunBinding/v1`と関連付けるのはtrusted recorderの責任で、イベント値からGitHub実行IDを推定しない。
+
+**POST前の境界**：`requestReviewDecision`はexpected bindingとgrantの3値をHTTP実行**前**に照合し、不一致なら`fetchImpl`を呼ばない。Egress grantが実在し`allowed===true`かつrepo ID/name/宛先/Owner認可も整合していることは従来どおり別の必要条件。`reviewable_files=0`、schema不正、認可不成立でもPOST 0。binding/secretの値を送信bodyや監査自由文字列へ転記しない。
 
 ### 6.2 実送信の唯一のRequest契約（設計例）
 
@@ -587,15 +604,19 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | 2 | Task 3 `classifyPRRisk` | `buildDecisionState`（内部v3をstrict projection） | 分類済みv3 → `DecisionState/v1`。不完全時はAPIなし |
 | 3 | Task 4 `authorizeDecisionEgress` | Task 5 `requestReviewDecision`の**必須grant** | GitHub REST ID/visibility・trusted policy・HEAD/run拘束 → `EgressAuthorization/v1`。失敗/未許可はPOST 0 |
 | 4 | Task 5 `requestReviewDecision` | Task 6 `selectReviewRoute`（advisoryのみ） | fixed model/state/questions、approved grant → normalized enum Decision。`reviewable_files=0`なら呼び出し0、`not_requested` |
-| 5 | Task 6 `selectReviewRoute` | Task 8 `writeRoutingDecision`、workflow Host step | local risk floor/catalog/Decision → `RoutingPreparationResult`、fixed `decision.json` |
+| 5 | Task 6 `selectReviewRoute` → Task 9 `prepareReviewRouting` | Task 8 `writeRoutingDecision`、workflow Host step | Task 6のpure resolved route + trusted `RunBinding/v1`・policy/catalog versions → Task 9の`RoutingPreparationResult`、fixed `decision.json` |
 | 6 | Workflow Host step + Task 7 callback | Task 8 `createAttemptRecorder` | enforceは認定済み`model`/明示`fallbackModels`＋observer。shadowはlegacyモデル/fallback＋観測専用observer。offはlegacyでobserverなし |
 | 7 | Task 8 finalizer／Artifact step／Gate | enforceは§8.1のseal→upload→gate→post、shadowは§11.5のbest-effort診断保存 | 固定3ファイル、別の`AuditDeliveryOutcome/v1` |
 
 **入力・出力契約（Task 9への拘束）**：trusted環境変数は`BASE_REF`, `COMMIT_SHA`, `TARGET_REPO`, `PR_NUMBER`, `OCR_PREVIEW_PATH`, `RUNNER_TEMP`, `GITHUB_OUTPUT`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`, `GITHUB_TOKEN`（GitHub App installation token）、`DECISION_ROUTING_MODE`。**唯一のActions Secret名は`DECISION_OPENROUTER_API_KEY`**、当該routing stepにのみNode環境変数`OPENROUTER_API_KEY: ${{ secrets.DECISION_OPENROUTER_API_KEY }}`としてマップする。他stepへ転送・出力しない。認可前にこの鍵を使ったPOSTを起動する呼出し経路は存在させない。`DecisionState/v1`/内部grantはNode内の引数のみで受け渡し、`GITHUB_OUTPUT`やartifactに格納しない。
 
-`RoutingPreparationResult`はtrustedローカルの `{status:'prepared'|'no_reviewable_files'|'degraded'|'blocked',mode:'shadow'|'enforce',proposedStrategy:'fast'|'deep'|null,selectedStrategy:'fast'|'deep'|null,selectedModelId:string|null,fallbackModels:string[],routeSource:enum,decisionStatus:enum,reviewableCount:number,headSha:hex40}`。`GITHUB_OUTPUT`にはenum・検証済みmodel ID・`fallbackModels`の小さいJSON配列だけを出し、Host入力は`RUNNER_TEMP/ocr-selected-route.json`（routing監査3ファイルの**外側**、0600、公開しない）からHEAD/run/modeを照合して取得する。`decision.json`の生成・初回freezeはTask 8の`writeRoutingDecision`が行う。**routingディレクトリ内のArtifact対象は従来どおり3ファイルだけ**。
+`RoutingPreparationResult`はtrustedローカルの `{status:'prepared'|'no_reviewable_files'|'degraded'|'blocked',mode:'shadow'|'enforce',proposedStrategy:'fast'|'deep'|null,selectedStrategy:'fast'|'deep'|null,selectedModelId:string|null,fallbackModels:string[],routeSource:enum,decisionStatus:enum,reviewableCount:number,headSha:hex40,runBinding:RunBinding/v1,policyVersion:trusted_version_string,modelCatalogVersion:trusted_version_string}`。`headSha === runBinding.headSha`、`mode === runBinding.mode`は必須。`GITHUB_OUTPUT`にはenum・検証済みmodel ID・`fallbackModels`の小さいJSON配列だけを出すが、**Hostの権威データとしては使用しない**。Host入力は`RUNNER_TEMP/ocr-selected-route.json`（routing監査3ファイルの**外側**、0600、公開しない）に保存した`SelectedReviewRoute/v1`のみから取得する。`decision.json`の生成・初回freezeはTask 8の`writeRoutingDecision`が行う。**routingディレクトリ内のArtifact対象は従来どおり3ファイルだけ**。
 
-`reviewable_files=0`でも抽出・risk分類・`decision.json`（`decision_status=not_requested`）は行い、**Decision API POST 0**。**shadow**は従来のHostによる`skipped`契約を維持する。**enforce**では認定モデルの選択・Host spawnを行わず、trusted workflowが既存形式`schema_version="1.0",mode="review",status="skipped",coverage=0,findings=[],message=<trusted fixed skipped reason>`の結果を生成する（既存schema不変更）。`attempts.ndjson`は0行が正規で、最終成功モデルはnull、Host未実行の`host_completed`イベントは要求しない。最終監査・Artifact／Gateは省略せず、D04対象の非レビュー高リスクscope gapがあれば`REVIEW_SCOPE_GAP_BLOCKED`で公開を禁止する。scope gap非該当の正常skipのみneutral可。`shadow`のrouting/observer失敗は旧Host/投稿/Checkを停止しない。`enforce`でroutingが`blocked`または未認定モデルならHost spawn前に失敗し、公開許可を出さない。
+**`SelectedReviewRoute/v1` の唯一の保存形式**：Task 9の`serializeSelectedReviewRoute(result:RoutingPreparationResult):SelectedReviewRoute/v1`が以下の**全15キー**をフィールドごとに新規構築する。`schema_version:'1'`、`workflow_run_id:canonical_decimal_string`、`run_attempt:positive_safe_integer`、`head_sha:lowercase_hex40`、`effective_mode:'shadow'|'enforce'`、`status:'prepared'|'no_reviewable_files'|'degraded'|'blocked'`、`reviewable_file_count:nonnegative_safe_integer`、`proposed_strategy:'fast'|'deep'|null`、`selected_strategy:'fast'|'deep'|null`、`selected_model_id:validated_catalog_id|null`、`fallback_models:validated_catalog_id[]`、`route_source:'model_decision'|'deterministic_fallback'|'not_requested'`、`decision_status:'succeeded'|'unavailable'|'not_requested'|'invalid_response'`、`policy_version:trusted_version_string`、`model_catalog_version:trusted_version_string`。未定義・extra property・`undefined`・プロトタイプ由来キーを拒否する。`selected_review_model`等のaudit専用値は混ぜない。shadowでは実行モデル/fallbackをこのrouteからHostへ反映してはならず、`selected_model_id=null`、`fallback_models=[]`、`selected_strategy=null`とする。書込者はTask 9 `writeSelectedReviewRoute({runTemp,result})`、検証者はTask 9 `readSelectedReviewRoute({runTemp,env,expectedMode})`。前者は厳格schemaを通した後に固定パスへ一度だけ`0600`で原子的に書込みfreeze、後者はロード直後にschemaと§6.1.1の4値をrunner環境から再生成したexpected bindingに照合する。自己申告されたroute内のbindingをexpectedに使わない。`policy_version`と`model_catalog_version`は戻り値のtrusted `policyVersion`/`modelCatalogVersion`からのみ転写し、serializerが任意の未指定値を補完しない。`RoutingPreparationResult`はローカルの戻り値、`SelectedReviewRoute/v1`はその**厳密な永続化投影**であり、API送信用`DecisionState/v1`とも監査`RoutingDecisionRecord/v1`とも別スキーマ。
+
+**Host実行直前の強制比較（Task 9）**：enforce/shadowで有効なrouteファイルが存在し、そこからrouting関連のHost経路へ入る場合、Host stepはtrusted env `GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT/COMMIT_SHA/DECISION_ROUTING_MODE`を**独立に読み直し**、期待bindingとroute、さらに`decision.json`のrun/head/modeとを検証する。**既存routeの型不一致、HEAD/run/attempt/mode差替え・欠落があればHostの`runHost`呼出し前に`RUN_BINDING_MISMATCH`（形式不正は`RUN_BINDING_INVALID`）で停止し、Host spawnは0回、モデル切替も投稿も実施しない。** Shadowでも存在するrouteのbinding不一致は単なるobserver故障でなくtrusted境界違反なので同様にspawn 0。**shadowでroute/監査生成そのものがbest-effortとして失敗してrouteファイルが存在しない場合は、新routeを消費せずobserver無しでlegacy Hostを実行する**（§11.5の可用性優先を維持）。`off`はrouteファイルを読み込まずlegacy実行のまま。`enforce`ではroute欠損もspawn 0。OCR reviewable 0件ならbinding検証後にenforce Hostをspawnせずtrusted skipを生成。
+
+`reviewable_files=0`でも抽出・risk分類・`decision.json`（`decision_status=not_requested`）は行い、**Decision API POST 0**。**shadow**は従来のHostによる`skipped`契約を維持する（route生成失敗時は§8.4のlegacy-without-observer例外）。**enforce**では認定モデルの選択・Host spawnを行わず、trusted workflowが既存形式`schema_version="1.0",mode="review",status="skipped",coverage=0,findings=[],message=<trusted fixed skipped reason>`の結果を生成する（既存schema不変更）。`attempts.ndjson`は0行が正規で、最終成功モデルはnull、Host未実行の`host_completed`イベントは要求しない。最終監査・Artifact／Gateは省略せず、D04対象の非レビュー高リスクscope gapがあれば`REVIEW_SCOPE_GAP_BLOCKED`で公開を禁止する。scope gap非該当の正常skipのみneutral可。`shadow`のrouting/observer失敗は旧Host/投稿/Checkを停止しない。`enforce`でroutingが`blocked`または未認定モデルならHost spawn前に失敗し、公開許可を出さない。
 
 ## 9. 障害・unknown時の規定結果
 
@@ -648,7 +669,7 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | Field | 型 / 定義 / enforcement |
 |---|---|
 | `schema_version` | `"2"` |
-| `repo_id`, `repo`, `pr_number`, `head_sha`, `workflow_run_id`, `run_attempt` | trusted GitHub確認済ID・GitHub repository fullname（内部だけ）・自然数・hex40など、正確な型・run拘束を必須とする。**Decision API送信不可** |
+| `repo_id`, `repo`, `pr_number`, `head_sha`, `workflow_run_id`, `run_attempt` | trusted GitHub確認済repo ID・GitHub repository fullname（内部だけ）・`pr_number`正整数・`head_sha` lowercase hex40・`workflow_run_id`正規10進文字列・`run_attempt`正の安全整数（§6.1.1）。`effective_mode`を含め、正確な型・値・run拘束を必須とする。**Decision API送信不可** |
 | `effective_mode` | `shadow` / `enforce`。offにはこのaudit無し |
 | `decision_status` | `succeeded` / `unavailable` / `not_requested` / `invalid_response` |
 | `egress_status` | `allowed` / `denied` / `not_checked` |
@@ -665,7 +686,7 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | `review_scope_gap`, `features_incomplete`, `review_quality_measured` | boolean。G2/shadowではquality必ずfalse |
 | `decision_api_cost`, `latency_ms` | finite nonnegative number / null。無料と推測して0を入れない |
 
-`RoutingAudit/v2`はローカルで内容を整合照合（e.g. `executed_review_model`は試行系列にあり、それに対応する唯一のHost successがあり、既存review JSON `status=success` + downstream validation PASS + HEAD一致）。`skipped/failed`/未検証時は`null`。`final.json`は**seal後immutable**。Artifact配送事実は`AuditDeliveryOutcome/v1`（workflow内部のstep `outcome=success|failure|skipped`、artifact参照、run_id/run_attemptに拘束、**final.jsonには含めない**）で別管理。schema・type・error処理と§8.1のGateを混同しない。
+`RoutingAudit/v2`はローカルで内容を整合照合（e.g. `executed_review_model`は試行系列にあり、それに対応する唯一のHost successがあり、既存review JSON `status=success` + downstream validation PASS + HEAD一致）。`skipped/failed`/未検証時は`null`。`final.json`は**seal後immutable**。Artifact配送事実は`AuditDeliveryOutcome/v1`（workflow内部のstep `outcome=success|failure|skipped`、artifact参照、`runId:string`/`runAttempt:number`を§6.1.1の`workflow_run_id`/`run_attempt`と照合し、**final.jsonには含めない**）で別管理。schema・type・error処理と§8.1のGateを混同しない。
 
 ### 11.3 監査保存・閲覧・保持（Owner G0-D07）
 
@@ -679,9 +700,9 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 
 ### 11.5 RG-R1-004 — Shadow G2観測証拠と配送の最小契約
 
-- **生成責任**：`prepare-review-routing.mjs`がTask 8 `writeRoutingDecision`を呼び、`decision.json`を作成・freezeする。既存Hostの呼出し点では**shadowでも**`onAttemptEvent`をobserverとして登録し、Task 8の`createAttemptRecorder`を通じて`attempts.ndjson`に保存する。**選定されたproposedモデル/許可fallbackをHostへ渡さない。** 現行のlegacy model/retry/fallbackは完全に同一。
+- **生成責任**：`prepare-review-routing.mjs`がTask 8 `writeRoutingDecision`を呼び、`decision.json`を作成・freezeする。**shadowでbinding検証済みrouteが存在する場合に**既存Hostの呼出し点で`onAttemptEvent`をobserverとして登録し、Task 8の`createAttemptRecorder`を通じて`attempts.ndjson`に保存する。**選定されたproposedモデル/許可fallbackをHostへ渡さない。** 現行のlegacy model/retry/fallbackは完全に同一。
 - **shadowの正規ファイル**：①`decision.json`は、Host前に採取できる分類・risk floor・`proposed_strategy`・`route_source`・decision/egress status・latency/cost（取得不能なら`null`）・policy/schema/catalog版・HEAD/run拘束を含む。②`attempts.ndjson`は既存HostのCLI引数試行を記録し、未観測なら0行のファイルと明示的`observer_status=unavailable`を診断に記す。③`final.json`はHost終了と既存OCR検証・HEAD判定の**観測可能な範囲**で`RoutingAudit/v2`をbest-effort封印する。未成立の`host_success_model`/`executed_review_model`は`null`、`review_quality_measured=false`。shadowの`selected_strategy`は**実適用されていない候補を表すために使わず`null`**とし、提案は`proposed_strategy`にのみ入れる。`RoutingAudit/v2`の`selected_strategy`の型は`fast|deep|null`と読み替える（`null`はshadowのみ許可、enforceは非null必須）。
-- **`RoutingDecisionRecord/v1`（`decision.json`）**：全キー必須、追加キー禁止。`schema_version:'1'`、`effective_mode:'shadow'|'enforce'`、`head_sha:hex40`、`workflow_run_id:string`、`run_attempt:positive integer`、`classification_status`（§4.2のenum）、`risk_floor:'fast'|'deep'`、`reviewable_file_count:nonnegative integer`、`proposed_strategy:'fast'|'deep'|null`、`selected_strategy:'fast'|'deep'|null`、`route_source:'model_decision'|'deterministic_fallback'|'not_requested'`、`decision_status:'succeeded'|'unavailable'|'not_requested'|'invalid_response'`、`egress_status:'allowed'|'denied'|'not_checked'`、`observer_status:'available'|'unavailable'|'not_started'`、`decision_latency_ms:finite nonnegative number|null`、`decision_api_cost:finite nonnegative number|null`、`policy_version:string`、`feature_schema_version:'3'`、`decision_state_version:'1'`、`model_catalog_version:string`。値はtrusted enum/数値/版のstrict projectionだけ。`observer_status`はHost前に`not_started`としてfreezeする。Host後の観測成否は、`final.json`では許容済みの試行／成功モデルの`null`や空配列で表し、詳細な失敗enumはサニタイズ済みActions診断にのみ記録する（freeze後上書き禁止、`RoutingAudit/v2`へ追加キーを挿入しない）。`route_source=not_requested`は`reviewable_file_count=0`の場合のみ。
+- **`RoutingDecisionRecord/v1`（`decision.json`）**：全キー必須、追加キー禁止。`schema_version:'1'`、`effective_mode:'shadow'|'enforce'`、`head_sha:hex40`、`workflow_run_id:canonical_decimal_string`、`run_attempt:positive_safe_integer`、`classification_status`（§4.2のenum）、`risk_floor:'fast'|'deep'`、`reviewable_file_count:nonnegative integer`、`proposed_strategy:'fast'|'deep'|null`、`selected_strategy:'fast'|'deep'|null`、`route_source:'model_decision'|'deterministic_fallback'|'not_requested'`、`decision_status:'succeeded'|'unavailable'|'not_requested'|'invalid_response'`、`egress_status:'allowed'|'denied'|'not_checked'`、`observer_status:'available'|'unavailable'|'not_started'`、`decision_latency_ms:finite nonnegative number|null`、`decision_api_cost:finite nonnegative number|null`、`policy_version:string`、`feature_schema_version:'3'`、`decision_state_version:'1'`、`model_catalog_version:string`。値はtrusted enum/数値/版のstrict projectionだけ。`observer_status`はHost前に`not_started`としてfreezeする。Host後の観測成否は、`final.json`では許容済みの試行／成功モデルの`null`や空配列で表し、詳細な失敗enumはサニタイズ済みActions診断にのみ記録する（freeze後上書き禁止、`RoutingAudit/v2`へ追加キーを挿入しない）。`route_source=not_requested`は`reviewable_file_count=0`の場合のみ。`RoutingDecisionRecord/v1`のbindingは`RunBinding/v1`をtrusted writerがフィールドごとに投影し、`SelectedReviewRoute/v1`と`RoutingAudit/v2`の同値を下流validatorが検証する。
 - **未登録のlegacy model**：shadow observerがCLIモデルIDをtrusted catalogに照合できない場合、モデル名の推測・偽装やlegacy Host停止をせず、`observer_status=unavailable`を**Actionsの別診断**として記録し、`RoutingAudit/v2`の`audit_status`に許容外の`unavailable`を代入しない（正規の`final.json`が成立するときの`audit_status`は`sealed`のみ）。attempt streamは0行でもよく、最終成功モデルは`null`。これを「実行モデルを認定・測定した」と表示しない。`enforce`で同じ欠落が生じた場合は公開禁止。
 - **配送**：`shadow`も固定3ファイルだけを独立`Upload routing audit`（Owner承認済み`retention-days=30`、リポジトリread閲覧境界、追加の削除/Incident決裁は未了ならshadow起動禁止）でbest-effort uploadする。部分ファイル・不正schemaならアップロードせず`SHADOW_AUDIT_UNAVAILABLE`をActionsの固定診断に記す。upload失敗／audit不整合は**既存review投稿とCheck Runを妨げない**。`off`では3ファイル・新uploadとも0。G2はroutingメタデータ・失敗率・latency/cost等の観測であり、レビュー品質比較はG3まで実施しない。
 
@@ -741,6 +762,16 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | T-029 | enforceのprogress/stderr/例外/result.messageにPR風文字列・認証様文字列を注入してもActions/Checkへraw転載なし。off/shadowの既存振る舞いを維持 | Tasks 7、9 |
 | T-030 | Task 1の依存追加**前**にNode既存テスト・Worker回帰・actionlint・git diff --checkを採取、未実行`NOT_RUN`。Ajv `npm ci`はTask 1導入後だけ実施 | Preflight・Tasks 1、10 |
 
+
+### RG-R2限定追加受入テスト（T-001〜T-030の契約を維持）
+
+| Test ID | 期待結果・責任Task |
+|---|---|
+| **T-031** | Task 4 `createRunBindingFromEnv`：`GITHUB_RUN_ID`の正規10進**文字列**を一切数値化しない。`9007199254740993`も正確に保存。run attemptは正規10進→正のsafe integerに一度だけ変換。空白/先頭0/指数/ゼロ/負数/overflow/`undefined`を拒否。`'123'`と`123`の混同なし |
+| **T-032** | Tasks 6/8/9：`RoutingPreparationResult.runBinding`から`SelectedReviewRoute/v1`の全15キーだけをstrict projectionし、`decision.json`とHEAD/run/mode/attemptが一致。未知version、extra key、型差、差替え、再sealを拒否。外部State/grant/Secret/pathをrouteへ転写しない |
+| **T-033** | Task 9：Host直前にenv由来trusted expected bindingとroute/decisionを比較。別HEAD、run ID、run attempt、mode、桁表現の差で`RUN_BINDING_MISMATCH`/`RUN_BINDING_INVALID`・**spawn 0**（enforce・存在するshadow route）。enforce欠損routeもspawn 0。shadowの純粋なbest-effort生成失敗はroute未消費で従来Hostを継続。offは新routeを参照しない |
+| **T-034** | Tasks 4/5/8/9：同じ期待bindingが`EgressAuthorization/v1`→`RoutingDecisionRecord/v1`→`RoutingAudit/v2`→`AuditDeliveryOutcome/v1`へ保持される。grant/run/head mismatchで**Decision POST 0**、異なるdelivery `runId`/`runAttempt`やfinalのhead/mode不整合で**publish false**。`ReviewAttemptEvent.run_attempt_id`をGitHubの`run_attempt`と混同しない |
+
 ## 14. Gates / 評価範囲（R2-D維持）
 
 - **G0 — Design / Owner**：今回R4の指定4 Finding／残余とG0-D01〜07の決裁事項を審査。**現状 PENDING**。技術是正案はOwner認可ではない。
@@ -786,9 +817,12 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | G0-D06 | G2はrouting観測のみ、レビュー品質評価はG3 | `BASIC_POLICY_APPROVED`、具体的G2運用とG2実施は`NOT_STARTED` |
 | G0-D07 | 無料Decisionのみ・自動課金禁止、routing監査Artifact保持30日、中央repository read権限を閲覧境界とする | `BASIC_POLICY_APPROVED`、Secret配布/実費評価・ID取扱い詳細・削除/Incident・実アクセス棚卸・実装確認は`PENDING_OWNER/VALIDATION`。shadow/enforce起動禁止 |
 
-**現在の単一実効状態**：`G0_BASIC_POLICY=APPROVED`、`G0_FULL_OPERATIONAL_AUTHORIZATION=NOT_GRANTED`、`IMPLEMENTATION_PLAN=CREATED`、`DESIGN_PLAN_CONSISTENCY=REVISION_READY_FOR_INDEPENDENT_RECHECK`（独立再審査前）、`RG_R1=BLOCKED_PENDING_RECHECK`、`G1/G2/G3/G4=NOT_STARTED`、`IMPLEMENTATION=NOT_STARTED`、`GITHUB_WRITES_BY_THIS_CORRECTION=NONE`、`DECISION_API_CALLS=NONE`、`SHADOW_ENFORCE_ACTIVATION=NONE`。
+**現在の単一実効状態**：`G0_BASIC_POLICY=APPROVED`、`G0_FULL_OPERATIONAL_AUTHORIZATION=NOT_GRANTED`、`IMPLEMENTATION_PLAN=CREATED`、`DESIGN_PLAN_CONSISTENCY=REVISION_READY_FOR_INDEPENDENT_RECHECK`（独立再審査前）、`RG_R2_INPUT_REVIEW=REVISION_REQUIRED(RG-R1-002_MAJOR,RG-R1-001_RESIDUAL_MINOR)`、`RG_R2_CORRECTION=REVISION_READY_FOR_INDEPENDENT_RECHECK`、`G1/G2/G3/G4=NOT_STARTED`、`IMPLEMENTATION=NOT_STARTED`、`GITHUB_WRITES_BY_RG_R1_CORRECTION_AUTHORING=NONE`、`DECISION_API_CALLS=NONE`、`SHADOW_ENFORCE_ACTIVATION=NONE`。
 
 状態の切替は新しいOwner証跡と独立再レビュー結果が得られた場合に限る。未決裁を`APPROVED`と書き換えてはならない。enforceゲートはD04で承認された**非対象高リスクのblocking**を適用する。§8.3の「将来のOwner決裁が必要」はR4初版時点の記述であり、この基本方針が承認された後の運用値の追加決裁・実装検証と区別する。
+
+
+**RG-R2現行のGitHub履歴と本改訂の境界**：RG-R1の修正文書は2026-10-20に`feature/pr-dynamic-llm-routing-docs`へコミットされ、**reviewed commit `4df169ffa5fa5da33bb4b0d21d2580afb1d1c8e7`は既にGitHubに存在する**。R4初版およびRG-R1**作成時**の`GITHUB_WRITES=NONE`は各作成セッションの過去の非実施記録であり、リポジトリに対して今まで一度も書込みがなかった意味ではない。本RG-R2限定是正は**ローカル文書生成のみ**で、`GITHUB_WRITES_BY_RG_R2=NONE`、`SOURCE_CODE_CHANGED_BY_RG_R2=NO`、`DECISION_API_CALLS_BY_RG_R2=NONE`、`SHADOW_ENFORCE_ACTIVATION_BY_RG_R2=NONE`とする。Owner基本方針は承認済みだが運用grant/モデル認定/Secret/削除・Incident手順/段階有効化は未承認。`G1/G2/G3/G4=NOT_STARTED`は継続。RG-R2修正文書への独立レビューPASSは未取得である。
 
 ## 16. 参照資料（R2から継承、2026-10-20参照）
 
@@ -940,3 +974,13 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | RG-R1-006 | T-030・Plan Preflight | RESOLVED（文書の順序修正） | 未実行 |
 
 **レビュー状態**：`REVISION_READY_FOR_INDEPENDENT_RECHECK`。自己検証を独立`PASS`として扱わず、原R2/R3/R4の既存Findingを自動再OPENしない。
+
+
+## Appendix J. RG-R2限定是正台帳（reviewed commit `4df169ffa5fa5da33bb4b0d21d2580afb1d1c8e7`を基準）
+
+| Finding | R2の原因 | 今回の規範是正 | 著者自己判定・未実証 |
+|---|---|---|---|
+| **RG-R1-002**（Major） | `workflow_run_id`の整数/文字列不一致、保存route未定義、Host前の照合欠落 | §6.1.1、§8.4、§11.2/11.5、T-031〜034：canonical string/safe integer、binding伝播、厳格route投影、Host spawn 0、POST 0、publish false | `RESOLVED_IN_PROPOSAL`（G1未実行、独立R2再審査待ち） |
+| **RG-R1-001残余**（Minor） | 未push宣言が既存のGitHub commitと矛盾 | §15.2現行追補：`4df169f`はpush済み、当時の未書込は履歴、RG-R2はGitHub書込なし | `RESOLVED_IN_PROPOSAL`（独立R2再審査待ち） |
+
+**非変更**：RG-R1-003〜006の是正、R2 A〜D、R2-FND-001/003/005、R3-FND-001/002のproposal判定を維持。G0基本方針承認は個別運用認可でなく、G1/G2/G3/G4は`NOT_STARTED`。本改訂は実装・GitHub書込み・Decision API呼出し・shadow/enforce有効化を行わず、最終状態`REVISION_READY_FOR_INDEPENDENT_RECHECK`。本記録は独立レビューPASSを宣言しない。
