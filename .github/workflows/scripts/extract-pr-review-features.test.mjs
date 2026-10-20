@@ -16,26 +16,31 @@ test('parses paths containing spaces, tabs, and newlines using NUL framing', () 
 
 test('counts rename, deletion, copy, binary, symlink, submodule, and mode-only records', () => {
   const records = parseNulGitChangeRecords({
-    nameStatus: nul('R100', 'old name.js', 'new name.js', 'D', 'gone.js', 'C075', 'source.js', 'copy.js', 'M', 'image.bin', 'M', 'link', 'M', 'module', 'M', 'exec.sh'),
-    numstat: nul('4\t2\t\0old name.js', 'new name.js', '0\t3\tgone.js', '1\t0\t\0source.js', 'copy.js', '-\t-\timage.bin', '0\t0\tlink', '0\t0\tmodule', '0\t0\texec.sh'),
+    nameStatus: nul('R100', 'old name.js', 'new name.js', 'D', 'gone.js', 'C075', 'source.js', 'copy.js', 'M', 'image.bin', 'M', 'link', 'M', 'module', 'M', 'exec.sh', 'A', 'new.js'),
+    numstat: nul('4\t2\t\0old name.js', 'new name.js', '0\t3\tgone.js', '1\t0\t\0source.js', 'copy.js', '-\t-\timage.bin', '0\t0\tlink', '0\t0\tmodule', '0\t0\texec.sh', '2\t0\tnew.js'),
     rawMode: Buffer.from([
       `:100644 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} R100\0old name.js\0new name.js\0`,
-      `:100644 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} D\0gone.js\0`,
+      `:100644 000000 ${'a'.repeat(40)} ${'b'.repeat(40)} D\0gone.js\0`,
       `:100644 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} C075\0source.js\0copy.js\0`,
       `:100644 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} M\0image.bin\0`,
       `:100644 120000 ${'a'.repeat(40)} ${'b'.repeat(40)} M\0link\0`,
       `:100644 160000 ${'a'.repeat(40)} ${'b'.repeat(40)} M\0module\0`,
-      `:100644 100755 ${'a'.repeat(40)} ${'b'.repeat(40)} M\0exec.sh\0`,
+      `:100755 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} M\0exec.sh\0`,
+      `:000000 100644 ${'a'.repeat(40)} ${'b'.repeat(40)} A\0new.js\0`,
     ].join('')),
   });
-  assert.equal(records.length, 7);
+  assert.equal(records.length, 8);
   assert.deepEqual([records[0].oldPath, records[0].path, records[0].status], ['old name.js', 'new name.js', 'renamed']);
+  assert.deepEqual([records[0].oldMode, records[0].mode], ['100644', '100644']);
+  assert.deepEqual([records[1].oldMode, records[1].mode], ['100644', '000000']);
   assert.equal(records[2].status, 'copied');
+  assert.deepEqual([records[2].oldMode, records[2].mode], ['100644', '100644']);
   assert.deepEqual([records[2].additions, records[2].deletions], [1, 0]);
   assert.deepEqual([records[3].additions, records[3].deletions, records[3].binary], [null, null, true]);
-  assert.equal(records[4].mode, '120000');
-  assert.equal(records[5].mode, '160000');
-  assert.equal(records[6].mode, '100755');
+  assert.deepEqual([records[4].oldMode, records[4].mode], ['100644', '120000']);
+  assert.deepEqual([records[5].oldMode, records[5].mode], ['100644', '160000']);
+  assert.deepEqual([records[6].oldMode, records[6].mode], ['100755', '100644']);
+  assert.deepEqual([records[7].oldMode, records[7].mode], ['000000', '100644']);
 });
 
 test('unknown and malformed Git records are rejected', () => {
@@ -114,6 +119,7 @@ test('missing raw mode or numstat is incomplete and remains deep risk', async ()
   const modeOnly = await runWith(Buffer.from(`:100644 100755 ${base} ${head} M\0x.bin\0`), nul('0\t0\tx.bin'));
   assert.equal(modeOnly.features_incomplete, false);
   assert.equal(modeOnly.all_changed_files[0].status, 'modified');
+  assert.deepEqual([modeOnly.all_changed_files[0].oldMode, modeOnly.all_changed_files[0].mode], ['100644', '100755']);
   assert.equal(modeOnly.additions, 0);
   assert.equal(modeOnly.deletions, 0);
   assert.equal(modeOnly.risk_floor, 'deep');

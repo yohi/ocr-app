@@ -122,6 +122,7 @@ export function parseNulGitChangeRecords({ nameStatus, numstat, rawMode }) {
       ...(record.oldPath === undefined ? {} : { oldPath: record.oldPath }),
       path: record.path,
       status: record.status,
+      oldMode: rawModeRecord.oldMode,
       mode: rawModeRecord.mode,
       additions: stat?.additions ?? null,
       deletions: stat?.deletions ?? null,
