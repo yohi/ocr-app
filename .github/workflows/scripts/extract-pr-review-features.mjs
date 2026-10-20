@@ -118,12 +118,10 @@ export function parseNulGitChangeRecords({ nameStatus, numstat, rawMode }) {
     const stat = statByKey.get(`${record.oldPath ?? ''}\0${record.path}`) ?? statByKey.get(`\0${record.path}`);
     const rawModeRecord = modes.get(record.path);
     if (!rawModeRecord) throw new Error(`Missing raw mode for ${record.path}`);
-    const modeOnly = !stat && rawModeRecord.oldMode !== rawModeRecord.mode;
-    const status = modeOnly ? 'mode_changed' : record.status;
     return {
       ...(record.oldPath === undefined ? {} : { oldPath: record.oldPath }),
       path: record.path,
-      status,
+      status: record.status,
       mode: rawModeRecord.mode,
       additions: stat?.additions ?? null,
       deletions: stat?.deletions ?? null,
@@ -147,7 +145,7 @@ function incompleteFeatures(headSha, preview) {
 function classify(files, paths, headSha) {
   const reviewable = new Set(paths);
   const hasUnknownCounts = files.some(file => file.additions === null || file.deletions === null);
-  const incomplete = files.some(file => (file.additions === null || file.deletions === null) && file.status !== 'mode_changed');
+  const incomplete = hasUnknownCounts;
   const additions = hasUnknownCounts ? null : files.reduce((sum, file) => sum + file.additions, 0);
   const deletions = hasUnknownCounts ? null : files.reduce((sum, file) => sum + file.deletions, 0);
   if ((additions !== null && !Number.isSafeInteger(additions)) || (deletions !== null && !Number.isSafeInteger(deletions))) throw new Error('Change count overflow');

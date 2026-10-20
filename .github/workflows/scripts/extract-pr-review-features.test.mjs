@@ -111,12 +111,19 @@ test('missing raw mode or numstat is incomplete and remains deep risk', async ()
   const missingStat = await runWith(Buffer.from(`:100644 100644 ${base} ${head} R100\0old\0new\0`), Buffer.alloc(0));
   assert.equal(missingStat.features_incomplete, true);
   assert.equal(missingStat.risk_floor, 'deep');
-  const modeOnly = await runWith(Buffer.from(`:100644 100755 ${base} ${head} M\0x.bin\0`), Buffer.alloc(0));
+  const modeOnly = await runWith(Buffer.from(`:100644 100755 ${base} ${head} M\0x.bin\0`), nul('0\t0\tx.bin'));
   assert.equal(modeOnly.features_incomplete, false);
-  assert.equal(modeOnly.all_changed_files[0].status, 'mode_changed');
-  assert.equal(modeOnly.additions, null);
-  assert.equal(modeOnly.deletions, null);
+  assert.equal(modeOnly.all_changed_files[0].status, 'modified');
+  assert.equal(modeOnly.additions, 0);
+  assert.equal(modeOnly.deletions, 0);
   assert.equal(modeOnly.risk_floor, 'deep');
+  const missingModeChangeStat = await runWith(Buffer.from(`:100644 100755 ${base} ${head} M\0x.bin\0`), Buffer.alloc(0));
+  assert.equal(missingModeChangeStat.features_incomplete, true);
+  assert.equal(missingModeChangeStat.classification_status, 'incomplete');
+  assert.equal(missingModeChangeStat.risk_floor, 'deep');
+  const missingAdditionStat = await runWith(Buffer.from(`:000000 100644 ${base} ${head} A\0new.bin\0`), Buffer.alloc(0));
+  assert.equal(missingAdditionStat.features_incomplete, true);
+  assert.equal(missingAdditionStat.risk_floor, 'deep');
 });
 
 test('binary, symlink, submodule, executable, rename, and copy changes never resolve to fast', async () => {
