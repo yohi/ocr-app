@@ -36,17 +36,17 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
   if (finalAudit.head_validation_status !== 'passed') return result('HEAD_VALIDATION_FAILED');
   if (finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
   if (decisionRecord.egress_status === 'allowed') {
-    const approvalRef = decisionRecord.owner_approval_ref;
+    const approvalRef = finalAudit.owner_approval_ref;
     if (typeof approvalRef !== 'string' || approvalRef.length === 0 || approvalRef.length > 128 || !APPROVAL_REF.test(approvalRef)) return result('EGRESS_NOT_APPROVED');
-    if (finalAudit.owner_approval_ref !== approvalRef) return result('EGRESS_NOT_APPROVED');
   }
-  const certified = certifiedModelIds(catalog);
-  if (certified.length === 0) return result('MODEL_NOT_CERTIFIED');
-  if (decisionRecord.reviewable_file_count > 0 &&
-      (typeof finalAudit.executed_review_model !== 'string' ||
-       !certified.includes(finalAudit.executed_review_model) ||
-       finalAudit.executed_review_model !== finalAudit.selected_review_model)) return result('MODEL_NOT_CERTIFIED');
-  if (decisionRecord.reviewable_file_count === 0 && finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
+  if (decisionRecord.reviewable_file_count === 0) {
+    if (finalAudit.executed_review_model !== null || finalAudit.attempted_review_models.length !== 0 || finalAudit.host_success_model !== null) return result('AUDIT_INCOMPLETE');
+    if (finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
+  } else {
+    const certified = certifiedModelIds(catalog);
+    if (certified.length === 0) return result('MODEL_NOT_CERTIFIED');
+    if (typeof finalAudit.executed_review_model !== 'string' || !certified.includes(finalAudit.executed_review_model) || finalAudit.executed_review_model !== finalAudit.selected_review_model) return result('MODEL_NOT_CERTIFIED');
+  }
   if (delivery?.outcome !== 'success') return result('ARTIFACT_UPLOAD_FAILED');
   if (typeof delivery.artifactId !== 'string' || delivery.artifactId.length === 0) return result('MISSING_ARTIFACT_ID');
   if (delivery.runId !== expectedBinding.workflowRunId || delivery.runAttempt !== expectedBinding.runAttempt) return result('RUN_BINDING_MISMATCH');

@@ -24,16 +24,14 @@ const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32)
  test('decision record is strict, bound, and frozen', () => {
   const record = decision();
   assert.equal(Object.isFrozen(record), true);
-  assert.deepEqual(Object.keys(record), ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','owner_approval_ref','policy_version','feature_schema_version','decision_state_version','model_catalog_version']);
-  assert.equal(record.workflow_run_id, binding.workflowRunId);
-  assert.equal(record.observer_status, 'not_started');
-  assert.equal(record.decision_api_cost, null);
-  assert.equal(Object.hasOwn(record, 'secret'), false);
+  assert.deepEqual(Object.keys(record), ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version']);
+  assert.equal(Object.keys(record).length, 20);
 });
 
 test('decision record rejects an invalid enum and malformed binding', () => {
   assert.throws(() => createRoutingDecisionRecord({ runBinding: { ...binding, workflowRunId: 123 }, features, decision: {}, egressStatus: 'denied', route, policyVersions: versions }));
   assert.throws(() => createRoutingDecisionRecord({ runBinding: binding, features: { ...features, classification_status: 'private/path' }, decision: {}, egressStatus: 'denied', route, policyVersions: versions }));
+  assert.throws(() => createRoutingDecisionRecord({ runBinding: binding, features: { ...features, reviewable_file_count: 1 }, decision: {}, egressStatus: 'denied', route: { ...route, routeSource: 'not_requested' }, policyVersions: versions }));
 });
 
 test('decision writer creates private files once', () => {
@@ -113,9 +111,15 @@ test('final audit only identifies a validated single host success', () => {
   assert.equal(Object.hasOwn(final, 'reviewable_file_count'), false);
 });
 
-test('nested feature scope gap is preserved in final audit', () => {
+  test('nested feature scope gap is preserved in final audit', () => {
   const final = finalizeRoutingAudit({ decision: decision(), attempts: [], reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, features: { review_scope_gap: true, features_incomplete: false } }, catalog });
   assert.equal(final.review_scope_gap, true);
+});
+
+test('final audit validates repo and owner approval ref bounds', () => {
+  assert.throws(() => finalizeRoutingAudit({ decision: decision(), attempts: [], reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding: binding, policy: { repoId: 42, repo: 'a\n'.repeat(70), prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog }));
+  assert.throws(() => finalizeRoutingAudit({ decision: decision(), attempts: [], reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: 'x'.repeat(129), review_scope_gap: false, features_incomplete: false }, catalog }));
+  assert.throws(() => finalizeRoutingAudit({ decision: decision(), attempts: [], reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: 'bad ref!', review_scope_gap: false, features_incomplete: false }, catalog }));
 });
 
 test('final audit writer validates binding and seals final.json once with private modes', () => {

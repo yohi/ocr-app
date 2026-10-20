@@ -10,7 +10,7 @@ const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid
 const EGRESS_STATUSES = ['allowed', 'denied', 'not_checked'];
 const EVENTS = ['attempt_started', 'attempt_completed', 'host_completed'];
 const RESULTS = ['spawn_failed', 'timeout', 'transport_error', 'invalid_output', 'model_reported_failure', 'host_validated_success', 'host_skipped', 'other_failure'];
-const DECISION_KEYS = ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','owner_approval_ref','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
+const DECISION_KEYS = ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
 const AUDIT_KEYS = ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms'];
 const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
@@ -49,7 +49,8 @@ export function validateRoutingDecisionRecord(record) {
   if (record.proposed_strategy !== null) enumValue(record.proposed_strategy, STRATEGIES);
   if (record.selected_strategy !== null) enumValue(record.selected_strategy, STRATEGIES);
   if ((record.effective_mode === 'shadow' && record.selected_strategy !== null) || (record.effective_mode === 'enforce' && record.reviewable_file_count > 0 && record.selected_strategy === null)) throw new Error('AUDIT_SCHEMA_INVALID');
-  count(record.reviewable_file_count); nullableNumber(record.decision_latency_ms); nullableNumber(record.decision_api_cost); nullableApprovalRef(record.owner_approval_ref);
+  count(record.reviewable_file_count); nullableNumber(record.decision_latency_ms); nullableNumber(record.decision_api_cost);
+  if (record.route_source === 'not_requested' && record.reviewable_file_count !== 0) throw new Error('AUDIT_SCHEMA_INVALID');
   validVersion(record.policy_version); validVersion(record.model_catalog_version);
   if (record.feature_schema_version !== '3' || record.decision_state_version !== '1') throw new Error('AUDIT_SCHEMA_INVALID');
   return record;
@@ -62,12 +63,15 @@ export function validateRoutingAudit(record) {
   enumValue(record.classification_status, CLASSIFICATIONS); enumValue(record.risk_floor, STRATEGIES);
   if (record.selected_strategy !== null) enumValue(record.selected_strategy, STRATEGIES);
   if (record.proposed_strategy !== null) enumValue(record.proposed_strategy, STRATEGIES);
-  for (const key of ['policy_version','model_catalog_version']) validVersion(record[key]);
+  for (const key of ['policy_version', 'model_catalog_version']) validVersion(record[key]);
   if (record.feature_schema_version !== '3' || record.decision_state_version !== '1') throw new Error('AUDIT_SCHEMA_INVALID');
   nullableApprovalRef(record.owner_approval_ref);
-  for (const key of ['proposed_review_model','selected_review_model','host_success_model','executed_review_model']) nullableModelId(record[key]);
+  for (const key of ['proposed_review_model', 'selected_review_model', 'host_success_model', 'executed_review_model']) nullableModelId(record[key]);
   if (!Array.isArray(record.attempted_review_models) || record.attempted_review_models.some(model => typeof model !== 'string' || !MODEL_ID.test(model)) || new Set(record.attempted_review_models).size !== record.attempted_review_models.length) throw new Error('AUDIT_SCHEMA_INVALID');
-  enumValue(record.review_validation_status, ['passed','failed','not_run']); enumValue(record.head_validation_status, ['passed','failed','not_run']);
+  if (record.executed_review_model !== null) {
+    if (record.host_success_model !== record.executed_review_model || !record.attempted_review_models.includes(record.executed_review_model)) throw new Error('AUDIT_SCHEMA_INVALID');
+  }
+  enumValue(record.review_validation_status, ['passed', 'failed', 'not_run']); enumValue(record.head_validation_status, ['passed', 'failed', 'not_run']);
   if (record.audit_status !== 'sealed' || typeof record.review_scope_gap !== 'boolean' || typeof record.features_incomplete !== 'boolean' || typeof record.review_quality_measured !== 'boolean' || (record.effective_mode === 'shadow' && record.review_quality_measured)) throw new Error('AUDIT_SCHEMA_INVALID');
   nullableNumber(record.decision_api_cost); nullableNumber(record.latency_ms);
   return record;
@@ -81,7 +85,7 @@ export function createRoutingDecisionRecord({ runBinding, features, decision, eg
     classification_status: features.classification_status, risk_floor: features.risk_floor, reviewable_file_count: features.reviewable_file_count,
     proposed_strategy: route.proposedStrategy ?? null, selected_strategy: route.selectedStrategy ?? null, route_source: route.routeSource, decision_status: route.decisionStatus,
     egress_status: egressStatus, observer_status: 'not_started', decision_latency_ms: decision.latencyMs ?? null, decision_api_cost: decision.cost ?? null,
-    owner_approval_ref: policyVersions.ownerApprovalRef ?? null, policy_version: policyVersions.policyVersion, feature_schema_version: '3', decision_state_version: '1', model_catalog_version: policyVersions.modelCatalogVersion,
+    policy_version: policyVersions.policyVersion, feature_schema_version: '3', decision_state_version: '1', model_catalog_version: policyVersions.modelCatalogVersion,
   };
   validateRoutingDecisionRecord(record);
   return Object.freeze(record);
