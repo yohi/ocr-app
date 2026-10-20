@@ -11,6 +11,8 @@
 - **凍結する判定**：R2 A〜D、R2-FND-001/003/005は`RESOLVED_IN_PROPOSAL`を維持。R3-FND-001/002、R2-FND-004残余、R2-FND-002残余のみ本改訂対象。
 - **Owner Decision**：G0-D01〜D07は全件`PENDING_OWNER`。技術的な提案是正はOwner承認・モデル認定・API許可・実行認可を意味しない。
 
+> **RG-R1設計・計画整合性の限定追補（2026-10-20、原R4を履歴として保存）**：本書のR4初版に記された`G0-D01..D07=PENDING_OWNER`／`IMPLEMENTATION_PLAN=NOT_CREATED`／`DESIGN_PLAN_CONSISTENCY=NOT_REVIEWED`は**R4初版作成時点のスナップショット**である。現在の実効状態は§15.2の追補を**優先**して読む。Human Ownerはチャット上で7件の**基本方針のみ承認**、Implementation Planは既に作成済み。ただし個別repo egress grant、モデル認定、Secret設定、監査削除・事故保全等の運用認可、実装／起動、G1〜G4、および独立Design↔Plan PASSは**いずれも未成立**。今回のRG-R1限定修正はレビュー対象ドキュメントだけを対象とし、GitHubへの反映は実施しない。
+
 ## 変更管理とスコープ固定
 
 今回の更新は**文書上の設計契約と未来の受入テスト要求**を明確化することのみ。R3で確定した方針を不要に再審査せず、R4で確定する監査→公開ゲート、カタログのJSON Schema、strict projection、attempt callbackに変更を限定する。Cloudflare Worker、OCR review engine、reviewable選別、off/shadow/enforce、OpenRouter Decisions API、Mercury Decide優先、Antigravity Host、既存review schemaを変更しない。実行モードは既定`off`のまま。Modelの能力は認定済カタログで強制し、Decision回答は常にadvisory。**raw diff、file paths、PR title、Secretsを外部に渡さない。**
@@ -516,6 +518,14 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 3. 監査ファイルをfreezeした後に`executed_review_model`を上書きしない。**final audit確定→Artifact→公開判断**の順序は§8.1が唯一の規範。成功モデルが記録されてもArtifact upload失敗なら公開してはいけない。
 4. `off/shadow`のlegacy primary/fallbackを変更しない。`off`ではrouting監査・Decision通信を増やさず、`shadow`では提案モデルを実行しないため提案値を実成功値と取り違えない。`executed_review_model`はprovider実モデルIDの証明ではなくCLI引数の証跡を意味する。
 
+### 7.4 RG-R1-005 — Host進捗・失敗通知の独立情報境界
+
+- **Routing Artifact境界**：`decision.json`/`attempts.ndjson`/`final.json`には、厳密な型・固定enum・許可された数量だけを保存する。stderr、prompt、raw result/message、例外文字列、PR本文、Secretを保存しない。
+- **Actions progress境界**：既存`agy stderr → sanitizeProgress → onProgress → process.stderr.write`経路は既知パターンを浄化するだけで、任意のPR文・diff抜粋・機密表現が必ず除去されるとの保証はない。**enforceではHost呼出しに旧`process.stderr.write` sinkを渡さず、progress callbackを未指定（または完全no-op）に固定する。** Host/runnerの`console.*`、例外catch、CLI exit診断が同じ内容を迂回出力しないかも後続G1で負例検証する。代替診断はtrusted runnerが生成した固定enumと件数のみ。
+- **Check Run境界**：enforceの`update-check-run.mjs`は`routingFailureReason`（固定enum）と`enforce=true`を明示して呼び、`failureDetails(result.message)`を**いかなるenforce結果でも参照・添付しない**。失敗・timeout・spawn error・invalid outputはサニタイズ済みenumとActions run URLのみで知らせる。`result.message`を任意文字列のままfailure通知へ転写しない。`/tmp/ocr-result.json`の既存`schema_version:1.0`、`status/coverage/findings/message`を変更せず、enforceで失敗結果を書き出す際の`message`はtrusted固定文だけに限定する。
+- **モード分離**：`off/shadow`の既存Host progress、retry/fallback、Check Run表示は変更しない。ただし従来経路のログを「任意機密が完全に除去済み」と保証するものではない。**enforceの保護をshadowへ適用して観測挙動を変えない**。
+- **fail closed**：固定enum化ができない例外は`REVIEW_EXECUTION_FAILED`等の一般理由へ写像し、raw `Error.message`・stderr・provider response本文を出力しない。`enforce`の監査不能・Check更新不能は公開成功としない。
+
 ## 8. ワークフロー統合点と実行経路（設計のみ）
 
 - **挿入位置**：`Prepare trusted review context`後に全変更特徴量抽出、trusted egress判定、Decision Adapter、policy resolver、routing decision auditを置く。旧OCR Preview/Context Builder/既存review JSON/schema・Antigravity sandboxは不変。
@@ -531,19 +541,19 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 
 | 順 | 信頼された責任主体 | 実施内容と証拠 | 失敗時の扱い |
 |---|---|---|---|
-| **1** | Antigravity Host + `onAttemptEvent` observer | Host終了確定、`host_completed`までの厳密なattempt系列（`attempts.ndjson`）をfreeze | `audit_incomplete`、success model不確定 |
+| **1** | Antigravity Host + `onAttemptEvent` observer | Host実行時は`host_completed`までの厳密なattempt系列をfreeze。**enforceのOCR reviewable=0**ではtrusted skip結果を作り、Hostをspawnせず0行の`attempts.ndjson`を正規としてfreeze | Host実行経路の不完全は`audit_incomplete`、success model不確定。skipで実行証拠を捏造しない |
 | **2** | 既存filter + `validate-ocr-result.mjs`（trusted workflow） | OCR既存review JSON、対象範囲、coverage、適法なfindingを検証し`review_validation_status`確定 | `failed`、公開禁止。結果schema不変更 |
 | **3** | 既存`check-pr-head.mjs`（trusted workflow） | 投稿直前HEAD SHA照合を実施し`head_validation_status`確定 | mismatch/unknownで公開禁止 |
 | **4** | Routing audit finalizer + strict validator | §11の`final.json`を成功モデル条件で**一度だけseal**、`decision.json`・`attempts.ndjson`と相互整合検証 | `audit_finalization_failed`、公開禁止。再修正/後付け成功は禁止 |
 | **5** | 独立`Upload routing audit` step | 固定3ファイルを`upload-artifact@v4`、Owner承認済`retention-days`で保存し**step `outcome=success`**を確認 | `audit_artifact_upload_failed`、公開禁止。job/Check failure |
 | **6** | 独立`Evaluate publish eligibility`（trusted gate） | 1〜5のrun/HEAD/model tier/artifact outcome/Owner D04決裁を突き合わせ、`publish_authorized`を一回決定 | `false`（default）、投稿不可 |
-| **7** | 既存`post-ocr-comments.mjs` + Check Run completion | **公開許可のときだけ**PRレビュー投稿。Check Runの最終結論はGate結果と投稿結果に従う | 投稿失敗は`failure`。Check Run更新は失敗の透明な通知用に実行 |
+| **7** | 既存`post-ocr-comments.mjs` + Check Run completion | **公開許可のときだけ**PRレビュー投稿。`enforce`では`Resolve fixed review threads`を実行せず返信・resolveを延期する。Check Runの最終結論はGate結果と投稿結果に従う | 投稿失敗は`failure`。Check Run更新は失敗の透明な通知用に実行 |
 
-**workflowの既存実行順との境界**：現行`Resolve fixed review threads`はPRへreply/resolveし得るため、enforceでは**すべてのPR書き込み（thread返信・resolveを含む）をステップ6のGate以後**に遅延／条件化する。`off/shadow`は従来のstep順序を維持し、thread resolverの内部仕様も変更しない。既存の`Mark Check Run in progress`は非レビューの進捗状態更新なので開始時のまま許可されるが、**success/conclusionまたはレビュー成果の公開を行うのはステップ7以後**。
+**workflowの既存実行順との境界（RG-R1-003・優先契約）**：現行`Resolve fixed review threads`はPRへreply/resolveし得る。**enforceではこの既存stepを実行しない（延期、mutation=0件）**。HEAD拘束済みの新規スレッド更新方式を別途認可するまでは復活させない。これによりenforceで最初に許されるレビュー由来のPR mutationは、ステップ6の許可とその後のHEAD再確認を経た`post-ocr-comments.mjs`によるレビュー投稿だけとなる。`off/shadow`のresolver・既存step順序は変更しない。既存の`Mark Check Run in progress`は非レビューの進捗状態更新なので開始時のまま許可されるが、**success/conclusionまたはレビュー成果の公開を行うのはステップ7以後**。
 
 **Check Run IDの前提**：`enforce`はCheck Runの最終結果通知を必須とし、`check_run_id`が無いrunはstep6のGateを`false`にする。新規Check Runの作成方式・権限・対応可能性は後続PlanとG1で検証する（本R4では作成しない）。`off/shadow`の既存`check_run_id`任意挙動は維持する。
 
-**HeadのTOCTOU対策**：step3のHEAD再検証の後、step7の投稿直前に軽量なHEAD一致確認を**再度実施**し、変化があればGateを破棄して公開しない。再チェックはstep3のHEAD validationの代替にはしない。GitHub側の同時更新を原子的に禁止するとは主張しない。投稿APIがcommit SHA拘束を受け付ける場合は照合済SHAを指定する。Check Run failure報告はこのpublish gateによる禁止に含めない。
+**HeadのTOCTOU対策**：step3のHEAD再検証の後、step7の**最初のPR mutation直前**に軽量なHEAD一致確認を**再度実施**し、変化があればGateを破棄して公開しない。enforceではthread mutationは存在しない。再チェックはstep3のHEAD validationの代替にはしない。GitHub側の同時更新を原子的に禁止するとは主張しない。投稿APIがcommit SHA拘束を受け付ける場合は照合済SHAを指定する。Check Run failure報告はこのpublish gateによる禁止に含めない。
 
 **Artifact upload結果は監査JSONの外側で確定**：`final.json`の`audit_status="sealed"`は**ローカル封印/スキーマ検証PASS**のみを表し、upload成功を先取りしない。step5の`outcome`とartifact ID/URL（GitHub提供時）はtrusted workflow outcomeとして評価し、`final.json`へ後から追記・再sealしない。`upload-artifact`は`continue-on-error`等でstep6・failure Check Run更新へ進められるよう制御しても、**生の`outcome`がfailureならGateはfalse**とし、job最終状態をfailureにする。`conclusion=success`をpublishの代わりに流用しない。
 
@@ -552,7 +562,7 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | enforceの実際の状態 | PRレビューコメント・thread mutation | Check Run最終結論と表示 | GitHub Actions job |
 |---|---|---|---|
 | Host成功、OCR検証PASS、HEAD一致、audit sealed、Artifact upload成功、publish gate=true、投稿成功 | **許可**（既存重複排除維持） | `success`（実際のreviewがsuccessの場合のみ） | `success` |
-| 正常なOCR `skipped`、Owner G0-D04で警告許容決裁あり、1〜6成功 | 既存skip/警告方針の範囲のみ。実レビュー完了と表示しない | `neutral`＋`review_skipped / review_scope_gap`表示（該当時） | Gate policyで明示された状態のみ。`executed_review_model=null` |
+| 正常なOCR `skipped`で**D04 blocking対象のscope gapが存在せず**、1〜6成功 | 既存skip方針のみ。実レビュー完了と表示しない。enforceのthread mutationは0 | `neutral`＋`review_skipped`表示 | Gate policyで明示された状態のみ。`executed_review_model=null`。**D04の非対象高リスクgapがあればGate=false/失敗** |
 | Host/attempt不完全、OCR検証fail、HEAD不一致、final schema不正 | **禁止** | `failure`＋固定理由enum（可能ならActionsリンク） | `failure` |
 | **Artifact upload fail / missing** | **禁止**。`always()`による既存post stepの素通し不可 | **`failure`＋`ROUTING_AUDIT_MISSING`**（投稿なし、監査欠損、Actions run URLを明示。Secret等は非表示） | **`failure`** |
 | upload成功だがgate条件不成立／Owner未決裁／能力下限違反 | **禁止** | `failure`＋固定理由enum | `failure` |
@@ -564,7 +574,28 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 
 ### 8.3 G0-D04とOCR非対象高リスク変更
 
-`review_scope_gap=true`でOCR対象外の高リスク変更を検知しても、選択モデルを深くするだけで欠落箇所をレビュー済みにできない。`off/shadow`は従来のレビュー・skip・Check Runを維持。`enforce`開始前には**G0-D04で警告/阻止のどちらかをOwnerが明示決裁**し、step6にその規則を組み込む。blocking方針が採用された場合は公開禁止・failure/neutralの具体的運用をOwner決裁で確定。Owner未決裁時にwarning既定で有効化しない。
+`review_scope_gap=true`でOCR対象外の高リスク変更を検知しても、選択モデルを深くするだけで欠落箇所をレビュー済みにできない。`off/shadow`は従来のレビュー・skip・Check Runを維持。**R4初版当時は**G0-D04の警告/阻止の選択が未決裁だったが、**§15.2の現在の基本方針ではOwnerはenforce時のblockingを承認済み**。step6は非対象高リスク・分類不能変更（`review_scope_gap=true`かつD04対象）を公開禁止とし、`failure`と固定理由`REVIEW_SCOPE_GAP_BLOCKED`で通知する。その他の正常skipだけ`neutral`可。G1検証・enforce実運用許可は未了であり、shadow/offへblockingを波及させない。
+
+### 8.4 RG-R1-002 — trusted実行エントリポイントとステップ境界
+
+**正規方式を単一のtrusted Node ESM orchestrationに固定**する：`self-repo/.github/workflows/scripts/prepare-review-routing.mjs`が公開する`prepareReviewRouting({env,preview,runGit,fetchImpl,writeJson,writeOutput}): Promise<RoutingPreparationResult>`を、`Prepare trusted review context`の直後に一つのActions step **`Prepare dynamic routing`** から実行する。PR checkoutからJavaScriptをimportせず、`self-repo`のtrustedスクリプトと設定だけを読む。Task 2〜6のpure/library APIをこのentrypointで順番に呼び出し、同じ判断を複数inline stepに再実装しない。
+
+| 因果順 | 実行者・Producer | Consumer・検証・境界 | 主な入力／出力 |
+|---|---|---|---|
+| 0 | Workflowのtrusted mode検証 | `off`なら新規機能を全部skip。`shadow/enforce`だけentrypoint起動。未知値はHost実行前に失敗 | `DECISION_ROUTING_MODE` → `effective_mode` |
+| 1 | Task 2 `extractPRFeatures` | Task 3 `classifyPRRisk`（trusted local、全Git変更） | 検証済みbase/head、OCR Preview → `InternalPRFeatures/v3` |
+| 2 | Task 3 `classifyPRRisk` | `buildDecisionState`（内部v3をstrict projection） | 分類済みv3 → `DecisionState/v1`。不完全時はAPIなし |
+| 3 | Task 4 `authorizeDecisionEgress` | Task 5 `requestReviewDecision`の**必須grant** | GitHub REST ID/visibility・trusted policy・HEAD/run拘束 → `EgressAuthorization/v1`。失敗/未許可はPOST 0 |
+| 4 | Task 5 `requestReviewDecision` | Task 6 `selectReviewRoute`（advisoryのみ） | fixed model/state/questions、approved grant → normalized enum Decision。`reviewable_files=0`なら呼び出し0、`not_requested` |
+| 5 | Task 6 `selectReviewRoute` | Task 8 `writeRoutingDecision`、workflow Host step | local risk floor/catalog/Decision → `RoutingPreparationResult`、fixed `decision.json` |
+| 6 | Workflow Host step + Task 7 callback | Task 8 `createAttemptRecorder` | enforceは認定済み`model`/明示`fallbackModels`＋observer。shadowはlegacyモデル/fallback＋観測専用observer。offはlegacyでobserverなし |
+| 7 | Task 8 finalizer／Artifact step／Gate | enforceは§8.1のseal→upload→gate→post、shadowは§11.5のbest-effort診断保存 | 固定3ファイル、別の`AuditDeliveryOutcome/v1` |
+
+**入力・出力契約（Task 9への拘束）**：trusted環境変数は`BASE_REF`, `COMMIT_SHA`, `TARGET_REPO`, `PR_NUMBER`, `OCR_PREVIEW_PATH`, `RUNNER_TEMP`, `GITHUB_OUTPUT`, `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`, `GITHUB_TOKEN`（GitHub App installation token）、`DECISION_ROUTING_MODE`。**唯一のActions Secret名は`DECISION_OPENROUTER_API_KEY`**、当該routing stepにのみNode環境変数`OPENROUTER_API_KEY: ${{ secrets.DECISION_OPENROUTER_API_KEY }}`としてマップする。他stepへ転送・出力しない。認可前にこの鍵を使ったPOSTを起動する呼出し経路は存在させない。`DecisionState/v1`/内部grantはNode内の引数のみで受け渡し、`GITHUB_OUTPUT`やartifactに格納しない。
+
+`RoutingPreparationResult`はtrustedローカルの `{status:'prepared'|'no_reviewable_files'|'degraded'|'blocked',mode:'shadow'|'enforce',proposedStrategy:'fast'|'deep'|null,selectedStrategy:'fast'|'deep'|null,selectedModelId:string|null,fallbackModels:string[],routeSource:enum,decisionStatus:enum,reviewableCount:number,headSha:hex40}`。`GITHUB_OUTPUT`にはenum・検証済みmodel ID・`fallbackModels`の小さいJSON配列だけを出し、Host入力は`RUNNER_TEMP/ocr-selected-route.json`（routing監査3ファイルの**外側**、0600、公開しない）からHEAD/run/modeを照合して取得する。`decision.json`の生成・初回freezeはTask 8の`writeRoutingDecision`が行う。**routingディレクトリ内のArtifact対象は従来どおり3ファイルだけ**。
+
+`reviewable_files=0`でも抽出・risk分類・`decision.json`（`decision_status=not_requested`）は行い、**Decision API POST 0**。**shadow**は従来のHostによる`skipped`契約を維持する。**enforce**では認定モデルの選択・Host spawnを行わず、trusted workflowが既存形式`schema_version="1.0",mode="review",status="skipped",coverage=0,findings=[],message=<trusted fixed skipped reason>`の結果を生成する（既存schema不変更）。`attempts.ndjson`は0行が正規で、最終成功モデルはnull、Host未実行の`host_completed`イベントは要求しない。最終監査・Artifact／Gateは省略せず、D04対象の非レビュー高リスクscope gapがあれば`REVIEW_SCOPE_GAP_BLOCKED`で公開を禁止する。scope gap非該当の正常skipのみneutral可。`shadow`のrouting/observer失敗は旧Host/投稿/Checkを停止しない。`enforce`でroutingが`blocked`または未認定モデルならHost spawn前に失敗し、公開許可を出さない。
 
 ## 9. 障害・unknown時の規定結果
 
@@ -606,7 +637,7 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | Final routing audit | `${RUNNER_TEMP}/ocr-routing/final.json` | §11.2 `RoutingAudit/v2`。既存OCR結果validation + HEAD checkの後で**最終seal** |
 
 - 中央trusted runner上でdir `0700`・file `0600`、固定の3ファイルのみをschema検証。未認可path、`target-repo/`、diff、Secret、任意エラー文字列のupload禁止。ファイル欠損は成功判定不能。`decision.json`/`attempts.ndjson`に失敗原因の列挙を保持する設計であり、機密のstdout/stderrは保存しない。
-- `github.run_id`/`github.run_attempt`でArtifactを一意化：`ocr-routing-audit-${run_id}-${run_attempt}`。既存`ocr-debug-logs`と**別の**`upload-artifact@v4` stepを用い、`retention-days`はG0-D07 Ownerが決裁するまで未設定・起動禁止。
+- `github.run_id`/`github.run_attempt`でArtifactを一意化：`ocr-routing-audit-${run_id}-${run_attempt}`。既存`ocr-debug-logs`と**別の**`upload-artifact@v4` stepを用い、`retention-days`は§15.2で承認された基本保持期間**30日**を唯一の値とする。ただし削除・Incident保全・閲覧実態等の運用詳細およびshadow/enforce個別有効化が未承認の間は起動禁止。
 - **enforce**では§8.1の順に**最終audit seal→upload完了確認→publish gate→PR投稿**。`always()`を使うのは失敗時の収集/通知だけ。Artifact無いときにPRコメント投稿は不可。
 - **shadow**では現在の固定モデル/投稿順を変更せず、追加routing監査はbest-effort。upload失敗時も旧レビュー結果とCheck Runを改変せず、診断enumだけをActions logへ記録。**off**では新監査ファイル生成・upload自体を行わない。
 
@@ -622,7 +653,8 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | `decision_status` | `succeeded` / `unavailable` / `not_requested` / `invalid_response` |
 | `egress_status` | `allowed` / `denied` / `not_checked` |
 | `classification_status` | §4.2の列挙のみ |
-| `risk_floor`, `selected_strategy` | `fast` / `deep` |
+| `risk_floor` | `fast` / `deep` |
+| `selected_strategy` | `fast` / `deep`（enforce時は必須）、`null`（shadowは提案を実行しないため必須） |
 | `proposed_strategy` | `fast` / `deep` / null |
 | `policy_version`, `feature_schema_version`, `decision_state_version`, `model_catalog_version` | trusted contract version文字列、`feature_schema_version="3"`、`decision_state_version="1"`。未検証・異なるversionを黙認しない |
 | `owner_approval_ref` | trusted確認済み参照／無しはnull。`PENDING`を承認済み文字列に偽装しない |
@@ -637,7 +669,7 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 
 ### 11.3 監査保存・閲覧・保持（Owner G0-D07）
 
-G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内）、central repositoryのartifact閲覧主体、PR/repo識別情報の保存範囲・匿名化、事故保全例外、削除プロセス、監査担当者をOwnerが文書決裁するまで、**shadow/enforceを有効化しない**。`retention-days`に暗黙の既定値を使わない。未決裁の運用値を認定値として例示しない。既存`ocr-debug-logs`の契約は変更しない。
+**R4初版の`G0-D07=PENDING_OWNER`は履歴**。現在は§15.2により無料Decision限定、routing Artifact**30日保持**、中央リポジトリreadアクセス境界の**基本方針のみ承認済み**。個別のSecret管理・IDの保存詳細、GitHub実アクセス評価、事故保全例外、削除手順、監査担当者等の**運用承認・検証は未了**のため、**shadow/enforceを有効化しない**。`retention-days`は起動可能になったときのみOwner-approved値`30`を明示し、暗黙既定値へフォールバックしない。既存`ocr-debug-logs`の保持契約は変更しない。
 
 ### 11.4 監査失敗の通知保証と限界
 
@@ -645,7 +677,15 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 - `always()`は**証拠収集・failure Check Run**に限定して許可し、条件付きpost/resolveを`always()`のみで実行しない。失敗のサニタイズ済ログすら書けない場合は失敗として明示する。
 - `executed_review_model`が非nullでも、artifact fail/公開禁止の状態を`review published`と表示しない。Host/validation通過はpublication成功と独立。
 
-## 12. 将来Implementation Planの分割単位（**Plan自体は未作成**）
+### 11.5 RG-R1-004 — Shadow G2観測証拠と配送の最小契約
+
+- **生成責任**：`prepare-review-routing.mjs`がTask 8 `writeRoutingDecision`を呼び、`decision.json`を作成・freezeする。既存Hostの呼出し点では**shadowでも**`onAttemptEvent`をobserverとして登録し、Task 8の`createAttemptRecorder`を通じて`attempts.ndjson`に保存する。**選定されたproposedモデル/許可fallbackをHostへ渡さない。** 現行のlegacy model/retry/fallbackは完全に同一。
+- **shadowの正規ファイル**：①`decision.json`は、Host前に採取できる分類・risk floor・`proposed_strategy`・`route_source`・decision/egress status・latency/cost（取得不能なら`null`）・policy/schema/catalog版・HEAD/run拘束を含む。②`attempts.ndjson`は既存HostのCLI引数試行を記録し、未観測なら0行のファイルと明示的`observer_status=unavailable`を診断に記す。③`final.json`はHost終了と既存OCR検証・HEAD判定の**観測可能な範囲**で`RoutingAudit/v2`をbest-effort封印する。未成立の`host_success_model`/`executed_review_model`は`null`、`review_quality_measured=false`。shadowの`selected_strategy`は**実適用されていない候補を表すために使わず`null`**とし、提案は`proposed_strategy`にのみ入れる。`RoutingAudit/v2`の`selected_strategy`の型は`fast|deep|null`と読み替える（`null`はshadowのみ許可、enforceは非null必須）。
+- **`RoutingDecisionRecord/v1`（`decision.json`）**：全キー必須、追加キー禁止。`schema_version:'1'`、`effective_mode:'shadow'|'enforce'`、`head_sha:hex40`、`workflow_run_id:string`、`run_attempt:positive integer`、`classification_status`（§4.2のenum）、`risk_floor:'fast'|'deep'`、`reviewable_file_count:nonnegative integer`、`proposed_strategy:'fast'|'deep'|null`、`selected_strategy:'fast'|'deep'|null`、`route_source:'model_decision'|'deterministic_fallback'|'not_requested'`、`decision_status:'succeeded'|'unavailable'|'not_requested'|'invalid_response'`、`egress_status:'allowed'|'denied'|'not_checked'`、`observer_status:'available'|'unavailable'|'not_started'`、`decision_latency_ms:finite nonnegative number|null`、`decision_api_cost:finite nonnegative number|null`、`policy_version:string`、`feature_schema_version:'3'`、`decision_state_version:'1'`、`model_catalog_version:string`。値はtrusted enum/数値/版のstrict projectionだけ。`observer_status`はHost前に`not_started`としてfreezeする。Host後の観測成否は、`final.json`では許容済みの試行／成功モデルの`null`や空配列で表し、詳細な失敗enumはサニタイズ済みActions診断にのみ記録する（freeze後上書き禁止、`RoutingAudit/v2`へ追加キーを挿入しない）。`route_source=not_requested`は`reviewable_file_count=0`の場合のみ。
+- **未登録のlegacy model**：shadow observerがCLIモデルIDをtrusted catalogに照合できない場合、モデル名の推測・偽装やlegacy Host停止をせず、`observer_status=unavailable`を**Actionsの別診断**として記録し、`RoutingAudit/v2`の`audit_status`に許容外の`unavailable`を代入しない（正規の`final.json`が成立するときの`audit_status`は`sealed`のみ）。attempt streamは0行でもよく、最終成功モデルは`null`。これを「実行モデルを認定・測定した」と表示しない。`enforce`で同じ欠落が生じた場合は公開禁止。
+- **配送**：`shadow`も固定3ファイルだけを独立`Upload routing audit`（Owner承認済み`retention-days=30`、リポジトリread閲覧境界、追加の削除/Incident決裁は未了ならshadow起動禁止）でbest-effort uploadする。部分ファイル・不正schemaならアップロードせず`SHADOW_AUDIT_UNAVAILABLE`をActionsの固定診断に記す。upload失敗／audit不整合は**既存review投稿とCheck Runを妨げない**。`off`では3ファイル・新uploadとも0。G2はroutingメタデータ・失敗率・latency/cost等の観測であり、レビュー品質比較はG3まで実施しない。
+
+## 12. 将来Implementation Planの分割単位（**R4初版当時はPlan未作成：履歴**）
 
 | Plan work item | 予定する責任・成果物（設計のみ） | Red/Green / contract test観点 |
 |---|---|---|
@@ -658,7 +698,7 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 | P7 Workflow / audit | §8.1 enforce順序と公開Gate、`AuditDeliveryOutcome/v1`、固定Artifact、retention | final seal→upload→gate→post、upload fail/Check failure/HEAD race |
 | P8 Gates | G1 mock、G2 shadow観測、G3比較、G4判断 | 実行証拠分離、旧テスト回帰PASSは将来の要求（未実施） |
 
-この表はImplementation Planの**インターフェース要求を定義する設計情報**に過ぎず、実装計画書を作成した、またはPlanを照合したことを意味しない。G0 Owner承認後にのみ、別のSuperpowers Implementation Planを正式作成する。
+この表は**R4初版当時の履歴スナップショット**であり、当時Implementation Planが未作成だったことを表す。**現在はImplementation Planが作成済み**（§15.2参照）だが、独立Design↔Plan整合性レビューはR1でBLOCKEDであり、R1指摘の文書限定修正を実施中。独立PASSや実装・G1着手を意味しない。
 ## 13. 必須受入テスト設計（未実施）
 
 | Test ID | 期待結果 |
@@ -690,6 +730,17 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 | T-024 | sealed finalの`audit_status=sealed`がupload successを意味しない。upload outcomeは分離。再seal・公開後の証拠差し替えを拒否 |
 
 テストは**設計上の予定**であり、現在PASSや実行済みを意味しない。高リスク・非対象コードの未レビューを`coverage=1`に変換する改変は禁止。
+### RG-R1限定追加受入テスト（T-001〜T-024を変更・削除しない）
+
+| Test ID | 将来G1 mock / 監査での期待結果 | 対応Plan |
+|---|---|---|
+| T-025 | effective D01〜D07の基本方針と個別運用認可を混同しない。未決裁repo・モデル・Secret/削除/Incidentに承認済み値を挿入しない | Preflight・Tasks 1/4/8/9 |
+| T-026 | 単一`prepare-review-routing.mjs`によるTask2→3→4→5→6→8の因果順、strictローカル変換、許可前POST0。reviewable=0はPOST0、enforceはHost spawn0＋schema互換skipped結果と0行attemptsを生成し、D04対象ならblocking。Secret変数mapping、3固定auditファイルをmockで検証 | Tasks 2〜6、8〜9 |
+| T-027 | enforceで`Resolve fixed review threads`の返信・resolve呼出0。最初のPR mutation（post）直前のHEAD再検証がfailならpost0。off/shadowはresolver動作不変 | Task 9 |
+| T-028 | shadowが`decision.json`・`attempts.ndjson`・`final.json`を作成/固定スキーマでbest-effort配布し、失敗しても旧投稿/Checkが継続する。品質測定false・catalog外legacy観測null | Tasks 7〜9 |
+| T-029 | enforceのprogress/stderr/例外/result.messageにPR風文字列・認証様文字列を注入してもActions/Checkへraw転載なし。off/shadowの既存振る舞いを維持 | Tasks 7、9 |
+| T-030 | Task 1の依存追加**前**にNode既存テスト・Worker回帰・actionlint・git diff --checkを採取、未実行`NOT_RUN`。Ajv `npm ci`はTask 1導入後だけ実施 | Preflight・Tasks 1、10 |
+
 ## 14. Gates / 評価範囲（R2-D維持）
 
 - **G0 — Design / Owner**：今回R4の指定4 Finding／残余とG0-D01〜07の決裁事項を審査。**現状 PENDING**。技術是正案はOwner認可ではない。
@@ -699,9 +750,9 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 - **G4 — Owner rollout decision**：G2/G3証拠とD04/D07決裁を確認して限定enforceの本格展開判断。自動進行なし。
 
 **今回の出力はR4 Design Specと別冊Handoffのみ**。G0承認・G1テスト・G2開始・G3検証・G4承認を一切行っていない。
-## 15. 残存課題とOwner Decision Register（全件未決裁）
+## 15. 残存課題とOwner Decision Register（R4初版の未決裁状態：履歴）
 
-現時点でG0-D01〜D07は全て`PENDING_OWNER`。R2/R3のOwner課題をR4文書改訂だけで承認状態にはしない。
+**この表はR4初版作成時点の履歴**であり、現在の決裁状態ではない。現在の有効な決裁状態は**§15.2**。R4初版時点ではG0-D01〜D07は全て`PENDING_OWNER`だった。R2/R3のOwner課題をR4文書改訂だけで承認状態にしたものではない。
 
 | Decision ID | Owner決裁対象 | R3での提案/論点 | Status |
 |---|---|---|---|
@@ -721,6 +772,24 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 - Archive/Artifactのdownload監査、retention-daysのGitHub制限、閲覧権限の運用実態。
 - `fast` allowlistの対象文書パターン・denylistの正規表現誤判定をG0 Ownerで確認。
 - 未作成Implementation Planとの仕様・用語・型/インターフェース・エラー処理・テスト方針・非機能要件の**一致確認**は後続Plan reviewの必須Gateとする。**Plan未作成のため整合性検証は未実施**。
+### 15.2 RG-R1-001 — Plan作成後のeffective Owner Decision State（R4初版の履歴より優先）
+
+**根拠と優先順位**：R4初版§15およびAppendix Hの`PENDING_OWNER`/`NOT_CREATED`は**当時の履歴**。2026-10-20にHuman Ownerが会話で7基本方針を「OK」と承認し、その後Implementation Planが作成された。**これだけでは運用レベルの個別grant/能力認定/Secret/監査削除・Incident承認やG0 full gateの通過は成立しない**。同日Superpowers Review Gate R1の判定は`BLOCKED`（Major 5、Minor 1）。今回の改訂後の正本間整合性は`AUTHOR_CORRECTED_PENDING_INDEPENDENT_RECHECK`、独立PASSではない。
+
+| ID | 基本ポリシー（Human Owner会話承認） | 有効な運用認可・残余状態 |
+|---|---|---|
+| G0-D01 | `off`既定、shadowとenforceは各段階で明示承認 | `BASIC_POLICY_APPROVED`、shadow/enforce起動は`PENDING_ACTIVATION` |
+| G0-D02 | 全repo外部送信default deny。publicも個別trusted policyが必要、restrictedは厳密id/full_name照合 | `BASIC_POLICY_APPROVED`、個別repository allowlist/grant=`PENDING_OWNER`、現在POST許可0件 |
+| G0-D03 | Risk＝ALL_CHANGED_FILES、レビュー対象＝OCR_REVIEWABLE_FILESを分離 | `BASIC_POLICY_APPROVED`、コード・G1証明`NOT_STARTED` |
+| G0-D04 | enforceではOCR対象外高リスク／分類不能変更をblocking | `BASIC_POLICY_APPROVED`、検証・有効化`PENDING`。shadow/offの従来動作は変更しない |
+| G0-D05 | owner-certifiedモデルだけ実行、Deep→Fast禁止 | `BASIC_POLICY_APPROVED`、**個別モデルcertification/Gate証拠/承認0件**、現行catalog例は全pending。enforce不可 |
+| G0-D06 | G2はrouting観測のみ、レビュー品質評価はG3 | `BASIC_POLICY_APPROVED`、具体的G2運用とG2実施は`NOT_STARTED` |
+| G0-D07 | 無料Decisionのみ・自動課金禁止、routing監査Artifact保持30日、中央repository read権限を閲覧境界とする | `BASIC_POLICY_APPROVED`、Secret配布/実費評価・ID取扱い詳細・削除/Incident・実アクセス棚卸・実装確認は`PENDING_OWNER/VALIDATION`。shadow/enforce起動禁止 |
+
+**現在の単一実効状態**：`G0_BASIC_POLICY=APPROVED`、`G0_FULL_OPERATIONAL_AUTHORIZATION=NOT_GRANTED`、`IMPLEMENTATION_PLAN=CREATED`、`DESIGN_PLAN_CONSISTENCY=REVISION_READY_FOR_INDEPENDENT_RECHECK`（独立再審査前）、`RG_R1=BLOCKED_PENDING_RECHECK`、`G1/G2/G3/G4=NOT_STARTED`、`IMPLEMENTATION=NOT_STARTED`、`GITHUB_WRITES_BY_THIS_CORRECTION=NONE`、`DECISION_API_CALLS=NONE`、`SHADOW_ENFORCE_ACTIVATION=NONE`。
+
+状態の切替は新しいOwner証跡と独立再レビュー結果が得られた場合に限る。未決裁を`APPROVED`と書き換えてはならない。enforceゲートはD04で承認された**非対象高リスクのblocking**を適用する。§8.3の「将来のOwner決裁が必要」はR4初版時点の記述であり、この基本方針が承認された後の運用値の追加決裁・実装検証と区別する。
+
 ## 16. 参照資料（R2から継承、2026-10-20参照）
 
 - [ocr-app / 確認対象HEAD](https://github.com/yohi/ocr-app/tree/68c5739c2570039fc62a4ed4814684ac65584791)（ドキュメント上の基準を固定）
@@ -846,7 +915,7 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 - [ ] `G0-R4-11` G1/G2/G3/G4がNOT_STARTED、実行/API/GitHub書込なし、Implementation Plan未作成を維持しているか。
 - [ ] `G0-R4-12` 将来Design↔Plan 6軸の乖離0件レビューをGate条件とし、未作成PlanのPASSを主張していないか。
 
-## Appendix H. R4の厳密な状態宣言
+## Appendix H. R4初版の厳密な状態宣言（履歴；現在は§15.2）
 
 - `R3-FND-001/002 = RESOLVED_IN_PROPOSAL`（今回の文書是正のみ）。
 - `R2-FND-002/004 RESIDUAL = RESOLVED_IN_PROPOSAL`（今回の文書是正のみ）。
@@ -857,3 +926,17 @@ G0-D07は**`PENDING_OWNER`**。保持日数（正の整数、GitHub上限以内�
 - `SOURCE_CODE_CHANGED = NO`、`GITHUB_WRITES = NONE`、`DECISION_API_CALLS = NONE`、`SHADOW_ENFORCE_ACTIVATION = NONE`。
 
 **提出状態**：`R4_DESIGN_CORRECTIONS_READY_FOR_FRESH_G0_REVIEW`（G0承認・Security承認・能力実証・実装許可・実運用開始を意味しない）。
+
+
+## Appendix I. RG-R1限定是正履歴（現在の文書正本に適用）
+
+| Finding | 修正位置 | 文書上の状態 | 独立実証 |
+|---|---|---|---|
+| RG-R1-001 | 冒頭の優先関係・§12・§15.2 | RESOLVED_IN_PROPOSAL | 再審査待ち |
+| RG-R1-002 | §8.4・§11.5・T-026 | RESOLVED_IN_PROPOSAL | 後続Plan/G1 |
+| RG-R1-003 | §8.1・T-027 | RESOLVED_IN_PROPOSAL | 後続Plan/G1 |
+| RG-R1-004 | §11.5・T-028 | RESOLVED_IN_PROPOSAL | 後続Plan/G1/G2 |
+| RG-R1-005 | §7.4・T-029 | RESOLVED_IN_PROPOSAL | 後続Plan/G1 |
+| RG-R1-006 | T-030・Plan Preflight | RESOLVED（文書の順序修正） | 未実行 |
+
+**レビュー状態**：`REVISION_READY_FOR_INDEPENDENT_RECHECK`。自己検証を独立`PASS`として扱わず、原R2/R3/R4の既存Findingを自動再OPENしない。
