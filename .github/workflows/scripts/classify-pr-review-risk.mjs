@@ -25,7 +25,7 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
   let known = true;
   let normalText = true;
   for (const file of files) {
-    if (!file || typeof file !== 'object' || typeof file.path !== 'string' || !file.path || typeof file.status !== 'string' || typeof file.mode !== 'string') {
+    if (!file || typeof file !== 'object' || typeof file.path !== 'string' || !file.path || typeof file.status !== 'string' || typeof file.oldMode !== 'string' || typeof file.mode !== 'string') {
       validRecords = false;
       known = false;
       continue;
@@ -35,9 +35,10 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
     else if (file.oldPath !== undefined) { validRecords = false; known = false; }
     code ||= CODE_EXTENSIONS.test(file.path) || (typeof file.oldPath === 'string' && CODE_EXTENSIONS.test(file.oldPath));
     known &&= ['added', 'modified', 'deleted', 'renamed', 'copied', 'type_changed'].includes(file.status);
-    normalText &&= ['added', 'modified'].includes(file.status) && file.mode === '100644' && file.binary === false && file.additions !== null && file.deletions !== null && file.oldPath === undefined;
+    normalText &&= ['added', 'modified'].includes(file.status) && file.mode === '100644' && file.oldMode === '100644' && file.oldMode === file.mode && file.binary === false && file.additions !== null && file.deletions !== null && file.oldPath === undefined;
   }
   const validCount = value => Number.isSafeInteger(value) && value >= 0;
+  const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || file.oldMode !== file.mode));
   const incomplete = features.features_incomplete !== false || !validRecords ||
     !validCount(features.all_changed_file_count) || features.all_changed_file_count !== files.length ||
     !validCount(features.reviewable_file_count) || !validCount(features.excluded_file_count) ||
@@ -48,6 +49,7 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
   if (incomplete) classification_status = 'incomplete';
   else if (!signalsKnown) classification_status = 'unclassified_other';
   else if (features.security_signal === 'metadata_positive' || features.migration_signal === 'metadata_positive' || paths.some(path => HIGH_RISK.test(path))) classification_status = 'high_risk_metadata';
+  else if (unsafeMode) classification_status = 'unclassified_other';
   else if (code) classification_status = 'unclassified_code';
   else if (!known || paths.some(path => !pathsMatch([path], trustedRiskPolicy.allow_paths)) || pathsMatch(paths, trustedRiskPolicy.deny_paths)) classification_status = 'unclassified_other';
   else if (files.every(file => normalText) && features.security_signal === 'metadata_not_observed' && features.migration_signal === 'metadata_not_observed' && features.features_incomplete === false && features.review_scope_gap === false) classification_status = 'allowlisted_docs_only';
