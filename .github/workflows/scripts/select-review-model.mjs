@@ -2,9 +2,12 @@ import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 import { assertRunBindingValid } from './ocr-run-binding.mjs';
 
 const RANK = Object.freeze({ fast: 0, deep: 1 });
+const MIN_CHOICE_PROBABILITY = 0.65;
+const MIN_PROBABILITY_MARGIN = 0.15;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
 const DECISION_STATUS = Object.freeze({
   available: 'succeeded', unavailable: 'unavailable', invalid: 'invalid_response',
+  egressDenied: 'egress_denied', notRequested: 'not_requested',
 });
 
 function assertMode(mode, runBinding) {
@@ -25,6 +28,8 @@ function localFloor(features) {
 function normalizedDecision(decision) {
   if (decision?.status === 'decision_unavailable') return { status: DECISION_STATUS.unavailable };
   if (decision?.status === 'invalid_response') return { status: DECISION_STATUS.invalid };
+  if (decision?.status === DECISION_STATUS.egressDenied) return { status: DECISION_STATUS.egressDenied };
+  if (decision?.status === DECISION_STATUS.notRequested) return { status: DECISION_STATUS.notRequested };
   if (decision?.status !== 'decision_available' || !['fast', 'deep'].includes(decision.choice)) {
     return { status: DECISION_STATUS.invalid };
   }
@@ -43,7 +48,9 @@ function strategyFor(floor, decision) {
   }
   const probability = decision.probabilities[decision.choice];
   const margin = Math.abs(decision.probabilities.fast - decision.probabilities.deep);
-  if (probability < 0.65 || margin < 0.15) return { strategy: 'deep', source: 'deterministic_fallback' };
+  if (probability < MIN_CHOICE_PROBABILITY || margin < MIN_PROBABILITY_MARGIN) {
+    return { strategy: 'deep', source: 'deterministic_fallback' };
+  }
   const strategy = RANK[decision.choice] < RANK[floor] ? floor : decision.choice;
   return { strategy, source: strategy === decision.choice ? 'model_decision' : 'deterministic_fallback' };
 }
@@ -60,7 +67,7 @@ function boundedRoute(route) {
 
 function result({ mode, strategy, source, decisionStatus, certifiedCatalog }) {
   const catalog = certifiedCatalog?.catalog ?? certifiedCatalog;
-  const evidence = certifiedCatalog?.evidence;
+  const evidence = certifiedCatalog?.evidence ?? {};
   if (mode === 'shadow') {
     return boundedRoute({
       selectedStrategy: null,

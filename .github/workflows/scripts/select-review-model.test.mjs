@@ -67,6 +67,18 @@ test('missing-key decision uses the local risk floor', () => {
   assert.equal(result.decisionStatus, 'unavailable');
 });
 
+test('egress denial retains its decision status while using the local risk floor', () => {
+  const result = select({ decision: { status: 'egress_denied' } });
+  assert.equal(result.selectedStrategy, 'fast');
+  assert.equal(result.decisionStatus, 'egress_denied');
+});
+
+test('not-requested decision status is preserved when features skip the Decision request', () => {
+  const result = select({ decision: { status: 'not_requested' } });
+  assert.equal(result.selectedStrategy, 'fast');
+  assert.equal(result.decisionStatus, 'not_requested');
+});
+
 test('docs-only local fast floor can select fast', () => {
   const result = select({ features: { risk_floor: 'fast' }, decision: confidentFast });
   assert.equal(result.selectedStrategy, 'fast');
@@ -76,6 +88,12 @@ test('docs-only local fast floor can select fast', () => {
 test('enforce rejects uncertified requested deep models without downgrading to fast', () => {
   assert.throws(() => select({
     features: { risk_floor: 'deep' }, decision: deepResult, certifiedCatalog: { catalog: pendingCatalog, evidence },
+  }), error => error.message === 'review_model_unavailable');
+});
+
+test('enforce rejects the real pending plain catalog without leaking a raw validation error', () => {
+  assert.throws(() => select({
+    features: { risk_floor: 'deep' }, decision: deepResult, certifiedCatalog: pendingCatalog,
   }), error => error.message === 'review_model_unavailable');
 });
 
@@ -127,7 +145,7 @@ test('returned route strings reject newline injection and model IDs are bounded'
   assert.throws(() => select({ certifiedCatalog: { catalog: malicious, evidence } }), error => error.message === 'review_model_unavailable');
 });
 
-test('decision confidence threshold is inclusive at 0.65 and margin 0.15', () => {
+test('choice probability of 0.65 is sufficient when the margin is clear', () => {
   const result = select({ decision: { ...confidentFast, probabilities: { fast: 0.65, deep: 0.35 } } });
   assert.equal(result.selectedStrategy, 'fast');
 });
