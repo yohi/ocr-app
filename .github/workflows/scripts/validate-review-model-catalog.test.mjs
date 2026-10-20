@@ -42,13 +42,41 @@ test('rejects duplicate model IDs and model catalog version mismatches', () => {
   }, evidence), /catalog_version_mismatch/);
 });
 
-test('rejects fallback self references and cycles', () => {
+test('rejects fallback self references', () => {
   const self = structuredClone(catalog);
   self.models[0].allowed_fallbacks = [self.models[0].model_id];
   assert.throws(() => validateCatalogSemantics(self, evidence), /fallback_self_reference/);
+});
+
+test('detects a cycle between same-tier models independently of tier degradation', () => {
   const cycle = structuredClone(catalog);
+  const deepPreferred = {
+    model_id: 'deep-test-model',
+    capability_tier: 'deep',
+    certification_status: 'pending',
+    certification_reference: null,
+    allowed_fallbacks: [],
+    catalog_version: catalog.catalog_version,
+  };
+  cycle.models[1].capability_tier = 'fast';
+  cycle.models.push(deepPreferred);
+  cycle.strategies.deep.preferred_model_id = deepPreferred.model_id;
+  cycle.models[0].allowed_fallbacks = [cycle.models[1].model_id];
   cycle.models[1].allowed_fallbacks = [cycle.models[0].model_id];
-  assert.throws(() => validateCatalogSemantics(cycle, evidence), /fallback_cycle|tier_degradation/);
+  assert.throws(() => validateCatalogSemantics(cycle, {
+    ...evidence,
+    cliAvailableModels: [...evidence.cliAvailableModels, deepPreferred.model_id],
+  }), /fallback_cycle/);
+});
+
+test('rejects a deep-to-fast fallback independently of fallback cycles', () => {
+  const degrading = structuredClone(catalog);
+  degrading.strategies.fast.preferred_model_id = degrading.models[1].model_id;
+  degrading.strategies.deep.preferred_model_id = degrading.models[0].model_id;
+  degrading.models[0].capability_tier = 'deep';
+  degrading.models[1].capability_tier = 'fast';
+  degrading.models[0].allowed_fallbacks = [degrading.models[1].model_id];
+  assert.throws(() => validateCatalogSemantics(degrading, evidence), /tier_degradation/);
 });
 
 test('rejects absent preferred and fallback model IDs', () => {
@@ -78,6 +106,46 @@ test('requires trusted evidence bound to the exact certification reference and m
   const invalidEvidence = { ...evidence, verifiedCertificationRefs: [] };
   assert.throws(() => validateCatalogSemantics(certifiedCatalog, invalidEvidence), /certification_reference_unverified/);
   assert.throws(() => resolveCertifiedModels(certifiedCatalog, 'fast', invalidEvidence), /review_model_unavailable/);
+});
+
+test('fails closed when any certification evidence binding field mismatches', () => {
+  const mismatchCases = [
+    ['model_id', { model_id: 'different-model' }],
+    ['capability_tier', { capability_tier: 'deep' }],
+    ['catalog_version', { catalog_version: '2.0.0' }],
+    ['certification_reference', { certification_reference: `sha256:${'b'.repeat(64)}` }],
+  ];
+
+  for (const [field, mismatch] of mismatchCases) {
+    const mismatchedEvidence = {
+      ...evidence,
+      verifiedCertificationRefs: evidence.verifiedCertificationRefs.map((reference, index) =>
+        index === 0 ? { ...reference, ...mismatch } : reference,
+      ),
+    };
+    assert.throws(() => resolveCertifiedModels(certifiedCatalog, 'fast', mismatchedEvidence), error => {
+      assert.equal(error.message, 'review_model_unavailable', field);
+      assert.doesNotMatch(error.message, /gemini-|claude-/);
+      return true;
+    });
+  }
+});
+
+test('resolves certified primary and fallback models for fast and deep strategies', () => {
+  assert.deepEqual(resolveCertifiedModels(certifiedCatalog, 'fast', evidence), {
+    primaryModelId: 'gemini-3.8-flash-medium',
+    allowedFallbackModels: ['claude-opus-4-6-thinking'],
+    capabilityTier: 'fast',
+  });
+  assert.deepEqual(resolveCertifiedModels(certifiedCatalog, 'deep', evidence), {
+    primaryModelId: 'claude-opus-4-6-thinking',
+    allowedFallbackModels: [],
+    capabilityTier: 'deep',
+  });
+});
+
+test('accepts the pending example catalog during semantic validation', () => {
+  assert.doesNotThrow(() => validateCatalogSemantics(catalog, evidence));
 });
 
 test('does not resolve an unavailable deep model or return any model ID', () => {
