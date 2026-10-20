@@ -1,10 +1,27 @@
 import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBindingEquals } from './ocr-run-binding.mjs';
+import { validateRoutingAudit, validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
 
 const result = reason => ({ authorized: false, reason });
-const validModels = catalog => catalog?.models?.filter(model => model?.certification_status === 'certified').map(model => model.model_id) ?? [];
+const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
+function validateRecords(decisionRecord, finalAudit) {
+  validateRoutingDecisionRecord(decisionRecord);
+  validateRoutingAudit(finalAudit);
+  const sharedFields = [
+    ['workflow_run_id', 'workflow_run_id'], ['run_attempt', 'run_attempt'], ['head_sha', 'head_sha'], ['effective_mode', 'effective_mode'],
+    ['decision_status', 'decision_status'], ['egress_status', 'egress_status'], ['classification_status', 'classification_status'], ['risk_floor', 'risk_floor'],
+    ['selected_strategy', 'selected_strategy'], ['proposed_strategy', 'proposed_strategy'], ['policy_version', 'policy_version'],
+    ['feature_schema_version', 'feature_schema_version'], ['decision_state_version', 'decision_state_version'], ['model_catalog_version', 'model_catalog_version'],
+  ];
+  if (sharedFields.some(([decisionKey, auditKey]) => decisionRecord[decisionKey] !== finalAudit[auditKey])) throw new Error('AUDIT_SCHEMA_INVALID');
+}
+function certifiedModelIds(catalog) {
+  if (!Array.isArray(catalog?.models)) return [];
+  return catalog.models.filter(model => model?.certification_status === 'certified' && typeof model.model_id === 'string').map(model => model.model_id);
+}
 
 export function evaluatePublishEligibility({ mode, expectedBinding, decisionRecord, finalAudit, delivery, checkRunId, ownerDecisions, headSha, catalog }) {
   if (mode !== 'enforce') return result('NOT_ENFORCE_MODE');
+  try { validateRecords(decisionRecord, finalAudit); } catch { return result('AUDIT_INCOMPLETE'); }
   try { assertRunBindingValid(expectedBinding); } catch { return result('RUN_BINDING_INVALID'); }
   if (expectedBinding.mode !== mode) return result('RUN_BINDING_MISMATCH');
   try {
@@ -17,16 +34,19 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
   if (finalAudit.audit_status !== 'sealed') return result('AUDIT_NOT_SEALED');
   if (finalAudit.review_validation_status !== 'passed') return result('REVIEW_VALIDATION_FAILED');
   if (finalAudit.head_validation_status !== 'passed') return result('HEAD_VALIDATION_FAILED');
-  if (!finalAudit || finalAudit.schema_version !== '2' || !decisionRecord || decisionRecord.schema_version !== '1' || !Array.isArray(finalAudit.attempted_review_models) || !Number.isSafeInteger(finalAudit.reviewable_file_count) || finalAudit.reviewable_file_count < 0) return result('AUDIT_INCOMPLETE');
-  const certified = validModels(catalog);
-  const selectedModel = decisionRecord.selected_review_model ?? finalAudit.selected_review_model;
-  const modelOk = typeof finalAudit.executed_review_model === 'string' &&
-    (certified.length > 0 ? certified.includes(finalAudit.executed_review_model) : finalAudit.executed_review_model === selectedModel);
-  if (finalAudit.review_scope_gap === true && ownerDecisions?.d04BlockingApproved !== true) return result('REVIEW_SCOPE_GAP_BLOCKED');
-  if (finalAudit.reviewable_file_count === 0) {
-    if (finalAudit.review_scope_gap === true) return result('REVIEW_SCOPE_GAP_BLOCKED');
-  } else if (finalAudit.executed_review_model === null) return result('REVIEW_EXECUTION_FAILED');
-  else if (!modelOk || finalAudit.executed_review_model !== selectedModel) return result('MODEL_NOT_CERTIFIED');
+  if (finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
+  if (decisionRecord.egress_status === 'allowed') {
+    const approvalRef = decisionRecord.owner_approval_ref;
+    if (typeof approvalRef !== 'string' || approvalRef.length === 0 || approvalRef.length > 128 || !APPROVAL_REF.test(approvalRef)) return result('EGRESS_NOT_APPROVED');
+    if (finalAudit.owner_approval_ref !== approvalRef) return result('EGRESS_NOT_APPROVED');
+  }
+  const certified = certifiedModelIds(catalog);
+  if (certified.length === 0) return result('MODEL_NOT_CERTIFIED');
+  if (decisionRecord.reviewable_file_count > 0 &&
+      (typeof finalAudit.executed_review_model !== 'string' ||
+       !certified.includes(finalAudit.executed_review_model) ||
+       finalAudit.executed_review_model !== finalAudit.selected_review_model)) return result('MODEL_NOT_CERTIFIED');
+  if (decisionRecord.reviewable_file_count === 0 && finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
   if (delivery?.outcome !== 'success') return result('ARTIFACT_UPLOAD_FAILED');
   if (typeof delivery.artifactId !== 'string' || delivery.artifactId.length === 0) return result('MISSING_ARTIFACT_ID');
   if (delivery.runId !== expectedBinding.workflowRunId || delivery.runAttempt !== expectedBinding.runAttempt) return result('RUN_BINDING_MISMATCH');
