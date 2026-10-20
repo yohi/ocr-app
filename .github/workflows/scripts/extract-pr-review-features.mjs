@@ -104,7 +104,7 @@ function parseRawModes(buffer) {
       path = values[index++];
       if (path === undefined) throw new Error('Malformed raw rename/copy mode');
     }
-    modes.set(path, mode);
+    modes.set(path, { oldMode, mode });
   }
   return modes;
 }
@@ -116,13 +116,15 @@ export function parseNulGitChangeRecords({ nameStatus, numstat, rawMode }) {
   const statByKey = new Map(stats.map(stat => [`${stat.oldPath ?? ''}\0${stat.path}`, stat]));
   return named.map(record => {
     const stat = statByKey.get(`${record.oldPath ?? ''}\0${record.path}`) ?? statByKey.get(`\0${record.path}`);
-    const mode = modes.get(record.path) ?? '000000';
-    if (!stat && record.status !== 'renamed' && record.status !== 'copied') throw new Error(`Missing numstat for ${record.path}`);
+    const rawModeRecord = modes.get(record.path);
+    if (!rawModeRecord) throw new Error(`Missing raw mode for ${record.path}`);
+    const modeOnly = !stat && rawModeRecord.oldMode !== rawModeRecord.mode;
+    const status = modeOnly ? 'mode_changed' : record.status;
     return {
       ...(record.oldPath === undefined ? {} : { oldPath: record.oldPath }),
       path: record.path,
-      status: record.status,
-      mode,
+      status,
+      mode: rawModeRecord.mode,
       additions: stat?.additions ?? null,
       deletions: stat?.deletions ?? null,
       binary: stat?.binary ?? false,
@@ -130,7 +132,7 @@ export function parseNulGitChangeRecords({ nameStatus, numstat, rawMode }) {
   });
 }
 
-function incompleteFeatures(headSha, preview, issue) {
+function incompleteFeatures(headSha, preview) {
   const paths = Array.isArray(preview?.reviewable_files) ? preview.reviewable_files.map(file => file.path).filter(path => typeof path === 'string') : [];
   return {
     schema_version: '3', head_sha: headSha, all_changed_files: [], ocr_reviewable_paths: paths,
@@ -138,35 +140,53 @@ function incompleteFeatures(headSha, preview, issue) {
     additions: null, deletions: null, change_size: 'unknown', language_families: [], change_areas: [],
     test_files_changed: false, security_signal: 'unassessable', migration_signal: 'unassessable',
     classification_status: 'incomplete', features_incomplete: true, review_scope_gap: true,
-    risk_floor: 'deep', concerns: [issue],
+    risk_floor: 'deep',
   };
 }
 
 function classify(files, paths, headSha) {
   const reviewable = new Set(paths);
-  const incomplete = files.some(file => file.additions === null || file.deletions === null);
-  const additions = incomplete ? null : files.reduce((sum, file) => sum + file.additions, 0);
-  const deletions = incomplete ? null : files.reduce((sum, file) => sum + file.deletions, 0);
+  const hasUnknownCounts = files.some(file => file.additions === null || file.deletions === null);
+  const incomplete = files.some(file => (file.additions === null || file.deletions === null) && file.status !== 'mode_changed');
+  const additions = hasUnknownCounts ? null : files.reduce((sum, file) => sum + file.additions, 0);
+  const deletions = hasUnknownCounts ? null : files.reduce((sum, file) => sum + file.deletions, 0);
   if ((additions !== null && !Number.isSafeInteger(additions)) || (deletions !== null && !Number.isSafeInteger(deletions))) throw new Error('Change count overflow');
   const count = files.length;
-  const familyRules = [['javascript', /\.(?:[cm]?js|jsx)$/i], ['typescript', /\.(?:[cm]?ts|tsx)$/i], ['python', /\.py$/i], ['markdown', /\.md$/i], ['yaml', /\.ya?ml$/i], ['json', /\.json$/i], ['shell', /\.sh$/i], ['other', /./]];
-  const families = [...new Set(files.map(file => familyRules.find(([, pattern]) => pattern.test(file.path))?.[0]).filter(Boolean))];
-  const security = files.some(file => /(?:auth|security|secret|permission|crypto|token)/i.test(file.path)) ? 'metadata_positive' : 'metadata_not_observed';
-  const migration = files.some(file => /(?:migration|migrations|schema|\.sql$)/i.test(file.path)) ? 'metadata_positive' : 'metadata_not_observed';
-  const gap = files.some(file => !reviewable.has(file.path));
-  const risk = count > 0 && (security === 'metadata_positive' || migration === 'metadata_positive' || count > 20 || additions === null || deletions === null);
+  const families = [...new Set(files.flatMap(file => [file.path, file.oldPath].filter(Boolean).map(path => {
+    const lowerPath = path.toLowerCase();
+    if (/\.md$/.test(lowerPath)) return 'markdown';
+    if (/\.py$/.test(lowerPath)) return 'python';
+    if (/\.(?:[cm]?ts|tsx)$/.test(lowerPath)) return 'typescript';
+    if (/\.(?:[cm]?js|jsx)$/.test(lowerPath)) return 'javascript';
+    if (/\.json$/.test(lowerPath)) return 'json';
+    if (/\.ya?ml$/.test(lowerPath)) return 'yaml';
+    if (/\.sql$/.test(lowerPath)) return 'sql';
+    if (/\.sh$/.test(lowerPath)) return 'shell';
+    if (/\.tf(?:vars)?$/.test(lowerPath)) return 'terraform';
+    return 'other';
+  })))].sort();
+  const allPaths = files.flatMap(file => [file.path, file.oldPath].filter(Boolean));
+  const lowerPaths = allPaths.map(path => path.toLowerCase());
+  const areas = new Set();
+  if (lowerPaths.some(path => /(^|\/)(?:docs?)(\/|$)|\.md$|(^|\/)(?:readme|agents)\.md$/.test(path))) areas.add('docs');
+  if (lowerPaths.some(path => /(^|\/)\.github(\/|$)|(^|\/)(?:ci|workflow)(\/|$)/.test(path))) areas.add('ci');
+  for (const area of ['auth', 'iam', 'secret', 'crypto', 'migration', 'deploy', 'payment']) {
+    if (lowerPaths.some(path => new RegExp(`(^|[\\/._-])${area}(?:s)?([\\/._-]|$)`).test(path) || (area === 'migration' && /\.sql$/.test(path)))) areas.add(area);
+  }
+  if (areas.size === 0) areas.add('other');
+  const security = allPaths.some(path => /(?:auth|security|secret|permission|crypto|token|iam)/i.test(path)) ? 'metadata_positive' : 'metadata_not_observed';
+  const migration = allPaths.some(path => /(?:migration|migrations|schema|\.sql$)/i.test(path)) ? 'metadata_positive' : 'metadata_not_observed';
+  const gap = files.some(file => !reviewable.has(file.path) || (file.oldPath !== undefined && !reviewable.has(file.oldPath)));
   return {
     schema_version: '3', head_sha: headSha, all_changed_files: files,
     ocr_reviewable_paths: [...reviewable], all_changed_file_count: count,
     reviewable_file_count: reviewable.size, excluded_file_count: Math.max(0, count - reviewable.size),
     additions, deletions, change_size: additions === null || deletions === null ? 'unknown' : additions + deletions < 100 ? 'small' : additions + deletions < 500 ? 'medium' : 'large',
-    language_families: families, change_areas: [], test_files_changed: files.some(file => /(?:^|[./_-])(?:test|tests|spec|__tests__)(?:[./_-]|$)/i.test(file.path)),
+    language_families: families, change_areas: [...areas].sort(), test_files_changed: allPaths.some(path => /(?:^|[./_-])(?:test|tests|spec|__tests__)(?:[./_-]|$)/i.test(path)),
     security_signal: security, migration_signal: migration,
-    classification_status: security === 'metadata_positive' || migration === 'metadata_positive'
-      ? 'high_risk_metadata'
-      : files.length === 0 ? 'unclassified_other' : 'unclassified_code',
+    classification_status: incomplete ? 'incomplete' : 'unclassified_other',
     features_incomplete: incomplete, review_scope_gap: gap,
-    risk_floor: risk || gap || incomplete ? 'deep' : 'fast',
+    risk_floor: 'deep',
   };
 }
 
@@ -192,7 +212,7 @@ export async function extractPRFeatures({ cwd, baseRef, headSha, preview, runGit
     if (results.some(output => !Buffer.isBuffer(output)) || results.reduce((total, output) => total + output.length, 0) > maxOutputBytes) throw new Error('Git output exceeds byte limit');
     const files = parseNulGitChangeRecords({ nameStatus: results[0], numstat: results[1], rawMode: results[2] });
     return classify(files, paths, headSha);
-  } catch (error) {
-    return incompleteFeatures(headSha, preview, error instanceof Error ? error.message : 'Git metadata unavailable');
+  } catch {
+    return incompleteFeatures(headSha, preview);
   }
 }
