@@ -1,0 +1,7 @@
+{
+  "schema_version": "1",
+  "destination": "openrouter-decisions",
+  "policy_version": "1",
+  "approval_reference_format": "OWNER-<approval-id>",
+  "allowed_repositories": []
+}
