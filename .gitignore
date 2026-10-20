@@ -13,3 +13,4 @@ cloudflare-worker/package-lock.json
 # Wrangler / Cloudflare Workers
 cloudflare-worker/.wrangler/
 cloudflare-worker/dist/
+.worktrees/
