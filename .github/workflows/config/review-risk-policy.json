@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "allow_paths": ["^README\\.md$", "^docs/.+\\.md$"],
+  "deny_paths": [
+    "(^|/)AGENTS\\.md$",
+    "(^|/)(security|identity|auth|credential|permission|secret|policy)([-_./]|$)",
+    "^\\.github(/|$)",
+    "(^|/)(config|configs|src|lib|test|tests|spec|__tests__|ci|workflow|workflows)(/|$)",
+    "(^|/)(package\\.json|.*\\.(js|jsx|mjs|cjs|ts|tsx|mts|cts|py|sh|sql|ya?ml|json|toml|lock))$"
+  ],
+  "language_families": ["markdown", "python", "typescript", "javascript", "json", "yaml", "sql", "shell", "terraform", "other", "unknown"],
+  "change_areas": ["docs", "ci", "auth", "iam", "secret", "crypto", "migration", "deploy", "payment", "other", "unknown"],
+  "max_array_items": 12,
+  "file_count_buckets": [{"max":0,"value":"0"},{"max":5,"value":"1-5"},{"max":20,"value":"6-20"},{"max":100,"value":"21-100"},{"max":null,"value":"101+"}],
+  "line_count_buckets": [{"max":0,"value":"0"},{"max":100,"value":"1-100"},{"max":500,"value":"101-500"},{"max":2000,"value":"501-2000"},{"max":null,"value":"2001+"}]
+}
