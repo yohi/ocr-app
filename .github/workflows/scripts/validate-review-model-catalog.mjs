@@ -13,6 +13,63 @@ export function validateCatalogShape(catalog) {
   if (!validateSchema(catalog)) fail('invalid_catalog_shape');
 }
 
+function rejectDuplicateIdentifiers(models) {
+  const identifiers = new Set();
+  for (const model of models) {
+    if (typeof model?.model_id !== 'string') continue;
+    if (identifiers.has(model.model_id)) fail('duplicate_model_id');
+    identifiers.add(model.model_id);
+  }
+}
+
+function rejectDuplicateFallbacks(models) {
+  for (const model of models) {
+    if (Array.isArray(model?.allowed_fallbacks) && new Set(model.allowed_fallbacks).size !== model.allowed_fallbacks.length) {
+      fail('duplicate_fallback');
+    }
+  }
+}
+
+function validatePreferredModels(catalog, models) {
+  for (const strategy of ['fast', 'deep']) {
+    const preferred = models.get(catalog.strategies[strategy].preferred_model_id);
+    if (!preferred) fail('preferred_model_missing');
+    if (tierRank[preferred.capability_tier] < tierRank[strategy]) fail('tier_degradation');
+  }
+}
+
+function validateModelFallbacks(model, models) {
+  const seenFallbacks = new Set();
+  for (const fallbackId of model.allowed_fallbacks) {
+    if (!models.has(fallbackId)) fail('fallback_model_missing');
+    if (fallbackId === model.model_id) fail('fallback_self_reference');
+    if (seenFallbacks.has(fallbackId)) fail('duplicate_fallback');
+    seenFallbacks.add(fallbackId);
+  }
+}
+
+function validateFallbackGraph(models) {
+  const visiting = new Set();
+  const visited = new Set();
+  function visit(modelId) {
+    if (visiting.has(modelId)) fail('fallback_cycle');
+    if (visited.has(modelId)) return;
+    visiting.add(modelId);
+    for (const fallbackId of models.get(modelId).allowed_fallbacks) visit(fallbackId);
+    visiting.delete(modelId);
+    visited.add(modelId);
+  }
+  for (const modelId of models.keys()) visit(modelId);
+}
+
+function validateFallbackTiers(catalog, models) {
+  for (const model of catalog.models) {
+    for (const fallbackId of model.allowed_fallbacks) {
+      if (tierRank[models.get(fallbackId).capability_tier] < tierRank[model.capability_tier]) fail('tier_degradation');
+    }
+  }
+}
+
 function certificationIsVerified(model, verifiedCertificationRefs) {
   return Array.isArray(verifiedCertificationRefs) && verifiedCertificationRefs.some(reference =>
     reference?.certification_reference === model.certification_reference &&
@@ -24,17 +81,8 @@ function certificationIsVerified(model, verifiedCertificationRefs) {
 
 export function validateCatalogSemantics(catalog, { verifiedCertificationRefs, cliAvailableModels } = {}) {
   if (Array.isArray(catalog?.models)) {
-    const identifiers = new Set();
-    for (const model of catalog.models) {
-      if (typeof model?.model_id === 'string') {
-        if (identifiers.has(model.model_id)) fail('duplicate_model_id');
-        identifiers.add(model.model_id);
-      }
-      if (Array.isArray(model?.allowed_fallbacks) &&
-          new Set(model.allowed_fallbacks).size !== model.allowed_fallbacks.length) {
-        fail('duplicate_fallback');
-      }
-    }
+    rejectDuplicateIdentifiers(catalog.models);
+    rejectDuplicateFallbacks(catalog.models);
   }
   validateCatalogShape(catalog);
   const models = new Map();
@@ -47,43 +95,17 @@ export function validateCatalogSemantics(catalog, { verifiedCertificationRefs, c
     models.set(model.model_id, model);
   }
 
-  for (const strategy of ['fast', 'deep']) {
-    const preferred = models.get(catalog.strategies[strategy].preferred_model_id);
-    if (!preferred) fail('preferred_model_missing');
-    if (tierRank[preferred.capability_tier] < tierRank[strategy]) fail('tier_degradation');
-  }
+  validatePreferredModels(catalog, models);
 
   for (const model of catalog.models) {
-    const seenFallbacks = new Set();
-    for (const fallbackId of model.allowed_fallbacks) {
-      if (!models.has(fallbackId)) fail('fallback_model_missing');
-      if (fallbackId === model.model_id) fail('fallback_self_reference');
-      if (seenFallbacks.has(fallbackId)) fail('duplicate_fallback');
-      seenFallbacks.add(fallbackId);
-    }
+    validateModelFallbacks(model, models);
     if (model.certification_status === 'certified' && !certificationIsVerified(model, verifiedCertificationRefs)) {
       fail('certification_reference_unverified');
     }
   }
 
-  const visiting = new Set();
-  const visited = new Set();
-  function visit(modelId) {
-    if (visiting.has(modelId)) fail('fallback_cycle');
-    if (visited.has(modelId)) return;
-    visiting.add(modelId);
-    for (const fallbackId of models.get(modelId).allowed_fallbacks) visit(fallbackId);
-    visiting.delete(modelId);
-    visited.add(modelId);
-  }
-  for (const modelId of models.keys()) visit(modelId);
-  for (const model of catalog.models) {
-    for (const fallbackId of model.allowed_fallbacks) {
-      if (tierRank[models.get(fallbackId).capability_tier] < tierRank[model.capability_tier]) {
-        fail('tier_degradation');
-      }
-    }
-  }
+  validateFallbackGraph(models);
+  validateFallbackTiers(catalog, models);
 }
 
 export function resolveCertifiedModels(catalog, strategy, evidence) {

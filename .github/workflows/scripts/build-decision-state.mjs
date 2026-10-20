@@ -10,14 +10,17 @@ const LINE_BUCKETS = new Set(['0', '1-100', '101-500', '501-2000', '2001+']);
 
 function ensureRecord(value, allowedKeys, label) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw new Error(`${label} must be a plain object`);
-  for (const key of Reflect.ownKeys(value)) if (typeof key !== 'string' || !allowedKeys.has(key)) throw new Error(`${label} has an unknown key`);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowedKeys.has(key)) throw new Error(`${label} has an unknown key`);
+  }
 }
 function enumValue(value, allowed, label) { if (typeof value !== 'string' || !allowed.has(value)) throw new Error(`${label} is invalid`); return value; }
 function count(value, label) { if (!Number.isSafeInteger(value) || value < 0) throw new Error(`${label} is invalid`); return value; }
 function bucket(value, limits, labels) { count(value, 'Count'); for (let index = 0; index < limits.length; index++) if (value <= limits[index]) return labels[index]; return labels.at(-1); }
+function compareCodeUnits(left, right) { return left < right ? -1 : left > right ? 1 : 0; }
 function sortedUnique(values, allowed, label) {
   if (!Array.isArray(values) || values.length > 12 || values.some(value => typeof value !== 'string' || !allowed.has(value))) throw new Error(`${label} is invalid`);
-  return [...new Set(values)].sort();
+  return [...new Set(values)].sort(compareCodeUnits);
 }
 function validateFeatures(features) {
   ensureRecord(features, FEATURE_KEYS, 'Features');
@@ -41,7 +44,9 @@ export function validateDecisionState(state) {
   for (const key of ['additions_bucket', 'deletions_bucket']) enumValue(state[key], LINE_BUCKETS, key);
   enumValue(state.change_size, SIZE, 'change_size'); enumValue(state.security_signal, SIGNAL, 'security_signal'); enumValue(state.migration_signal, SIGNAL, 'migration_signal'); enumValue(state.classification_status, CLASSIFICATION, 'classification_status');
   sortedUnique(state.language_families, LANGUAGE, 'language_families'); sortedUnique(state.change_areas, AREA, 'change_areas');
-  for (const key of ['test_files_changed', 'review_scope_gap', 'features_incomplete']) if (typeof state[key] !== 'boolean') throw new Error(`${key} is invalid`);
+  for (const key of ['test_files_changed', 'review_scope_gap', 'features_incomplete']) {
+    if (typeof state[key] !== 'boolean') throw new Error(`${key} is invalid`);
+  }
 }
 
 export function buildDecisionState(features) {

@@ -6,12 +6,31 @@ function validPolicy(policy) {
   if (!policy || typeof policy !== 'object' || !Array.isArray(policy.allow_paths) || !Array.isArray(policy.deny_paths)) throw new Error('Trusted risk policy is invalid');
   for (const pattern of [...policy.allow_paths, ...policy.deny_paths]) {
     if (typeof pattern !== 'string' || pattern.length > 256) throw new Error('Trusted path rule is invalid');
-    new RegExp(pattern);
+    try { new RegExp(pattern); } catch { throw new Error('Trusted path rule is invalid'); }
   }
 }
 
 function pathsMatch(paths, rules) {
   return paths.some(path => rules.some(rule => new RegExp(rule).test(path)));
+}
+
+function isValidRecord(file) {
+  return Boolean(file && typeof file === 'object' && typeof file.path === 'string' && file.path &&
+    typeof file.status === 'string' && typeof file.oldMode === 'string' && typeof file.mode === 'string');
+}
+
+function isCodeFile(file) {
+  return CODE_EXTENSIONS.test(file.path) || (typeof file.oldPath === 'string' && CODE_EXTENSIONS.test(file.oldPath));
+}
+
+function isKnownStatus(status) {
+  return ['added', 'modified', 'deleted', 'renamed', 'copied', 'type_changed'].includes(status);
+}
+
+function isNormalTextChange(file) {
+  return ['added', 'modified'].includes(file.status) && file.mode === '100644' &&
+    file.oldMode === '100644' && file.oldMode === file.mode && file.binary === false &&
+    file.additions !== null && file.deletions !== null && file.oldPath === undefined;
 }
 
 export function classifyPRRisk(features, trustedRiskPolicy) {
@@ -25,17 +44,13 @@ export function classifyPRRisk(features, trustedRiskPolicy) {
   let known = true;
   let normalText = true;
   for (const file of files) {
-    if (!file || typeof file !== 'object' || typeof file.path !== 'string' || !file.path || typeof file.status !== 'string' || typeof file.oldMode !== 'string' || typeof file.mode !== 'string') {
-      validRecords = false;
-      known = false;
-      continue;
-    }
+    if (!isValidRecord(file)) { validRecords = false; known = false; continue; }
     paths.push(file.path);
     if (typeof file.oldPath === 'string') paths.push(file.oldPath);
     else if (file.oldPath !== undefined) { validRecords = false; known = false; }
-    code ||= CODE_EXTENSIONS.test(file.path) || (typeof file.oldPath === 'string' && CODE_EXTENSIONS.test(file.oldPath));
-    known &&= ['added', 'modified', 'deleted', 'renamed', 'copied', 'type_changed'].includes(file.status);
-    normalText &&= ['added', 'modified'].includes(file.status) && file.mode === '100644' && file.oldMode === '100644' && file.oldMode === file.mode && file.binary === false && file.additions !== null && file.deletions !== null && file.oldPath === undefined;
+    code ||= isCodeFile(file);
+    known &&= isKnownStatus(file.status);
+    normalText &&= isNormalTextChange(file);
   }
   const validCount = value => Number.isSafeInteger(value) && value >= 0;
   const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || file.oldMode !== file.mode));

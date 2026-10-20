@@ -31,38 +31,39 @@ function fields(buffer) {
   return result;
 }
 
+function recordStatus(code) {
+  return ({ A: 'added', D: 'deleted', T: 'type_changed' })[code] ?? 'modified';
+}
+
+function parseNameStatusRecord(values, index) {
+  const statusToken = values[index++];
+  if (statusToken === undefined) throw new Error('Missing Git status');
+  if (!/^(?:A|M|D|T|R\d{1,3}|C\d{1,3})$/.test(statusToken)) throw new Error(`Unknown Git status: ${statusToken}`);
+  const status = statusToken[0];
+  if (status === 'R' || status === 'C') {
+    const oldPath = values[index++];
+    const path = values[index++];
+    if (oldPath === undefined || path === undefined) throw new Error('Malformed rename/copy record');
+    return { record: { oldPath, path, status: status === 'R' ? 'renamed' : 'copied' }, nextIndex: index };
+  }
+  const path = values[index++];
+  if (path === undefined) throw new Error('Missing Git path');
+  return { record: { path, status: recordStatus(status) }, nextIndex: index };
+}
+
 function parseNameStatus(buffer) {
   const values = fields(buffer);
   const records = [];
   for (let index = 0; index < values.length;) {
-    const statusToken = values[index++];
-    if (statusToken === undefined) throw new Error('Missing Git status');
-    const match = /^(A|M|D|T|R\d{1,3}|C\d{1,3})$/.exec(statusToken);
-    if (!match) throw new Error(`Unknown Git status: ${statusToken}`);
-    const code = match[1];
-    if (code === undefined) throw new Error('Malformed Git status');
-    const status = code[0];
-    if (status === 'R' || status === 'C') {
-      const oldPath = values[index++];
-      const path = values[index++];
-      if (oldPath === undefined || path === undefined) throw new Error('Malformed rename/copy record');
-      records.push({ oldPath, path, status: status === 'R' ? 'renamed' : 'copied' });
-    } else {
-      const path = values[index++];
-      if (path === undefined) throw new Error('Missing Git path');
-      records.push({ path, status: status === 'A' ? 'added' : status === 'D' ? 'deleted' : status === 'T' ? 'type_changed' : 'modified' });
-    }
+    const parsed = parseNameStatusRecord(values, index);
+    index = parsed.nextIndex;
+    records.push(parsed.record);
     if (records.length > MAX_RECORDS) throw new Error('Git record count exceeds limit');
   }
   return records;
 }
 
-function parseNumstat(buffer) {
-  const values = fields(buffer);
-  const records = [];
-  for (let index = 0; index < values.length;) {
-    const stat = values[index++];
-    if (stat === undefined) throw new Error('Missing numstat record');
+function parseNumstatRecord(stat, values, index) {
     const match = /^([^\t]+)\t([^\t]+)\t([\s\S]*)$/.exec(stat);
     const added = match?.[1];
     const deleted = match?.[2];
@@ -76,11 +77,21 @@ function parseNumstat(buffer) {
       const oldPath = values[index++];
       const path = values[index++];
       if (oldPath === undefined || path === undefined) throw new Error('Malformed rename numstat');
-      records.push({ oldPath, path, additions, deletions, binary });
+      return { record: { oldPath, path, additions, deletions, binary }, nextIndex: index };
     } else {
-      const path = pathField;
-      records.push({ path, additions, deletions, binary });
+      return { record: { path: pathField, additions, deletions, binary }, nextIndex: index };
     }
+}
+
+function parseNumstat(buffer) {
+  const values = fields(buffer);
+  const records = [];
+  for (let index = 0; index < values.length;) {
+    const stat = values[index++];
+    if (stat === undefined) throw new Error('Missing numstat record');
+    const parsed = parseNumstatRecord(stat, values, index);
+    index = parsed.nextIndex;
+    records.push(parsed.record);
     if (records.length > MAX_RECORDS) throw new Error('Numstat record count exceeds limit');
   }
   return records;
@@ -143,6 +154,34 @@ function incompleteFeatures(headSha, preview) {
   };
 }
 
+function languageFamilies(files) {
+  const familyForPath = path => {
+    const lowerPath = path.toLowerCase();
+    if (lowerPath.endsWith('.md')) return 'markdown';
+    if (lowerPath.endsWith('.py')) return 'python';
+    if (/\.(?:[cm]?ts|tsx)$/.test(lowerPath)) return 'typescript';
+    if (/\.(?:[cm]?js|jsx)$/.test(lowerPath)) return 'javascript';
+    if (lowerPath.endsWith('.json')) return 'json';
+    if (lowerPath.endsWith('.yml') || lowerPath.endsWith('.yaml')) return 'yaml';
+    if (lowerPath.endsWith('.sql')) return 'sql';
+    if (lowerPath.endsWith('.sh')) return 'shell';
+    if (lowerPath.endsWith('.tf') || lowerPath.endsWith('.tfvars')) return 'terraform';
+    return 'other';
+  };
+  return [...new Set(files.flatMap(file => [file.path, file.oldPath].filter(Boolean).map(familyForPath)))].sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
+}
+
+function changeAreas(lowerPaths) {
+  const areas = new Set();
+  if (lowerPaths.some(path => /(^|\/)(?:docs?)(\/|$)/.test(path) || path.endsWith('.md') || /(^|\/)(?:readme|agents)\.md$/.test(path))) areas.add('docs');
+  if (lowerPaths.some(path => /(^|\/)\.github(\/|$)|(^|\/)(?:ci|workflow)(\/|$)/.test(path))) areas.add('ci');
+  for (const area of ['auth', 'iam', 'secret', 'crypto', 'migration', 'deploy', 'payment']) {
+    if (lowerPaths.some(path => new RegExp(String.raw`(^|[\/._-])${area}(?:s)?([\/._-]|$)`).test(path) || (area === 'migration' && path.endsWith('.sql')))) areas.add(area);
+  }
+  if (areas.size === 0) areas.add('other');
+  return areas;
+}
+
 function classify(files, paths, headSha) {
   const reviewable = new Set(paths);
   const hasUnknownCounts = files.some(file => file.additions === null || file.deletions === null);
@@ -151,37 +190,28 @@ function classify(files, paths, headSha) {
   const deletions = hasUnknownCounts ? null : files.reduce((sum, file) => sum + file.deletions, 0);
   if ((additions !== null && !Number.isSafeInteger(additions)) || (deletions !== null && !Number.isSafeInteger(deletions))) throw new Error('Change count overflow');
   const count = files.length;
-  const families = [...new Set(files.flatMap(file => [file.path, file.oldPath].filter(Boolean).map(path => {
-    const lowerPath = path.toLowerCase();
-    if (/\.md$/.test(lowerPath)) return 'markdown';
-    if (/\.py$/.test(lowerPath)) return 'python';
-    if (/\.(?:[cm]?ts|tsx)$/.test(lowerPath)) return 'typescript';
-    if (/\.(?:[cm]?js|jsx)$/.test(lowerPath)) return 'javascript';
-    if (/\.json$/.test(lowerPath)) return 'json';
-    if (/\.ya?ml$/.test(lowerPath)) return 'yaml';
-    if (/\.sql$/.test(lowerPath)) return 'sql';
-    if (/\.sh$/.test(lowerPath)) return 'shell';
-    if (/\.tf(?:vars)?$/.test(lowerPath)) return 'terraform';
-    return 'other';
-  })))].sort();
+  const compareCodeUnits = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+  const families = languageFamilies(files);
   const allPaths = files.flatMap(file => [file.path, file.oldPath].filter(Boolean));
   const lowerPaths = allPaths.map(path => path.toLowerCase());
-  const areas = new Set();
-  if (lowerPaths.some(path => /(^|\/)(?:docs?)(\/|$)|\.md$|(^|\/)(?:readme|agents)\.md$/.test(path))) areas.add('docs');
-  if (lowerPaths.some(path => /(^|\/)\.github(\/|$)|(^|\/)(?:ci|workflow)(\/|$)/.test(path))) areas.add('ci');
-  for (const area of ['auth', 'iam', 'secret', 'crypto', 'migration', 'deploy', 'payment']) {
-    if (lowerPaths.some(path => new RegExp(`(^|[\\/._-])${area}(?:s)?([\\/._-]|$)`).test(path) || (area === 'migration' && /\.sql$/.test(path)))) areas.add(area);
-  }
-  if (areas.size === 0) areas.add('other');
+  const areas = changeAreas(lowerPaths);
   const security = allPaths.some(path => /(?:auth|security|secret|permission|crypto|token|iam)/i.test(path)) ? 'metadata_positive' : 'metadata_not_observed';
   const migration = allPaths.some(path => /(?:migration|migrations|schema|\.sql$)/i.test(path)) ? 'metadata_positive' : 'metadata_not_observed';
   const gap = files.some(file => !reviewable.has(file.path) || (file.oldPath !== undefined && !reviewable.has(file.oldPath)));
+  let totalChanges = null;
+  if (additions !== null && deletions !== null) totalChanges = additions + deletions;
+  let changeSize = 'unknown';
+  if (totalChanges !== null) {
+    if (totalChanges < 100) changeSize = 'small';
+    else if (totalChanges < 500) changeSize = 'medium';
+    else changeSize = 'large';
+  }
   return {
     schema_version: '3', head_sha: headSha, all_changed_files: files,
     ocr_reviewable_paths: [...reviewable], all_changed_file_count: count,
     reviewable_file_count: reviewable.size, excluded_file_count: Math.max(0, count - reviewable.size),
-    additions, deletions, change_size: additions === null || deletions === null ? 'unknown' : additions + deletions < 100 ? 'small' : additions + deletions < 500 ? 'medium' : 'large',
-    language_families: families, change_areas: [...areas].sort(), test_files_changed: allPaths.some(path => /(?:^|[./_-])(?:test|tests|spec|__tests__)(?:[./_-]|$)/i.test(path)),
+    additions, deletions, change_size: changeSize,
+    language_families: families, change_areas: [...areas].sort(compareCodeUnits), test_files_changed: allPaths.some(path => /(?:^|[./_-])(?:test|tests|spec|__tests__)(?:[./_-]|$)/i.test(path)),
     security_signal: security, migration_signal: migration,
     classification_status: incomplete ? 'incomplete' : 'unclassified_other',
     features_incomplete: incomplete, review_scope_gap: gap,
