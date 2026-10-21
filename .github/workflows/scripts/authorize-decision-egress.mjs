@@ -27,15 +27,11 @@ function checkoutName(value) {
   return match?.[1]?.toLowerCase() ?? null;
 }
 
-export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRepo, runBinding, installationToken, policy, fetchImpl }) {
-  let validBinding = true;
-  try { assertRunBindingValid(runBinding); } catch { validBinding = false; }
-  const target = parseTarget(targetRepo);
-  const [owner, repoName, ...extra] = target.split('/');
+async function fetchRepository({ owner, repoName, installationToken, fetchImpl }) {
   let body = null;
   let apiValid = false;
   try {
-    if (owner && repoName && !extra.length && typeof fetchImpl === 'function' && typeof installationToken === 'string' && installationToken) {
+    if (owner && repoName && typeof fetchImpl === 'function' && typeof installationToken === 'string' && installationToken) {
       const response = await fetchImpl(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repoName)}`, {
         method: 'GET', headers: { Authorization: `Bearer ${installationToken}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10000),
       });
@@ -50,12 +46,28 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRep
   } catch {
     // Network and response errors are represented only by the fixed denial enum.
   }
+  return { body, apiValid };
+}
+
+function classifyVisibility(body, apiValid) {
   let visibility = VISIBILITY.unknown;
   if (apiValid && body.private === false && body.visibility === 'public') {
     visibility = VISIBILITY.public;
   } else if (apiValid && body.private === true && ['private', 'internal'].includes(body.visibility)) {
     visibility = VISIBILITY.restricted;
   }
+  return visibility;
+}
+
+export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRepo, runBinding, installationToken, policy, fetchImpl }) {
+  let validBinding = true;
+  try { assertRunBindingValid(runBinding); } catch { validBinding = false; }
+  const target = parseTarget(targetRepo);
+  const [owner, repoName, ...extra] = target.split('/');
+  const { body, apiValid } = extra.length
+    ? { body: null, apiValid: false }
+    : await fetchRepository({ owner, repoName, installationToken, fetchImpl });
+  const visibility = classifyVisibility(body, apiValid);
   const entry = policyEntries(policy).find(item => item && typeof item === 'object' && item.id === body?.id && item.full_name === body?.full_name && approvalValid(item.approval_ref, policy?.approval_reference_format));
   const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && checkoutName(checkoutRepo) === target.toLowerCase() && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
   return {
