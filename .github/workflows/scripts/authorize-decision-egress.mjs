@@ -50,7 +50,12 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRep
   } catch {
     // Network and response errors are represented only by the fixed denial enum.
   }
-  const visibility = !apiValid ? VISIBILITY.unknown : body.private === false && body.visibility === 'public' ? VISIBILITY.public : body.private === true && ['private', 'internal'].includes(body.visibility) ? VISIBILITY.restricted : VISIBILITY.unknown;
+  let visibility = VISIBILITY.unknown;
+  if (apiValid && body.private === false && body.visibility === 'public') {
+    visibility = VISIBILITY.public;
+  } else if (apiValid && body.private === true && ['private', 'internal'].includes(body.visibility)) {
+    visibility = VISIBILITY.restricted;
+  }
   const entry = policyEntries(policy).find(item => item && typeof item === 'object' && item.id === body?.id && item.full_name === body?.full_name && approvalValid(item.approval_ref, policy?.approval_reference_format));
   const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && checkoutName(checkoutRepo) === target.toLowerCase() && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
   return {
