@@ -41,7 +41,6 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
   }
   if (decisionRecord.reviewable_file_count === 0) {
     if (finalAudit.executed_review_model !== null || finalAudit.attempted_review_models.length !== 0 || finalAudit.host_success_model !== null) return result('AUDIT_INCOMPLETE');
-    if (finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
   } else {
     const certified = certifiedModelIds(catalog);
     if (certified.length === 0) return result('MODEL_NOT_CERTIFIED');

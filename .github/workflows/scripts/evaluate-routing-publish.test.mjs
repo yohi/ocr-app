@@ -69,7 +69,7 @@ test('publish gate requires owner approval only for allowed egress', () => {
   const allowed = { ...decisionRecord, egress_status: 'allowed' };
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: allowed, finalAudit: { ...finalAudit, egress_status: 'allowed' } })).reason, 'EGRESS_NOT_APPROVED');
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: allowed, finalAudit: { ...finalAudit, egress_status: 'allowed', owner_approval_ref: 'owner/approval-7' } })).authorized, true);
-  assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...allowed, owner_approval_ref: 'bad ref' }, finalAudit: { ...finalAudit, egress_status: 'allowed' } })).reason, 'AUDIT_INCOMPLETE');
+  assert.equal(evaluatePublishEligibility(args({ decisionRecord: allowed, finalAudit: { ...finalAudit, egress_status: 'allowed', owner_approval_ref: 'bad ref' } })).reason, 'AUDIT_INCOMPLETE');
 });
 
 test('publish gate rejects skipped delivery and exact run binding mismatches', () => {

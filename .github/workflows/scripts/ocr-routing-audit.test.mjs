@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, statSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import {
   createRoutingDecisionRecord,
   writeRoutingDecision,
@@ -93,11 +94,14 @@ test('final audit only identifies a validated single host success', () => {
     event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
-  const final = finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: null, review_scope_gap: false, features_incomplete: false }, catalog });
+  const final = finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: null, proposedReviewModel: 'claude-opus-4-6-thinking', selectedReviewModel: 'claude-opus-4-6-thinking', review_scope_gap: false, features_incomplete: false }, catalog });
   assert.equal(Object.isFrozen(final), true);
   assert.equal(final.workflow_run_id, binding.workflowRunId);
   assert.equal(final.executed_review_model, 'claude-opus-4-6-thinking');
   assert.deepEqual(final.attempted_review_models, ['claude-opus-4-6-thinking']);
+  const publish = evaluatePublishEligibility({ mode: 'enforce', expectedBinding: binding, decisionRecord: record, finalAudit: final, delivery: { outcome: 'success', artifactId: 'artifact-1', runId: binding.workflowRunId, runAttempt: binding.runAttempt }, checkRunId: '123', ownerDecisions: {}, headSha: binding.headSha, catalog });
+  assert.equal(publish.authorized, true);
+  assert.equal(publish.reason, 'PUBLISH_AUTHORIZED');
   const invalid = finalizeRoutingAudit({ decision: record, attempts: [], reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog });
   assert.equal(invalid.host_success_model, null);
   assert.equal(invalid.executed_review_model, null);
