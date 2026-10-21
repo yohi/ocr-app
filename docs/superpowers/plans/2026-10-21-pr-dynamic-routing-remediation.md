@@ -16,14 +16,17 @@ No new runtime dependency or TypeScript pipeline is required.
 
 **Spec:** [Design R4](../specs/2026-10-20-pr-dynamic-llm-routing-design.md), especially §§6.1, 7, 8, 11, 13, 15.2;
 [original implementation plan](2026-10-20-pr-dynamic-llm-routing.md).
-Task 1 produces the remediation specification and requires its explicit review before Tasks 2–16.
+Task 1 reviews and freezes the remediation contracts **within this plan** and requires explicit Owner review
+before Tasks 2–16. No separate remediation specification file is created in this revision.
 The contracts proposed below are not already approved amendments to R4.
 
 ## Global Constraints
 
 - Planning baseline: `f057743ba226655bb772a58185e08816ca28b973` on `master`, inspected on 2026-10-21.
 - This document authorizes neither implementation nor operational activation. Review this plan and select an execution
-  method; after Task 1, review the written remediation specification before proceeding with code.
+  method; after Task 1, obtain explicit Owner acceptance of the **plan-level contracts** before proceeding with code.
+- This plan-only correction addresses review findings RMP-001–005; Design R4 and the original plan remain unchanged.
+  Record any normative conflict with R4 and require a separate Owner decision before implementing it.
 - No GitHub writes, merge, deployment, actual Decision API call, or actual model invocation is part of this plan.
   Commit checkpoints are proposals: run them only when the user explicitly authorizes commits.
 - `off` remains the default and skips every new routing check, lookup, extraction, artifact, and context read.
@@ -37,7 +40,8 @@ The contracts proposed below are not already approved amendments to R4.
 - Decision provider remains `inception/mercury-decide:free`, one attempt, 5,000 ms timeout, no paid substitution.
 - Repo egress remains a separate exact ID/full_name grant, default deny for public and restricted repositories.
 - Startup authorization precedes Decision POST, review Host spawn, and routing audit creation/upload.
-  GitHub identity GETs and sanitized failure Check updates are permitted to establish identity/report denial.
+  GitHub identity GETs, fresh central approval/withdrawal GETs and sanitized failure Check updates
+  are permitted for establishing authority and reporting denial; old cached approval never substitutes for a failed GET.
 - Routing artifact remains exactly `decision.json`, `attempts.ndjson`, `final.json`, retention `30` days,
   name `ocr-routing-audit-${run_id}-${run_attempt}`. Private execution context is never uploaded.
 - Enforce order remains Host/attempts → filter/validation → HEAD check → immutable seal → upload → Gate →
@@ -70,9 +74,12 @@ Splitting them into independently shipped features would leave partially protect
 Sixteen reviewable tasks replace the earlier rough estimate; validation is attached to each deliverable.
 Tasks 13–15 supply cross-boundary proof rather than substituting for component tests.
 
-Task 1 is documentation-only. Its output is a proposal requiring Owner review, not an operational approval.
-If the Owner rejects any proposed contract, update the specification and this plan before implementing consumers.
-Do not silently choose a different evidence store, time policy, approval authority, or CLI discovery mechanism.
+Task 1 reviews plan-level contracts only, not a new specification. The Owner must accept the contracts before Task 2;
+this does not grant implementation writes, operational approvals, or activation. Rejected contracts require plan revision.
+Do not silently choose a different authority source, revocation policy, evidence store, or CLI mechanism.
+**Intermediate Task 2–11 checkpoints are non-deployable/non-mergeable.** Their component tests may pass while
+workflow consumers are not yet migrated (notably Task 4 → Task 7). Do not run Actions from a partial branch,
+or regard it as integrated until Task 12 and Tasks 13–14 pass.
 
 Dependency order:
 
@@ -98,8 +105,8 @@ New files listed here are application workflow configuration/code, not AI agent 
 
 | Files | Responsibility | Tasks |
 | --- | --- | --- |
-| `docs/superpowers/specs/2026-10-21-pr-dynamic-routing-remediation-design.md` | Canonical remediation contracts after review | 1 |
-| `C/routing-authorization.json`, `S/routing-authorization.mjs`, matching test | Owner registry and stage evaluation | 2 |
+| `docs/superpowers/plans/2026-10-21-pr-dynamic-routing-remediation.md` | Review/freeze plan-level contracts; no new spec file | 1 |
+| `C/routing-authorization.json`, approved `C/routing-approvals/` dossiers, `S/routing-authorization.mjs`, matching test | Fresh Owner registry, operational dossiers and stage checks | 2 |
 | `S/authorize-routing-start.mjs`, matching test; `ocr-engine.yml` | Early workflow startup authorization | 3, 12 |
 | `S/read-checkout-identity.mjs`, matching test; `S/authorize-decision-egress.mjs`, matching test | Git origin/HEAD and REST identity | 4 |
 | `C/review-certification-index.json`, `S/load-review-certification.mjs`, matching test | Evidence digest/provenance verification | 5 |
@@ -123,27 +130,51 @@ Keep new modules focused; if a task needs more than 250 source lines, split vali
 
 ## Proposed contracts for the Task 1 specification
 
-These decisions are explicit so Task 1 does not invent security policy during implementation.
-The reviewed specification will own these definitions; this plan supplies implementation handoffs.
+These proposed implementation contracts are explicit so workers do not invent security policy. Task 1 freezes
+them within this plan; effective Design R4 remains unchanged unless the Owner separately decides a divergence.
+Plan review is not an operational activation grant.
 
 ### A. Trusted approval registry and staged activation
 
-Use files from the central `self-repo` checkout pinned to `github.sha`, never the target PR or dispatch content.
-Trust is the existing central-repository maintenance boundary: registry changes need an explicit Owner decision.
-A digest proves byte identity, not who approved it. Owner approval and digest verification are separate checks.
-Do not introduce a signature service, remote evidence database, or automatic approval issuer in this remediation.
+Use the central `self-repo` checkout pinned to `github.sha` for code, policy, catalog and source manifest,
+never the target PR or dispatch contents. **The pinned checkout is not the live revocation authority.**
+On every non-off authorization boundary, fetch the current `routing-authorization.json` and its operational
+dossiers from the Owner-controlled `refs/heads/master` of the central repository via authenticated GitHub REST.
+Use a trusted central repository ID/full name, fixed branch and fixed paths; no PR-controlled ref or fallback
+on missing/stale responses. The central protected-branch maintenance policy and API read permissions are
+operational preconditions to activation; verify them rather than assuming branch protection exists.
+A digest proves byte identity, not who approved it; a solo Owner-recorded `security` assessment is not an
+independent second-human Security approval. No new signature service, evidence database or approval issuer.
 
 `RoutingAuthorizationRegistry/v1` has exactly `schema_version:'1'`, `approvals:Approval[]`,
 `activations:Activation[]`, `revoked_refs:string[]`; initialize both arrays empty and revocations empty.
 References match `OWNER-[A-Z0-9][A-Z0-9._-]{0,95}` and are unique within the registry.
 Records are plain objects, all keys required, no inherited/extra/undefined properties.
 
+`fetchCurrentRoutingAuthorization({centralRepoId,centralRepoFullName,protectedRef,token,fetchImpl,now})`
+performs bounded authenticated GETs for the central REST repository identity, the latest registry and approved
+dossiers at fixed paths; verify identity, path/type, decoded raw bytes and strict schemas. On 403/404/429/5xx,
+timeout, malformed response, missing file or changed authority, return `ROUTING_AUTHORITY_UNAVAILABLE` and deny
+the **next** effect. No cached/pinned-registry fallback, success-string authorization or automatic retry.
+Revalidate approval scopes, pinned code manifest and current policy/catalog bytes against the new read.
+This is per-effect revocation detection, **not** atomic instantaneous revocation: GitHub read visibility,
+updates between GET and effect, and already-running Hosts remain residual races. Never claim an external
+request can be undone after it begins; document this explicit limit in operation review.
+
 `Approval` has exactly `ref`, `kind`, `repo_id`, `full_name`, `subject_sha256`, `issued_at`, `expires_at`.
 Kinds are `owner_operation`, `security`, `audit_operation`, `g1`, `g2`, `g3`, `g4`, `model`, `cli_inventory`.
 IDs are positive safe integers, full_name is exact GitHub REST spelling, subject is `sha256:<lowercase hex64>`.
 Dates are canonical UTC ISO strings; accept only `issued_at <= now < expires_at` with no clock-skew grace.
 An approval points to exact subject bytes or a reviewed operational dossier digest, not merely a PASS label.
-The Owner records verified gate results here in a separately authorized change; tests never populate real approvals.
+For `owner_operation`, `security` and `audit_operation`, require distinct `RoutingOperationalDossier/v1` raw JSON
+bytes at fixed approved central paths under `C/routing-approvals/`. Each dossier binds its reference/kind,
+issuer and explicit Owner decision, repo ID/name, allowed mode/effects, pinned source-manifest/policy/catalog
+digests, issuance and expiry, and revocation linkage. Its raw SHA-256 must equal that approval's
+`subject_sha256`; verify all dossier fields against the activation and executing context. Absent, altered,
+expired, wrong-kind/scope/issuer dossiers deny, and one dossier cannot satisfy different approval kinds.
+For `g1`–`g4`, the subject is the tested source manifest below; model and CLI approvals bind their evidence
+bytes per contract C. `security` here means a documented solo-Owner assessment, not independent personnel
+certification. Real decisions require a separately authorized Owner change; fixtures cannot grant activation.
 
 `Activation` has exactly `repo_id`, `full_name`, `mode`, `issued_at`, `expires_at`, `policy_sha256`,
 `catalog_sha256`, `approval_refs`. Mode is `shadow|enforce`. Digests hash raw egress-policy/catalog file bytes.
@@ -163,8 +194,11 @@ This avoids approvals becoming invalid merely because an approval-only commit ch
 | `enforce` | `owner_operation`, `security`, `audit_operation`, `g1`, `g2`, `g3`, `g4` | Eligible to attempt the enforce pipeline |
 
 G4 is not a prerequisite for shadow or G3 evidence generation. The runtime variable selects a requested mode only.
-Re-evaluate registry validity at preparation, before Host, before audit upload, at Gate, and before publication.
+Fetch and re-evaluate **fresh central registry/dossier bytes** at startup, preparation, immediately before
+Decision POST and Host spawn, before routing audit upload, at Gate and immediately before review post.
+Revalidate time, scope, policy/catalog and pinned source manifest each time; an unavailable GET denies.
 Startup denial produces fixed `ROUTING_ACTIVATION_DENIED`; no review, thread mutation, or routing upload.
+New revocation cannot retroactively cancel a Decision request or Host process already started.
 Failure notification may update an existing Check Run; it must not display review success or raw exception data.
 
 ### B. Checkout identity
@@ -200,6 +234,12 @@ Require canonical UTC dates and `observed_at <= now < expires_at`; reject invent
 Verify the installed `agy` executable digest independently. The adapter uses the workflow's fixed installation
 path `$HOME/.local/bin/agy`, resolves it with `realpath`, requires a regular executable file and hashes its bytes.
 Ignore target-controlled PATH entries; reject an executable resolved inside the target checkout.
+**The enforce Host must spawn that exact verified absolute realpath**, not a later `PATH` lookup of `agy`.
+Immediately before spawn recheck canonical path and digest; a changed/writable substitute fails closed.
+Provide an enforce-only `cliExecutablePath` parameter to the existing Host; `off/shadow` retain `spawn('agy', ...)`.
+Launcher hashing alone does not establish identity of dynamically loaded dependencies: require reviewed
+installation/package provenance and dependency-manifest evidence before G2/G3 runtime approval, and record
+remaining filesystem TOCTOU. Do not claim cryptographic process attestation.
 The approved binary hash remains mandatory even for a valid regular file; do not execute a guessed CLI command.
 The inventory is an Owner-approved observation of CLI-supported IDs tied to that installation, not a claim of
 current provider capacity or of the provider's internal model identity. Actual transport failures still use fallback.
@@ -223,12 +263,16 @@ source_manifest_sha256,approval_refs:string[]}`, `certification_refs:string[]`, 
 Store at `${RUNNER_TEMP}/ocr-routing-execution-context.json`, atomic no-overwrite write, mode `0600`,
 outside the artifact directory. Read paths are fixed; callers cannot supply a PR-selected context filename.
 Use `lstat`, reject symlinks/non-regular files, bound size to 64 KiB, validate exact keys and binding.
-Re-load current trusted registry/index/bytes and verify hashes/expiry at consumers; stored refs are not authority.
+Re-fetch current central authorization/dossier bytes on every side-effect boundary while verifying the pinned
+trusted policy/catalog/index/source-manifest bytes, digests and expiry. Stored refs, previous API responses
+and output strings are not authority; remote failure denies the subsequent effect.
 The context records provenance, not the external grant or Secret. It never changes the 15-key selected route.
 
 Keep `evaluatePublishEligibility` pure. Replace unused `ownerDecisions` with `startupAuthorization`, add
 `selectedRoute`, `attempts`, and `certifiedBundle:{catalog,evidence}|null`.
-Callers independently revalidate provenance and provide `startupAuthorization` and the bundle, not catalog flags.
+Callers re-fetch central authority and independently revalidate provenance before providing
+`startupAuthorization` and bundle, not catalog flags. The pure Gate rejects a missing/failed fresh
+result; a previous authorization boolean is never enough.
 For nonempty review, require selected primary/fallback to equal the current certified resolved route, enforce
 `selected_strategy >= risk_floor`, validate strict attempt order, one final Host success, and actual executed model
 in `[selected_model_id,...fallback_models]`. Repeated attempts of the same model are allowed; transitions must
@@ -238,38 +282,42 @@ For normal skip require no model selection, no attempts, null Host/executed mode
 no scope gap, authorized startup, delivered artifact, and Check ID. Never require model proof just for skip.
 Retain existing egress approval checks and immutable final/upload separation.
 
-## Task 1: Write and review the remediation specification
+## Task 1: Freeze the plan-only remediation contracts and Owner decisions
 
-**Files:** Create `docs/superpowers/specs/2026-10-21-pr-dynamic-routing-remediation-design.md`.
-Reference the existing R4 specification and original plan; leave their historical state snapshots intact.
+**Files:** Review and, if necessary, modify only this remediation plan; do not create another specification.
+Keep Design R4 and the original implementation plan unchanged as inputs.
 
-**Interfaces:** Consumes the accepted corrected audit and proposed contracts A–D above.
-Produces the reviewed normative amendment for Tasks 2–16, with finding-to-requirement IDs `REM-001`–`REM-005`.
+**Interfaces:** Consume the corrected audit, contracts A–D and RMP-001–005; maintain mapping to
+`REM-001`–`REM-005`. This is not a new operational approval.
 
-- [ ] **Step 1:** Write the English specification with contracts A–D, precedence over affected R4 implementation
-  details, stage table, denial effects, trust limitations, and requirement IDs for each finding. No real approval data.
-- [ ] **Step 2:** Check that every contract names its issuer, trusted source, scope, expiry, revocation, consumer,
-  allowed effects, failure enum, and test owner. Verify that G3 comparison remains outside production publication.
-- [ ] **Step 3:** Run `markdownlint-cli2 docs/superpowers/specs/2026-10-21-pr-dynamic-routing-remediation-design.md`
-  and `git diff --check`; expected no errors. If tooling is unavailable, record `NOT_RUN`, not PASS.
-- [ ] **Step 4:** Ask the Owner to review the written specification. STOP before Task 2 until explicitly approved.
-  Any revision of A–D must be reflected in this plan's interfaces and tests before consumers are implemented.
-- [ ] **Step 5:** If commits are authorized, stage only this specification and corresponding plan corrections;
-  proposed commit: `docs(ocr): 是正仕様と認可境界を定義`.
+- [ ] **Step 1:** Confirm contracts for live central revocation reads, per-kind operational approval
+  subject bytes, exact spawned CLI identity, one enforce publisher and non-deployable intermediate commits.
+  Identify any contract that conflicts with effective Design R4.
+- [ ] **Step 2:** Verify each grant's issuer, source, approved subject, scope, expiry, revocation consumer,
+  side effects and failure outcome. Document solo-Owner trust limits, GitHub API freshness/TOCTOU,
+  and already-running Host cancellation limits; G3 comparison remains outside this workflow.
+- [ ] **Step 3:** Validate this plan as text (`markdownlint-cli2` where available, `git diff --check`);
+  unavailable tooling is NOT_RUN, not PASS. Do not edit specification, source, workflow or config files.
+- [ ] **Step 4:** Ask the Owner to explicitly accept the plan-level contracts; STOP before Task 2 until
+  accepted. Plan acceptance grants no implementation GitHub write, certification, egress or activation.
+- [ ] **Step 5:** If a contract changes effective R4 policy, obtain a **separate** Owner design decision
+  before implementation. Do not infer that this plan amends R4 or create a new specification file.
 
 ## Task 2: Implement strict startup authorization
 
 **Files:** Create `C/routing-authorization.json`, `S/routing-authorization.mjs`, and its `.test.mjs`.
 
-**Interfaces:** `evaluateRoutingStartup({mode,repoIdentity,registry,policySha256,catalogSha256,
-sourceManifestSha256,now}):StartupAuthorization` is pure.
+**Interfaces:** `evaluateRoutingStartup({mode,repoIdentity,registry,operationalDossiers,policySha256,catalogSha256,
+sourceManifestSha256,now}):StartupAuthorization` is pure. A trusted caller supplies **fresh** verified bytes.
 `StartupAuthorization` is `{authorized:boolean,reason:'ROUTING_ACTIVATION_AUTHORIZED'|
 'ROUTING_ACTIVATION_DENIED',approvalRefs:string[]}`. Off callers do not invoke it.
-Also export `hashRoutingSourceManifest({trustedRoot,readFile,listTrackedPaths}):string` per contract A.
+Also export `hashRoutingSourceManifest({trustedRoot,readFile,listTrackedPaths}):string` and the bounded
+`fetchCurrentRoutingAuthorization` adapter per contract A.
 
 - [ ] **Step 1:** Add `startup rejects missing stale revoked and wrong-stage approvals` with a valid synthetic
   shadow registry and variants for `{}`, `now===expires_at`, revoked reference, wrong repo ID/name, changed source,
-  policy/catalog hashes, missing security/audit approval, duplicates, inherited/extra keys, and `undefined`.
+  policy/catalog hashes, missing security/audit approval, wrong issuer, altered per-kind dossier subject,
+  duplicates, inherited/extra keys, and `undefined`.
   Assert every variant returns `authorized===false`; valid shadow passes without g2/g3/g4; enforce does not.
 
   ```javascript
@@ -280,8 +328,9 @@ Also export `hashRoutingSourceManifest({trustedRoot,readFile,listTrackedPaths}):
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/routing-authorization.test.mjs`;
   expected FAIL on the new missing export/assertions, not dependency installation failure.
-- [ ] **Step 3:** Implement contract A and the exact source manifest; create the empty default registry.
-  Add valid synthetic enforce coverage requiring g1/g2/g3/g4; never treat `basic_policy_approved` as approval.
+- [ ] **Step 3:** Implement contract A, operational dossier digests, bounded central REST GET and exact source
+  manifest; create only the empty default registry. Test 403/404/429/5xx/timeout and scope mismatch with
+  zero subsequent effects. Synthetic enforce requires g1/g2/g3/g4; `basic_policy_approved` is not authority.
 - [ ] **Step 4:** Rerun the test; expected PASS including changed source manifest after a one-byte source mutation.
 - [ ] **Step 5:** If authorized, stage only this task's files; commit `feat(ocr): 起動認可を段階別に検証`.
 
@@ -290,7 +339,8 @@ Also export `hashRoutingSourceManifest({trustedRoot,readFile,listTrackedPaths}):
 **Files:** Create `S/authorize-routing-start.mjs` and its test. Modify the mode-validation/startup portion of
 `.github/workflows/ocr-engine.yml` (baseline lines 134–166; relocate ahead of PR checkout/tool setup).
 
-**Interfaces:** `authorizeRoutingStart({env,readTrustedConfig,fetchRepoIdentity,now,writeOutput}):Promise<void>`.
+**Interfaces:** `authorizeRoutingStart({env,readTrustedConfig,fetchRepoIdentity,
+fetchCurrentAuthorization,now,writeOutput}):Promise<void>`.
 It reads expected scope from validated target metadata plus GitHub REST, never dispatch visibility.
 Write `ROUTING_START_AUTHORIZED=true|false` exactly once; on denial throw fixed `ROUTING_ACTIVATION_DENIED`.
 Export the CLI adapter only behind a main-module guard so tests can import it without effects.
@@ -307,7 +357,9 @@ Export the CLI adapter only behind a main-module guard so tests can import it wi
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/authorize-routing-start.test.mjs`; expected FAIL.
 - [ ] **Step 3:** Implement the adapter using Task 2, central checkout, and App token REST identity.
-  Put the step after App token generation but before PR checkout, CLI install, OAuth restoration, and preview.
+  Put the step after App token generation and a Node 20 setup step but before PR checkout, CLI install, OAuth
+  restoration and preview. Use the central job `github.token` for central authority reads, not the
+  target-scoped App token; check permissions before activation.
   Startup step is not `continue-on-error` in either shadow or enforce. No new dependency installation is needed.
 - [ ] **Step 4:** Run its test and `actionlint .github/workflows/ocr-engine.yml`; expected PASS/clean.
   Full downstream `always()` protection is completed in Task 12; do not run/activate intermediate workflow revisions.
@@ -348,13 +400,14 @@ all other parameters and the existing EgressAuthorization/v1 output remain uncha
 Consume existing `S/validate-review-model-catalog.mjs:82–135`; keep its resolver evidence shape.
 
 **Interfaces:** Export contract C's `loadVerifiedCertification` and
-`readInstalledCliIdentity({env,targetRoot,resolveExecutable,readFile}):{binarySha256:string}`.
+`readInstalledCliIdentity({env,targetRoot,resolveExecutable,readFile}):{resolvedPath:string,binarySha256:string}`.
 The inventory supplies the approved version; binary identity itself never invents a version string.
 Production executable reads are bounded at 256 MiB and fail closed on resolution/read/hash errors.
 
 - [ ] **Step 1:** Add `catalog cannot certify itself` asserting catalog certified flags/digests without approved
   index bytes fail `REVIEW_CERTIFICATION_INVALID`. Verify one-byte tamper, expired/revoked Owner refs, wrong
-  model/tier/version, wrong binary digest, path escape/symlink, oversize evidence, and duplicate inventory IDs reject.
+  model/tier/version, wrong binary digest, path escape/symlink, oversize evidence, duplicate inventory IDs,
+  swapped `PATH` binary and changed realpath/digest immediately before spawn reject.
   Valid synthetic evidence must produce exact resolver arrays, not booleans or extra keys.
 
   ```javascript
@@ -394,7 +447,8 @@ For shadow/zero-review, `certifiedBundle=null`; consumer explicitly specifies `n
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/routing-execution-context.test.mjs`; expected FAIL.
 - [ ] **Step 3:** Implement contract D; use same-directory temporary creation plus atomic link/no-overwrite
-  publication and cleanup. Revalidation calls Tasks 2/5 using current trusted bytes, not saved arrays as authority.
+  publication and cleanup. Revalidation calls Tasks 2/5 using newly fetched central approval/dossier bytes and pinned trusted
+  code/policy/catalog bytes, not saved arrays as authority; 429/timeout never reuse earlier approval.
   Normalize all failures to fixed `ROUTING_EXECUTION_CONTEXT_INVALID` or `ROUTING_ACTIVATION_DENIED`.
 - [ ] **Step 4:** Rerun the test; expected PASS, including exact large run ID `9007199254740993` and skip/null bundle.
 - [ ] **Step 5:** If authorized, stage only this task's files; commit `feat(ocr): 実行証跡をrunに拘束して保持`.
@@ -405,7 +459,8 @@ For shadow/zero-review, `certifiedBundle=null`; consumer explicitly specifies `n
 
 **Interfaces:** Preserve `prepareRoutingStep`'s existing return `{route,decisionRecord,egressStatus}`.
 Extend input with `trustedInputs`, `now`, `readEvidence`, `readCliIdentity`, `fetchRepoIdentity` test seams;
-production defaults load fixed central files. Existing `runGit` and `fetchImpl` seams remain.
+production defaults load fixed central policy/catalog and freshly fetched central approvals.
+  Existing `runGit` and `fetchImpl` seams remain.
 Feed `selectReviewRoute` exactly `{catalog,evidence}` in nonempty enforce, plain catalog in shadow/skip.
 
 - [ ] **Step 1:** Add `enforce preparation uses verified bundle end to end`: synthetic approved scope, observed
@@ -423,7 +478,8 @@ Feed `selectReviewRoute` exactly `{catalog,evidence}` in nonempty enforce, plain
   tests. Existing shadow/skip tests must be updated with synthetic startup approval, never real registry edits.
 - [ ] **Step 3:** Enforce startup before extraction/egress/route/audit writes. Read actual checkout identity;
   preserve all-change classification and 15-key projection. Write the private context after route resolution.
-  Re-evaluate startup immediately before Decision POST if time elapsed. Skip model evidence for shadow/zero-review.
+  Fetch fresh central approval and re-evaluate startup immediately before Decision POST regardless of elapsed
+  time; revocation can occur before expiry. Skip model evidence for shadow/zero-review.
 - [ ] **Step 4:** Run preparation, selector, egress, and Decision provider tests; expected PASS.
   Assert zero-review has POST=0 and no model/CLI lookup; GitHub identity GETs are allowed and counted separately.
 - [ ] **Step 5:** If authorized, stage only this task's files; commit `fix(ocr): 認定証拠をルート選択へ接続`.
@@ -434,14 +490,15 @@ Feed `selectReviewRoute` exactly `{catalog,evidence}` in nonempty enforce, plain
 at lines 225–307 moves here in Task 12. Existing `S/antigravity-host.mjs` remains the execution engine.
 
 **Interfaces:** `runRoutingReview({env,context,prompt,runHost,readRoute,readDecision,readExecutionContext,
-revalidateExecutionContext,createRecorder,writeResult,writeOutput,onProgress}):Promise<ReviewResult>`.
+revalidateExecutionContext,readInstalledCliIdentity,createRecorder,writeResult,writeOutput,onProgress}):Promise<ReviewResult>`.
 CLI defaults call existing implementations; injection seams perform no effects until invoked.
 Off branches before dynamic routing imports/reads and calls legacy Host with identical options.
 
 - [ ] **Step 1:** Add `Host revalidates authority before spawn`: after successful preparation, expire/revoke the
   activation or alter binding/context/evidence; assert runHost=0, result.status=`failed`, fixed reason only.
   Test authorized nonempty enforce receives exact selected model and own fallback array, observer and runAttemptId;
-  `onProgress` is absent. Pending/invalid evidence cannot reach the engine's catalog-flag-only check.
+  `onProgress` is absent. Pending/invalid evidence cannot reach the engine's catalog-flag-only check. Add a fake `PATH` executable:
+  enforce must spawn the attested absolute realpath or spawn zero; off/shadow retain the legacy command.
 
   ```javascript
   assert.equal((await runRoutingReview(revokedHostInput)).status, 'failed');
@@ -453,7 +510,9 @@ Off branches before dynamic routing imports/reads and calls legacy Host with ide
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/run-routing-review.test.mjs`; expected FAIL.
 - [ ] **Step 3:** Move existing boundary behavior without rewriting prompt or Host engine. Revalidate Task 6
-  immediately before enforce spawn; assert permitted route equals `resolveCertifiedModels` output.
+  using fresh central authority before enforce spawn; assert permitted route equals `resolveCertifiedModels`
+  output. Add the minimal enforce-only executable-path seam to `readChild` so spawn uses the verified
+  absolute `agy` path; off/shadow continue legacy `spawn('agy', ...)`.
   Preserve shadow binding-mismatch spawn 0 and pure observer-failure legacy continuation.
   Authorized zero-review enforce creates the existing trusted skipped JSON and seals an empty attempt stream.
 - [ ] **Step 4:** Run the new test plus existing Host/preparation tests; expected PASS, no real `agy` spawn.
@@ -528,9 +587,11 @@ Retain existing failure enums; add `ROUTING_ACTIVATION_DENIED` and `ROUTE_ATTEMP
 writeOutput}):Promise<{published:boolean,reason:string}>`.
 The CLI loads fixed selected route, attempts, sealed final, external upload outcome and Check ID, then supplies
 Task 10 inputs. `postReview` calls existing posting CLI with expected SHA and forwards its review_url output.
+**Enforce must have exactly one posting path:** Task 11 publisher is the only enforce caller; the old
+workflow post step runs off/shadow exclusively. No duplicate enforce publisher or second POST.
 Re-evaluating the pure Gate does not modify final.json or the earlier GitHub step outputs.
 
-- [ ] **Step 1:** Add `publication never posts after a boundary failure`: inject failure at context revalidation,
+- [ ] **Step 1:** Add `publication never posts after a boundary failure`: inject failure at fresh central GET/context revalidation,
   Gate, and immediate HEAD check; assert postReview=0. Valid fallback yields call order `[gate,head,post]` once.
   Test post failure returns `PUBLISH_FAILED`, does not retry, and never reports success. Check updates stay external.
 
@@ -542,7 +603,7 @@ Re-evaluating the pure Gate does not modify final.json or the earlier GitHub ste
   ```
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/publish-routing-review.test.mjs`; expected FAIL.
-- [ ] **Step 3:** Implement the boundary, rechecking expiry/current approval immediately before the final HEAD
+- [ ] **Step 3:** Implement the boundary, freshly fetching central registry/dossiers and rechecking expiry/approval immediately before the final HEAD
   check and post. Reuse trusted delivery data; no authority from a standalone `PUBLISH_AUTHORIZED=true` string.
   Preserve expected SHA in posting call. Keep the separate earlier Gate and HEAD steps for workflow diagnostics.
 - [ ] **Step 4:** Rerun the test and existing posting/dedup tests; expected PASS and no real GitHub request.
@@ -559,8 +620,10 @@ Export only fixed authorization booleans/enums and existing output IDs, never th
 
 - [ ] **Step 1:** Add workflow assertions for every routing/Host/thread/post/upload branch: off follows legacy;
   non-off requires `steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true'`, not `!= 'false'`.
-  Assert shadow startup lacks `continue-on-error`, upload requires successful current reauthorization/finalization,
-  and unknown/failed startup cannot reach an `always()` mutation. Run workflow tests; expected FAIL.
+  Assert shadow startup lacks `continue-on-error`, upload requires successful **fresh** reauthorization/finalization,
+  and unknown/failed startup cannot reach an `always()` mutation. Verify exactly one enforce posting step
+  and that legacy posting is strictly off/shadow; missing or duplicated publishers fail. Run workflow tests;
+  expected FAIL.
 
   ```javascript
   assert.match(shadowResolverCondition, /ROUTING_START_AUTHORIZED == 'true'/);
@@ -574,8 +637,8 @@ Export only fixed authorization booleans/enums and existing output IDs, never th
   before upload, using Task 6; write `AUTHORIZED=true|false`, with missing output treated as false.
   it is not allowed to rewrite sealed files. Denial prohibits upload in both shadow and enforce.
   Missing/invalid shadow audit records emit `SHADOW_AUDIT_UNAVAILABLE` and do not upload partial files.
-- [ ] **Step 3:** Keep off/shadow legacy post path; enforce uses Task 11 after the existing independent Gate and
-  final HEAD step. Preserve enforce thread disablement, successful upload raw outcome, artifact ID, 30-day retention,
+- [ ] **Step 3:** Restrict the legacy posting step to off/shadow; enforce uses **only** Task 11 after
+  the existing independent Gate and final HEAD step, with zero alternate posting routes. Preserve enforce thread disablement, successful upload raw outcome, artifact ID, 30-day retention,
   neutral skip, failure Check reporting, and fixed diagnostic-only denial messages.
 - [ ] **Step 4:** Run `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs
   .github/workflows/scripts/update-check-run.test.mjs .github/workflows/scripts/antigravity-policy.test.mjs`
@@ -587,20 +650,24 @@ Export only fixed authorization booleans/enums and existing output IDs, never th
 **Files:** Create `S/routing-remediation.integration.test.mjs`.
 
 **Interfaces:** Execute the real Task 3/7/8/9/10/11 exports, with isolated temporary Git repositories,
-production codecs/writers, synthetic trusted configuration/evidence, fake GitHub/OpenRouter fetch,
+production codecs/writers, synthetic trusted configuration/evidence, fake **live central registry** and
+GitHub/OpenRouter fetch,
 fake Host spawn, fake uploader and fake poster. Do not implement a second authorization algorithm in tests.
 Upload simulation consumes the actual sealed files and returns external DeliveryOutcome; record every effect.
 
 - [ ] **Step 1:** Add `unapproved startup produces zero routing effects` and variants for wrong repo/checkout,
-  stale/revoked approval, wrong run attempt, missing context, and missing certification. Assert Decision POST=0
+  stale/revoked approval, altered operational dossier digest/issuer, central REST 403/429/timeout,
+  wrong run attempt, missing context, and missing certification. Assert Decision POST=0
   where the failure precedes egress; Host spawn/upload/post=0 for startup denial. Distinguish earlier authorized
-  effects from later revocation: late denial prevents subsequent effects, not actions already completed.
-- [ ] **Step 2:** Add valid primary-failure/fallback-success through final seal/upload/Gate/HEAD/post; assert
+  effects from later revocation: update the mocked live registry between startup and upload/post; the next
+  live read prevents future effects without claiming already-started calls were cancelled.
+- [ ] **Step 2:** Add CLI realpath/PATH substitution and pre-spawn digest-change negative cases.
+  Add valid primary-failure/fallback-success through final seal/upload/Gate/HEAD/post; assert
   selected primary differs from executed fallback and post count=1. Add normal skip without model proof:
   Decision POST=0, Host spawn=0, empty attempts, valid upload/Gate, neutral—not review-success—completion.
 - [ ] **Step 3:** Add upload failure/missing file, malformed review JSON, seal failure, changed final HEAD, scope
-  gap and check-ID absence; assert no review post or thread mutation. Revocation just before upload means upload=0;
-  revocation just before post means post=0. Snapshot sealed bytes before/after all Gate calls; they are identical.
+  gap and check-ID absence; assert no review post or thread mutation. Revocation visible on the **fresh central GET** just before upload means upload=0;
+  revocation visible just before post means post=0; central API failure never authorizes posting. Snapshot sealed bytes before/after all Gate calls; they are identical.
 
   ```javascript
   assert.deepEqual(startupDeniedEffects, { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
@@ -713,14 +780,16 @@ Separate code-under-test revision from later documentation-only evidence commit;
   Review intended diff and verify no private context, raw prompt, auth token, machine-specific path, or real
   synthetic approval leaked into tracked configuration. If authorized, commit only evidence/docs changes with
   `docs(ocr): 固定SHAでG1是正証跡を再構成`. Later code changes require a new evidence run.
-- [ ] **Step 6:** Request independent review of the amendment, code, regression proofs and G1 evidence.
+- [ ] **Step 6:** Request independent review of the accepted plan contracts, code, regression proofs and G1 evidence.
   Do not mark findings closed, claim independent certification, enable shadow/enforce, push, or merge by inference.
 
 ## Acceptance and self-review checklist
 
-- [ ] REM-001 / TARGET-001: verified evidence and independent CLI inventory reach the real resolver and Host;
+- [ ] REM-001 / TARGET-001: verified evidence and independent CLI inventory reach resolver and Host,
+  and enforce spawns the exact verified executable;
   missing/tampered/expired evidence prevents enforce execution (Tasks 5–8, 13).
-- [ ] REM-002 / TARGET-002: stage-specific Owner authority gates startup and is revalidated at downstream effects;
+- [ ] REM-002 / TARGET-002: stage-specific Owner authority with current central registry/dossier reads
+  gates startup and is revalidated at downstream effects;
   missing approval cannot be bypassed by skip, an output string, shadow best-effort, or `always()` (Tasks 2–3, 6–13).
 - [ ] REM-003 / TARGET-003: valid certified fallback can publish with executed!=selected primary;
   unauthorized/wrong-tier/incomplete attempts cannot (Tasks 8–11, 13).
@@ -732,14 +801,17 @@ Separate code-under-test revision from later documentation-only evidence commit;
   OCR schema/scope, egress default deny, free single Decision request, explicit fallback array,
   immutable 3-file audit, 30-day retention, repeated HEAD checks, thread disablement, sanitized enforce diagnostics.
   Preserve their existing tests and validate their traceability rather than restating the entire R4 specification.
+- [ ] RMP-001–005 have owned negative tests; revocation is per-effect best-effort, not instantaneous
+  cancellation. Enforce posting has one path, and intermediate Task 2–11 revisions are not deployable.
 - [ ] Review Focus lines 1–5 each have an owning test task; production entrypoints are used by integration tests.
 - [ ] Recheck function/field names, exact file paths, no source/config implementation during planning, no new
   AI agent configuration, no real grant/certification, and no accidental operational PASS claims.
 
 ## Execution handoff
 
-The Owner must review this plan and choose execution method. For this authorization-sensitive change,
+The Owner must review and accept these plan-only contracts at Task 1 and choose execution method.
+No new remediation specification is requested. For this authorization-sensitive change,
 subagent-driven implementation/review is recommended if the harness provides suitable implementer/reviewer agents.
 Only exploration/librarian agents are currently exposed; do not silently use them as full implementation agents.
-Native execution is the supported fallback and uses the same Task 1 written-spec approval stop.
+Native execution is the supported fallback and uses the same Task 1 plan-contract approval stop.
 Neither method selection nor spec approval grants operational activation or GitHub write permission.
