@@ -1,5 +1,6 @@
 import { spawn as nodeSpawn } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
+import { randomBytes } from 'node:crypto';
 
 const SCHEMA_VERSION = '1.0';
 const REVIEW_MODE = 'review';
@@ -197,19 +198,32 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     let settled = false;
     const effectiveModel = normalizeAntigravityModel(model);
     const workspace = resolvePath(cwd);
-    const child = spawn('agy', [
-      '--add-dir', workspace,
-      '--sandbox',
-      '--disable-slash-commands',
-      '--model', effectiveModel,
-      '--input-format', 'stream-json',
-      '--output-format', 'stream-json',
-      '--print-timeout', `${printTimeoutMs}ms`,
-    ], {
-      cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: true,
-    });
+    let timer;
+    const earlyFinish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    let child;
+    try {
+      child = spawn('agy', [
+        '--add-dir', workspace,
+        '--sandbox',
+        '--disable-slash-commands',
+        '--model', effectiveModel,
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--print-timeout', `${printTimeoutMs}ms`,
+      ], {
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        detached: true,
+      });
+    } catch (error) {
+      earlyFinish({ error, failureKind: 'spawn_failed' });
+      return;
+    }
     const appendOutput = (current, chunk) => {
       if (current.length >= MAX_OUTPUT_CHARS) return current;
       return current + String(chunk).slice(0, MAX_OUTPUT_CHARS - current.length);
@@ -249,8 +263,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       progressBuffer = '';
     };
     const removeOutputListeners = () => {
-      child.stdout?.removeListener('data', onStdout);
-      child.stderr?.removeListener('data', onStderr);
+      child?.stdout?.removeListener('data', onStdout);
+      child?.stderr?.removeListener('data', onStderr);
     };
     const killProcessTree = signal => {
       try {
@@ -270,8 +284,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
       removeOutputListeners();
       resolve(result);
     };
-    const timer = setTimeout(() => {
-      finish({ error: new Error('Antigravity host timed out') });
+    timer = setTimeout(() => {
+      finish({ error: new Error('Antigravity host timed out'), failureKind: 'timeout' });
       killProcessTree('SIGTERM');
       setTimeout(() => killProcessTree('SIGKILL'), KILL_GRACE_PERIOD_MS);
     }, timeoutMs);
@@ -281,7 +295,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     child.once('error', error => {
       if (settled) return;
       flushProgress();
-      finish({ error });
+      finish({ error, failureKind: 'spawn_failed' });
     });
     child.once('close', (code, signal) => {
       if (settled) return;
@@ -296,7 +310,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
         finish({ parsed });
       } catch (err) {
         const errorDetail = stderr.trim() ? ` (stderr: ${stderr.trim()})` : '';
-        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`) });
+        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`), failureKind: 'invalid_output' });
       }
     });
     child.stdin.once('error', error => {
@@ -328,13 +342,54 @@ async function runMode({
   env = process.env,
   model,
   fallbackModel,
+  fallbackModels,
+  modelCatalog,
+  routingMode = 'off',
+  runAttemptId,
+  onAttemptEvent,
   maxRetries = parsePositiveInteger(env?.ANTIGRAVITY_MAX_RETRIES, DEFAULT_MAX_RETRIES, 5),
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   printTimeoutMs,
   onProgress,
 }) {
-  if (typeof prompt !== 'string' || prompt.length === 0) return failure(mode, 'Prompt is required');
-  if (typeof cwd !== 'string' || cwd.length === 0) return failure(mode, 'Trusted working directory is required');
+  const enforce = routingMode === 'enforce';
+  const auditId = typeof runAttemptId === 'string' && /^[a-f0-9]{32}$/i.test(runAttemptId)
+    ? runAttemptId
+    : randomBytes(16).toString('hex');
+  let auditIncomplete = false;
+  let attemptIndex = 0;
+  const emitEvent = (event, index, currentModel, result, duration, hostStatus) => {
+    if (typeof onAttemptEvent !== 'function') {
+      if (enforce) auditIncomplete = true;
+      return;
+    }
+    try {
+      onAttemptEvent({
+        schema_version: '1',
+        run_attempt_id: auditId,
+        attempt_index: index,
+        event,
+        model: currentModel,
+        result,
+        timestamp: new Date().toISOString(),
+        duration_ms: duration,
+        host_status: hostStatus,
+      });
+    } catch {
+      if (enforce) auditIncomplete = true;
+    }
+  };
+  const complete = result => {
+    const status = result.status;
+    if (routingMode === 'shadow' || enforce) {
+      emitEvent('host_completed', null, null, null, null, status);
+    }
+    return enforce && auditIncomplete ? failure(mode, 'AUDIT_INCOMPLETE') : result;
+  };
+  const fixedFailure = code => complete(failure(mode, code));
+
+  if (typeof prompt !== 'string' || prompt.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Prompt is required');
+  if (typeof cwd !== 'string' || cwd.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Trusted working directory is required');
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
@@ -342,9 +397,37 @@ async function runMode({
     ? printTimeoutMs
     : resolvePrintTimeoutMs(env);
   const effectiveModel = model ? normalizeAntigravityModel(model) : resolveModel(env);
-  const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
-  const models = [effectiveModel, configuredFallbackModel ? normalizeAntigravityModel(configuredFallbackModel) : null]
+  let fallbackCandidates;
+  if (enforce) {
+    const catalogModels = Array.isArray(modelCatalog?.models) ? modelCatalog.models : [];
+    const byId = new Map(catalogModels.map(entry => [entry?.model_id, entry]));
+    const primary = byId.get(effectiveModel);
+    const rank = { fast: 0, deep: 1 };
+    const eligible = entry => entry?.certification_status === 'certified' &&
+      Number.isInteger(rank[entry.capability_tier]);
+    if (!Object.hasOwn(arguments[0] ?? {}, 'fallbackModels') || !Array.isArray(fallbackModels) ||
+        typeof onAttemptEvent !== 'function' || !eligible(primary)) {
+      return fixedFailure('INVALID_FALLBACK_MODELS');
+    }
+    const allowedFallbacks = new Set(primary.allowed_fallbacks ?? []);
+    const seen = new Set([effectiveModel]);
+    fallbackCandidates = [];
+    for (const id of fallbackModels) {
+      const entry = typeof id === 'string' ? byId.get(id) : null;
+      if (!entry || !eligible(entry) || seen.has(id) || !allowedFallbacks.has(id) ||
+          rank[entry.capability_tier] < rank[primary.capability_tier]) {
+        return fixedFailure('INVALID_FALLBACK_MODELS');
+      }
+      seen.add(id);
+      fallbackCandidates.push(normalizeAntigravityModel(id));
+    }
+  } else {
+    const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
+    fallbackCandidates = configuredFallbackModel ? [normalizeAntigravityModel(configuredFallbackModel)] : [];
+  }
+  const models = [effectiveModel, ...fallbackCandidates]
     .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
+  const progressSink = enforce ? undefined : onProgress;
 
   const attempts = Math.max(1, maxRetries + 1);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
@@ -352,6 +435,12 @@ async function runMode({
     let shouldFallback = false;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
+      const currentIndex = ++attemptIndex;
+      const startedAt = Date.now();
+      if (routingMode === 'shadow' || enforce) {
+        emitEvent('attempt_started', currentIndex, normalizeAntigravityModel(currentModel), null, null, null);
+        if (enforce && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
+      }
       let childResult;
       try {
         childResult = await readChild({
@@ -362,53 +451,64 @@ async function runMode({
           spawn,
           mode,
           model: currentModel,
-          onProgress,
+          onProgress: progressSink,
         });
       } catch (error) {
-        if (isFallbackError(error.message)) {
-          if (modelIndex < models.length - 1) {
-            shouldFallback = true;
-            break;
-          }
-          return failure(mode, error.message);
-        }
-        if (attempt < attempts && isTransientError(error.message)) {
-          await new Promise(r => setTimeout(r, retryDelayMs * attempt));
-          continue;
-        }
-        return failure(mode, error.message);
+        childResult = { error };
       }
-
+      let attemptResult;
+      let validatedResult;
+      let validationMessage;
       if (childResult.error) {
-        if (isFallbackError(childResult.error.message)) {
-          if (modelIndex < models.length - 1) {
-            shouldFallback = true;
-            break;
+        if (childResult.failureKind === 'spawn_failed') attemptResult = 'spawn_failed';
+        else if (childResult.failureKind === 'timeout') attemptResult = 'timeout';
+        else {
+          const message = childResult.error.message;
+          if (isFallbackError(message)) attemptResult = 'model_reported_failure';
+          else if (/timed out|etimedout/i.test(message)) attemptResult = 'timeout';
+          else if (childResult.failureKind === 'invalid_output' || /malformed JSON|JSON|payload|Invalid payload/i.test(message)) attemptResult = 'invalid_output';
+          else attemptResult = 'transport_error';
+        }
+      } else {
+        try {
+          if (mode === THREAD_MODE) {
+            const data = validateThread(childResult.parsed);
+            validatedResult = { ...data, status: 'success', message: '' };
+          } else {
+            validatedResult = validateReview(childResult.parsed);
           }
-          return failure(mode, childResult.error.message);
+          if (validatedResult.status === 'skipped') attemptResult = 'host_skipped';
+          else if (validatedResult.status === 'failed') attemptResult = 'model_reported_failure';
+          else attemptResult = 'host_validated_success';
+        } catch (error) {
+          attemptResult = 'invalid_output';
+          validationMessage = error.message;
         }
-        if (attempt < attempts && isTransientError(childResult.error.message)) {
-          await new Promise(r => setTimeout(r, retryDelayMs * attempt));
-          continue;
-        }
-        return failure(mode, childResult.error.message);
       }
+      if (routingMode === 'shadow' || enforce) {
+        emitEvent('attempt_completed', currentIndex, normalizeAntigravityModel(currentModel), attemptResult, Date.now() - startedAt, null);
+        if (enforce && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
+      }
+      if (validatedResult) return complete(validatedResult);
 
-      try {
-        if (mode === THREAD_MODE) {
-          const data = validateThread(childResult.parsed);
-          return { ...data, status: 'success', message: '' };
+      const errorMessage = childResult.error?.message ?? validationMessage ?? 'Antigravity host returned invalid output';
+      if (isFallbackError(errorMessage)) {
+        attemptResult = 'model_reported_failure';
+        if (modelIndex < models.length - 1) {
+          shouldFallback = true;
+          break;
         }
-        return validateReview(childResult.parsed);
-      } catch (error) {
-        return failure(mode, error.message);
+        return complete(failure(mode, enforce ? 'MODEL_REPORTED_FAILURE' : errorMessage));
       }
+      if (attempt < attempts && isTransientError(errorMessage)) {
+        await new Promise(r => setTimeout(r, retryDelayMs * attempt));
+        continue;
+      }
+      return complete(failure(mode, enforce ? 'REVIEW_EXECUTION_FAILED' : errorMessage));
     }
-
     if (shouldFallback) continue;
   }
-
-  return failure(mode, 'Antigravity host failed without a response');
+  return complete(failure(mode, enforce ? 'REVIEW_EXECUTION_FAILED' : 'Antigravity host failed without a response'));
 }
 
 export function runHost(options) {
