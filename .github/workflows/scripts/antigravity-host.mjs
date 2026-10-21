@@ -477,7 +477,9 @@ async function runMode({
           } else {
             validatedResult = validateReview(childResult.parsed);
           }
-          attemptResult = validatedResult.status === 'skipped' ? 'host_skipped' : 'host_validated_success';
+          if (validatedResult.status === 'skipped') attemptResult = 'host_skipped';
+          else if (validatedResult.status === 'failed') attemptResult = 'model_reported_failure';
+          else attemptResult = 'host_validated_success';
         } catch (error) {
           attemptResult = 'invalid_output';
           validationMessage = error.message;

@@ -724,6 +724,22 @@ test('attempt observer emits sanitized ordered events with exact CLI model argum
   assert.deepEqual(Object.keys(events[0]).sort(), ['schema_version', 'run_attempt_id', 'attempt_index', 'event', 'model', 'result', 'timestamp', 'duration_ms', 'host_status'].sort());
 });
 
+test('attempt observer classifies a validated failed review as model_reported_failure', async () => {
+  const events = [];
+  const failedReview = { ...validReview, status: 'failed' };
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'shadow',
+    onAttemptEvent: event => events.push(event),
+    spawn: spawnWith(JSON.stringify(failedReview)),
+  });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(events[1].event, 'attempt_completed');
+  assert.equal(events[1].result, 'model_reported_failure');
+  assert.equal(events[2].event, 'host_completed');
+  assert.equal(events[2].host_status, 'failed');
+});
+
 test('shadow observer errors are ignored and enforce observer errors fail closed', async () => {
   const shadow = await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'shadow',
