@@ -27,8 +27,11 @@ The contracts proposed below are not already approved amendments to R4.
   method; after Task 1, obtain explicit Owner acceptance of the **plan-level contracts** before proceeding with code.
 - This plan-only correction addresses review findings RMP-001–005; Design R4 and the original plan remain unchanged.
   Record any normative conflict with R4 and require a separate Owner decision before implementing it.
-- No GitHub writes, merge, deployment, actual Decision API call, or actual model invocation is part of this plan.
-  Commit checkpoints are proposals: run them only when the user explicitly authorizes commits.
+- Plan authoring and offline implementation validation perform no GitHub writes, merge, deployment, actual
+  Decision API call, or actual model invocation. Commit checkpoints are proposals: run them only when the user
+  explicitly authorizes commits. The runtime contracts below describe separately authorized workflow execution;
+  they do not authorize live effects during this work. On a denied or failed runtime path, the sole permitted
+  GitHub write is a sanitized failure update to an existing Check Run; never report review success on that path.
 - `off` remains the default and skips every new routing check, lookup, extraction, artifact, and context read.
 - `shadow` never executes a proposed model; authorized shadow preserves legacy retry/fallback/publication behavior.
   `review_quality_measured=false`. Startup denial is intentionally blocking, not a best-effort observer failure.
@@ -40,8 +43,9 @@ The contracts proposed below are not already approved amendments to R4.
 - Decision provider remains `inception/mercury-decide:free`, one attempt, 5,000 ms timeout, no paid substitution.
 - Repo egress remains a separate exact ID/full_name grant, default deny for public and restricted repositories.
 - Startup authorization precedes Decision POST, review Host spawn, and routing audit creation/upload.
-  GitHub identity GETs, fresh central approval/withdrawal GETs and sanitized failure Check updates
-  are permitted for establishing authority and reporting denial; old cached approval never substitutes for a failed GET.
+  GitHub identity GETs and fresh central approval/withdrawal GETs are permitted for establishing authority;
+  old cached approval never substitutes for a failed GET. Only on denial or failure may the runtime update an
+  existing Check Run with a sanitized failure notification, under the exception above.
 - Routing artifact remains exactly `decision.json`, `attempts.ndjson`, `final.json`, retention `30` days,
   name `ocr-routing-audit-${run_id}-${run_attempt}`. Private execution context is never uploaded.
 - Enforce order remains Host/attempts → filter/validation → HEAD check → immutable seal → upload → Gate →
@@ -199,7 +203,8 @@ Decision POST and Host spawn, before routing audit upload, at Gate and immediate
 Revalidate time, scope, policy/catalog and pinned source manifest each time; an unavailable GET denies.
 Startup denial produces fixed `ROUTING_ACTIVATION_DENIED`; no review, thread mutation, or routing upload.
 New revocation cannot retroactively cancel a Decision request or Host process already started.
-Failure notification may update an existing Check Run; it must not display review success or raw exception data.
+Only on denial or failure may notification update an existing Check Run; this is the sole GitHub write exception
+on that blocked path. It must not display review success or raw exception data, or permit review/thread mutations.
 
 ### B. Checkout identity
 
@@ -217,7 +222,10 @@ REST numeric ID, allowlist, action checkout constraints, and RunBinding remain n
 
 `ReviewCertificationIndex/v1` has exactly `schema_version:'1'`, `certifications`, `cli_inventory`.
 Default is `certifications:[]`, `cli_inventory:null`.
-Each certification entry has exactly `path`, `sha256`, `approval_ref`; the inventory entry has the same keys.
+Each certification reference entry has exactly `path`, `sha256`, `approval_ref`.
+The index's `cli_inventory` is either `null` or a reference entry with exactly those same three keys;
+it does not embed the CLI inventory document. Its `sha256` hashes the referenced document's raw JSON bytes,
+and its `approval_ref` identifies the matching `cli_inventory` approval for that digest and repo scope.
 Paths are relative to `C/routing-evidence/`, plain regular files, no symlink/traversal; reads are limited to 64 KiB.
 The initial empty index does not require creating that directory or synthetic evidence files.
 
@@ -228,7 +236,8 @@ The index's `model` approval must match the digest and repo; evidence dates and 
 `capability_evidence_sha256` identifies the independently reviewed capability dossier; require a matching
 non-revoked `model` approval for that dossier as well. Self-written status or a digest alone cannot certify a model.
 
-CLI inventory exact fields are `schema_version:'1'`, `cli_version`, `cli_binary_sha256`, `models:string[]`,
+The referenced CLI inventory document (not the index entry) has exactly `schema_version:'1'`, `cli_version`,
+`cli_binary_sha256`, `models:string[]`,
 `observed_at`, `expires_at`. Require a matching `cli_inventory` approval and nonempty unique bounded model IDs.
 Require canonical UTC dates and `observed_at <= now < expires_at`; reject inventories observed in the future.
 Verify the installed `agy` executable digest independently. The adapter uses the workflow's fixed installation
