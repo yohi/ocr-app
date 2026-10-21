@@ -46,4 +46,26 @@ describe('buildCheckRunUpdate', () => {
     assert.equal(update.conclusion, 'neutral');
     assert.equal(update.output.title, 'OpenCodeReview skipped');
   });
+
+  it('never includes arbitrary review errors in enforce output', () => {
+    const update = buildCheckRunUpdate({
+      conclusion: 'failure', targetRepo: 'owner/repo', prNumber: '42',
+      detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123',
+      result: { status: 'failed', message: 'PR secret Bearer hidden' }, enforce: true,
+      routingFailureReason: 'ARTIFACT_UPLOAD_FAILED',
+    });
+    assert.doesNotMatch(update.output.summary, /PR secret|Bearer hidden/);
+    assert.match(update.output.summary, /ARTIFACT_UPLOAD_FAILED/);
+    assert.match(update.output.summary, /actions\/runs\/123/);
+  });
+
+  it('maps unknown enforce reasons to a fixed general reason', () => {
+    const update = buildCheckRunUpdate({
+      conclusion: 'failure', targetRepo: 'owner/repo', prNumber: '42',
+      detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123', result: null,
+      enforce: true, routingFailureReason: 'injected\nsecret',
+    });
+    assert.match(update.output.summary, /REVIEW_EXECUTION_FAILED/);
+    assert.doesNotMatch(update.output.summary, /injected|secret/);
+  });
 });

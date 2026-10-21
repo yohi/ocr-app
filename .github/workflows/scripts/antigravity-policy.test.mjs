@@ -179,3 +179,22 @@ test('external forks are checked before the app-token secret step', () => {
   assert.match(workflow, /steps\.target\.outputs\.internal == 'false'/);
   assert.match(workflow, /"conclusion":"neutral"/);
 });
+
+test('routing dependencies and decision secret are scoped to shadow/enforce preparation', () => {
+  const install = workflow.match(/- name: Prepare dynamic routing\n([\s\S]*?)(?=\n      - name:)/)?.[1] ?? '';
+  assert.match(install, /DECISION_ROUTING_MODE/);
+  assert.match(install, /env\.DECISION_ROUTING_MODE == 'shadow'.*env\.DECISION_ROUTING_MODE == 'enforce'/);
+  assert.doesNotMatch(install, /DECISION_ROUTING_MODE != 'off'/);
+  assert.match(install, /npm ci --prefix self-repo\/\.github\/workflows --ignore-scripts/);
+  assert.match(install, /secrets\.DECISION_OPENROUTER_API_KEY/);
+  assert.match(workflow, /case "\$DECISION_ROUTING_MODE" in\n\s+off\|shadow\|enforce\)/);
+  assert.doesNotMatch(stepRun('Run Antigravity review host'), /DECISION_OPENROUTER_API_KEY|npm ci/);
+});
+
+test('enforce host call suppresses progress and check failure detail', () => {
+  const host = stepRun('Run Antigravity review host');
+  assert.match(host, /routingMode: 'enforce'/);
+  assert.match(host, /onProgress/);
+  assert.match(workflow, /ROUTING_FAILURE_REASON/);
+  assert.match(workflow, /DECISION_ROUTING_MODE/);
+});
