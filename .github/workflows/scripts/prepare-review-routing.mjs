@@ -47,6 +47,7 @@ function validateRoute(value) {
     if (typeof value[key] !== 'string' || value[key].length < 1 || value[key].length > 128 || /[\r\n]/.test(value[key])) routeError();
   }
   if (value.effective_mode === 'shadow' && (value.selected_model_id !== null || value.fallback_models.length !== 0 || value.selected_strategy !== null)) routeError();
+  if (value.effective_mode === 'enforce' && value.reviewable_file_count > 0 && value.selected_model_id === null) routeError();
   if (value.status === 'no_reviewable_files' && value.reviewable_file_count !== 0) routeError();
   if (value.route_source === 'not_requested' && value.reviewable_file_count !== 0) routeError();
   return value;

@@ -52,6 +52,16 @@ test('enforce route carries only selected certified execution fields', () => {
   assert.equal(Object.hasOwn(serialized, 'selected_review_model'), false);
 });
 
+test('enforce route rejects a missing model when reviewable files exist', () => {
+  const routeInput = {
+    route: { status: 'degraded', reviewableCount: 1, selectedStrategy: 'deep', proposedStrategy: 'deep', selectedReviewModel: null, fallbackModels: [], routeSource: 'deterministic_fallback', decisionStatus: 'unavailable' },
+    runBinding: createRunBindingFromEnv(env('enforce')),
+    policyVersions: { policyVersion: '1.0.0', modelCatalogVersion: '1.2.0' },
+  };
+
+  assert.throws(() => serializeSelectedReviewRoute(routeInput), { message: 'ROUTE_SCHEMA_INVALID' });
+});
+
 test('saved route binding mismatch fails before a caller can spawn Host', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-mismatch-'));
   let spawnCount = 0;

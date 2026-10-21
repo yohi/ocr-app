@@ -84,7 +84,7 @@ GIT_MASTER=1 git diff --check
 | T-021 | 欠落 Artifact | 8,9,10 | `node --test .github/workflows/scripts/evaluate-routing-publish.test.mjs` | `6ebbf4a` | PASS | exit 0 |
 | T-022 | 誤った run attempt | 8,9,10 | `node --test .github/workflows/scripts/ocr-routing-audit.test.mjs` | `6ebbf4a` | PASS | exit 0 |
 | T-023 | 繰り返し HEAD 照合 | 8,9,10 | `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs` | `6ebbf4a` | PASS | exit 0 |
-| T-024 | ゲート失敗時の PR 書込み 0 | 8,9,10 | `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs` | `6ebbf4a` | PASS | exit 0 |
+| T-024 | 公開ゲート条件と順序の静的文字列確認 | 8,9,10 | `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs` | `6ebbf4a` | PASS | YAML 内のゲート条件・HEAD 再検証・PR 投稿ステップの順序を文字列で確認。ゲート失敗時の実行や PR 書込み 0 件は検証対象外 |
 | T-025 | RG-R1-001 authority / Plan created | Preflight,1,4,8-9 | 基本方針承認は会話で取得；運用承認は未実施 | `6ebbf4a` | PASS (policy) | G0-D01〜D07 BASIC_POLICY_APPROVED |
 | T-026 | RG-R1-002 routing order and secrets | 2-6,8-9 | `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs` | `6ebbf4a` | PASS | exit 0 |
 | T-027 | RG-R1-003 thread/HEAD | 9 | `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs` | `6ebbf4a` | PASS | exit 0 |
