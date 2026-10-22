@@ -1,0 +1,28 @@
+markdownlint-cli2 v0.24.0 (markdownlint v0.42.0)
+Finding: docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md
+Linting: 1 file
+Summary: 24 issues in 1 file
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:33 error MD031/blanks-around-fences Fenced code blocks should be surrounded by blank lines [Context: "```"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:34 error MD032/blanks-around-lists Lists should be surrounded by blank lines [Context: "- 結果: exit 0"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:39 error MD031/blanks-around-fences Fenced code blocks should be surrounded by blank lines [Context: "```"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:40 error MD032/blanks-around-lists Lists should be surrounded by blank lines [Context: "- 結果: 308/308 PASS、exit 0"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:46 error MD031/blanks-around-fences Fenced code blocks should be surrounded by blank lines [Context: "```"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:47 error MD032/blanks-around-lists Lists should be surrounded by blank lines [Context: "- 結果: 31/31 PASS、exit 0"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:52 error MD031/blanks-around-fences Fenced code blocks should be surrounded by blank lines [Context: "```"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:53 error MD032/blanks-around-lists Lists should be surrounded by blank lines [Context: "- 結果: exit 0"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:57 error MD031/blanks-around-fences Fenced code blocks should be surrounded by blank lines [Context: "```"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:58 error MD032/blanks-around-lists Lists should be surrounded by blank lines [Context: "- 結果: exit 0"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:1 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:5 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:5 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:9 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:9 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:13 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:13 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:17 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:17 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:21 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:21 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:25 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:25 error MD060/table-column-style Table column style [Table pipe is missing space to the right for style "compact"]
+docs/superpowers/evidence/2026-10-20-pr-dynamic-routing-g1.md:63:29 error MD060/table-column-style Table column style [Table pipe is missing space to the left for style "compact"]

@@ -108,3 +108,18 @@ GIT_MASTER=1 git diff --check
 - Plan: `docs/superpowers/plans/2026-10-20-pr-dynamic-llm-routing.md`
 - Design: `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`
 - Ledger: `.superpowers/sdd/2026-10-20-pr-dynamic-llm-routing/progress.md`
+
+## 是正通知（2026-10-21 追記）
+
+本証跡は `feature/pr-dynamic-llm-routing` ブランチのコミット `6ebbf4a816e950621d97361676fa8b52ae85d8c8` を対象として作成された。
+2026-10-21 の修復計画実施後、以下の理由により本証跡は現 HEAD の証明として使用できなくなった:
+
+- 対象コミット `6ebbf4a...` はローカルに存在するが、GitHub API からは 422 が返却され、remote での可用性が確認できない。
+- T-ID マッピングに齟齬があり、設計 T-001〜T-034 の原義と実 assert が一致していなかった。
+- 旧証跡には `node --test` のコマンド名・対象ファイルの記載漏れがあり、再現性が不十分だった。
+
+修復後の新しい G1 証跡は以下を参照:
+
+- `docs/superpowers/evidence/2026-10-21-pr-dynamic-routing-g1.md`
+- 対象コミット: `5564145fdd4ffcef57de8f109771fe3ca1817540`
+- ブランチ: `2026-10-21-pr-dynamic-routing-remediation`
