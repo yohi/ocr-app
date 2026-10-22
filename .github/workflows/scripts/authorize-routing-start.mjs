@@ -11,7 +11,7 @@ import {
 
 const ERROR_DENIED = 'ROUTING_ACTIVATION_DENIED';
 
-function defaultReadTrustedConfig(env) {
+async function defaultReadTrustedConfig(env) {
   const [owner, repo] = (env.GITHUB_REPOSITORY ?? '').split('/');
   if (!owner || !repo) throw new Error(ERROR_DENIED);
   return { centralRepo: `${owner}/${repo}`, protectedRef: 'master' };

@@ -141,7 +141,7 @@ export function hashRoutingSourceManifest({ trustedRoot, readFile, listTrackedPa
   const scriptPaths = tracked.filter((path) => path.startsWith('.github/workflows/scripts/'));
   if (new Set(tracked).size !== tracked.length || new Set(scriptPaths).size !== scriptPaths.length
     || MANIFEST_FIXED.some((path) => !tracked.includes(path))) throw new Error('ROUTING_SOURCE_MANIFEST_INVALID');
-  const lines = [...selected].sort().map((path) => {
+  const lines = [...selected].sort((left, right) => left.localeCompare(right, 'en')).map((path) => {
     const absolute = resolve(trustedRoot, path);
     const rel = relative(resolve(trustedRoot), absolute);
     if (isAbsolute(rel) || rel === '..' || rel.startsWith(`..${sep}`) || rel !== path) throw new Error('ROUTING_SOURCE_MANIFEST_INVALID');
@@ -156,7 +156,9 @@ export function hashRoutingSourceManifest({ trustedRoot, readFile, listTrackedPa
 }
 
 async function getJson(url, token, fetchImpl, timeoutSignal, maxBytes = 65536) {
-  const response = await fetchImpl(url, {
+  const requestUrl = new URL(url);
+  if (requestUrl.origin !== 'https://api.github.com') throw new Error('unavailable');
+  const response = await fetchImpl(requestUrl, {
     method: 'GET', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
     signal: timeoutSignal,
   });
@@ -174,7 +176,7 @@ async function getJson(url, token, fetchImpl, timeoutSignal, maxBytes = 65536) {
     if (!(value instanceof Uint8Array)) throw new Error('unavailable');
     length += value.byteLength;
     if (length > maxBytes) {
-      await reader.cancel();
+      reader.cancel();
       throw new Error('unavailable');
     }
     chunks.push(Buffer.from(value));
@@ -185,7 +187,7 @@ async function getJson(url, token, fetchImpl, timeoutSignal, maxBytes = 65536) {
 
 function decodeContent(response, expectedPath) {
   if (response?.type !== 'file' || response.path !== expectedPath || typeof response.content !== 'string' || response.encoding !== 'base64') throw new Error('unavailable');
-  const encoded = response.content.replace(/\n/g, '');
+  const encoded = response.content.replaceAll('\n', '');
   const bytes = Buffer.from(encoded, 'base64');
   if (bytes.toString('base64') !== encoded) throw new Error('unavailable');
   return bytes;
