@@ -388,3 +388,111 @@ test('publisher HEAD retrieval failure reports HEAD_VALIDATION_FAILED without po
   assert.match(body.output.summary, /理由: HEAD_VALIDATION_FAILED\./);
   assert.doesNotMatch(body.output.summary + result.logs.join('\n'), /PR_BODY_SECRET_SENTINEL|HEAD_CHANGED/);
 });
+
+for (const [name, reason] of [
+  ['Prepare dynamic routing', 'ROUTING_ACTIVATION_DENIED'],
+  ['Run Antigravity review host', 'REVIEW_EXECUTION_FAILED'],
+  ['Finalize routing audit', 'ROUTING_AUDIT_MISSING'],
+]) {
+  for (const failure of ['binding', 'filesystem', 'json', 'api']) {
+    test(`${name} contains enforce ${failure} exceptions at the production boundary`, async () => {
+      const value = fixture();
+      const marker = 'PR_BODY_SECRET_SENTINEL';
+      const fail = () => { throw Object.assign(new Error(`/private/${marker}`), { code: marker }); };
+      value.modules['antigravity-host.mjs'] = { runHost: fail };
+      value.modules['run-routing-review.mjs'] = { runRoutingReview: fail };
+      const preparation = value.modules['prepare-review-routing.mjs'];
+      preparation.prepareRoutingStep = async () => {
+        if (failure === 'binding') preparation.createRunBindingFromEnv();
+        else if (failure === 'api') await value.modules['routing-authorization.mjs'].fetchCurrentRoutingAuthorization();
+        else JSON.parse(value.modules['node:fs'].default.readFileSync('/run/ocr-routing/decision.json'));
+      };
+      if (failure === 'binding') {
+        preparation.createRunBindingFromEnv = fail;
+        value.modules['ocr-run-binding.mjs'].createRunBindingFromEnv = fail;
+      } else if (failure === 'filesystem') {
+        value.modules['node:fs'].default.readFileSync = fail;
+      } else if (failure === 'json') {
+        value.files.set('/run/ocr-review-context.json', marker);
+        value.files.set('/run/ocr-routing/decision.json', marker);
+      } else {
+        value.modules['node:child_process'].execFileSync = fail;
+        value.modules['routing-authorization.mjs'].fetchCurrentRoutingAuthorization = fail;
+      }
+      const result = await execute(name, value.imports, value.env);
+      assert.equal(result.exitCode, 1);
+      assert.deepEqual(result.logs, [reason]);
+      assert.ok(!value.calls.includes('post'));
+    });
+  }
+
+  test(`${name} retains shadow exception behavior`, async () => {
+    const value = fixture();
+    value.modules['node:fs'].default.readFileSync = () => { throw new Error('shadow diagnostic'); };
+    value.modules['antigravity-host.mjs'] = {};
+    value.modules['run-routing-review.mjs'] = {};
+    value.modules['prepare-review-routing.mjs'].prepareRoutingStep = async () => { throw new Error('shadow diagnostic'); };
+    await assert.rejects(execute(name, value.imports, { ...value.env, DECISION_ROUTING_MODE: 'shadow' }), /shadow diagnostic/);
+  });
+
+  test(`${name} contains dependency import errors in enforce mode`, async () => {
+    const value = fixture();
+    const result = await execute(name, async source => {
+      if (!source.startsWith('node:')) throw new Error('PR_BODY_SECRET_SENTINEL');
+      return value.imports(source);
+    }, value.env);
+    assert.equal(result.exitCode, 1);
+    assert.deepEqual(result.logs, [reason]);
+  });
+}
+
+for (const name of ['Run Antigravity review host', 'Finalize routing audit']) {
+  for (const command of ['git', 'gh']) {
+    test(`${name} captures enforce ${command} stderr before handling command failure`, async () => {
+      const value = fixture();
+      value.modules['antigravity-host.mjs'] = {};
+      value.modules['run-routing-review.mjs'] = {};
+      let options;
+      value.modules['routing-authorization.mjs'].hashRoutingSourceManifest = ({ listTrackedPaths }) => {
+        listTrackedPaths('self-repo');
+        return `sha256:${'d'.repeat(64)}`;
+      };
+      value.modules['node:child_process'].execFileSync = (binary, _args, input) => {
+        if (binary === command) {
+          options = input;
+          throw new Error('PR_BODY_SECRET_SENTINEL');
+        }
+        return binary === 'gh' ? '7' : '';
+      };
+      const result = await execute(name, value.imports, value.env);
+      assert.equal(result.exitCode, 1);
+      assert.deepEqual(options?.stdio, ['ignore', 'pipe', 'pipe']);
+      assert.doesNotMatch(result.logs.join('\n'), /PR_BODY_SECRET_SENTINEL/);
+    });
+  }
+}
+
+test('production finalizer contains a missing decision after failed preparation', async () => {
+  const value = fixture();
+  value.files.delete('/run/ocr-routing/decision.json');
+  value.files.delete('/run/ocr-routing/final.json');
+  const result = await execute('Finalize routing audit', value.imports, value.env);
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(result.logs, ['ROUTING_AUDIT_MISSING']);
+  assert.ok(!value.files.has('/run/ocr-routing/final.json'));
+  assert.deepEqual(value.calls, []);
+});
+
+test('production preparation captures enforce source-manifest git stderr', async () => {
+  const value = fixture();
+  let options;
+  value.modules['node:child_process'].execFileSync = (_command, _args, input) => {
+    options = input;
+    throw new Error('PR_BODY_SECRET_SENTINEL');
+  };
+  value.modules['prepare-review-routing.mjs'].prepareRoutingStep = ({ execGit }) => execGit('git', [], { encoding: 'utf8' });
+  const result = await execute('Prepare dynamic routing', value.imports, value.env);
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(options?.stdio, ['ignore', 'pipe', 'pipe']);
+  assert.deepEqual(result.logs, ['ROUTING_ACTIVATION_DENIED']);
+});

@@ -750,6 +750,18 @@ Decision Providerは、PR由来データの`private=false`、README記載、ラ�
 | T-023 | enforceで`Resolve fixed review threads`をGate前に実行しない。`off/shadow`のthread resolver、review comment・Check順序・fallback/再試行を回帰テストで保持 |
 | T-024 | sealed finalの`audit_status=sealed`がupload successを意味しない。upload outcomeは分離。再seal・公開後の証拠差し替えを拒否 |
 
+**T-004 clarification (2026-10-23):** The unchanged T-004 row preserves the original R4
+acceptance condition when G0-D04 blocking was undecided. For current acceptance, §15.2
+takes precedence: the Owner has approved the basic policy to block out-of-scope
+high-risk or unclassified changes in `enforce`. Apply §8.2/§8.3 and T-026 together:
+when reviewable=0, Decision API calls and Host spawns remain zero, and the internal
+review result is schema-compatible `skipped` with an empty attempts stream. If a
+D04 scope gap exists, the publish Gate must nevertheless deny publication and
+report Check Run `failure` with `REVIEW_SCOPE_GAP_BLOCKED`; only a normal skip
+without a blocking gap may be `neutral`. Preserve legacy `off/shadow` behavior.
+This clarification neither establishes G1 acceptance nor grants operational
+authorization or activation of `shadow/enforce`.
+
 テストは**設計上の予定**であり、現在PASSや実行済みを意味しない。高リスク・非対象コードの未レビューを`coverage=1`に変換する改変は禁止。
 ### RG-R1限定追加受入テスト（T-001〜T-024を変更・削除しない）
 
