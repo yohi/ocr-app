@@ -4,7 +4,7 @@ import { authorizeDecisionEgress } from './authorize-decision-egress.mjs';
 
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'shadow' };
 const policy = { allowed_repositories: [{ id: 42, full_name: 'owner/repo', approval_ref: 'OWNER-123' }], approval_reference_format: 'OWNER-<approval-id>', destination: 'openrouter-decisions', policy_version: 'v1' };
-const input = { targetRepo: 'owner/repo', headSha: binding.headSha, checkoutRepo: 'https://github.com/owner/repo.git', runBinding: binding, installationToken: 'secret-token', policy };
+const input = { targetRepo: 'owner/repo', headSha: binding.headSha, checkoutIdentity: { fullName: 'owner/repo', headSha: binding.headSha }, runBinding: binding, installationToken: 'secret-token', policy };
 const response = (body, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 const execute = (body, status = 200, options = {}) => authorizeDecisionEgress({ ...input, ...options, fetchImpl: options.fetchImpl ?? (async (_url, init) => { assert.equal(init.headers.Authorization, 'Bearer secret-token'); return response(body, status); }) });
 const repo = { id: 42, full_name: 'owner/repo', private: false, visibility: 'public' };
@@ -51,11 +51,24 @@ test('denies a hanging GitHub lookup after the request timeout', async () => {
   assert.equal(grant.reason, 'egress_denied');
 });
 
-test('does not trust dispatch visibility and rejects checkout or head mismatch', async () => {
+test('does not trust dispatch visibility and rejects checkout identity or head mismatch', async () => {
   assert.equal((await execute(repo, 200, { targetRepo: { owner: 'owner', repo: 'repo', visibility: 'public' } })).allowed, true);
-  assert.equal((await execute(repo, 200, { checkoutRepo: 'https://github.com/attacker/repo.git' })).allowed, false);
+  assert.equal((await execute(repo, 200, { checkoutIdentity: { fullName: 'attacker/repo', headSha: binding.headSha } })).allowed, false);
+  assert.equal((await execute(repo, 200, { checkoutIdentity: { fullName: 'owner/repo', headSha: 'b'.repeat(40) } })).allowed, false);
   assert.equal((await execute(repo, 200, { headSha: 'b'.repeat(40) })).allowed, false);
   assert.equal((await execute(repo, 200, { runBinding: { ...binding, headSha: 'b'.repeat(40) } })).allowed, false);
+});
+
+test('checkout mismatch denies egress without a Decision POST', async () => {
+  const methods = [];
+  const grant = await authorizeDecisionEgress({
+    ...input,
+    checkoutIdentity: { fullName: 'other/repo', headSha: binding.headSha },
+    fetchImpl: async (_url, init) => { methods.push(init.method); return response(repo); },
+  });
+  assert.equal(grant.allowed, false);
+  assert.equal(grant.reason, 'egress_denied');
+  assert.equal(methods.filter(method => method === 'POST').length, 0);
 });
 
 test('denies an unapproved repository and absent or invalid Owner approval reference', async () => {

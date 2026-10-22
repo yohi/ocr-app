@@ -8,6 +8,7 @@ import { requestReviewDecision } from './decision-provider.mjs';
 import { selectReviewRoute } from './select-review-model.mjs';
 import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
+import { readCheckoutIdentity } from './read-checkout-identity.mjs';
 
 const ROUTE_KEYS = Object.freeze([
   'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status',
@@ -117,7 +118,8 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     JSON.parse(fileSystem.readFileSync(new URL('../config/review-risk-policy.json', import.meta.url), 'utf8')));
   const policy = JSON.parse(fileSystem.readFileSync(new URL('../config/decision-egress-policy.json', import.meta.url), 'utf8'));
   const catalog = JSON.parse(fileSystem.readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
-  const grant = await authorizeDecisionEgress({ targetRepo: env.TARGET_REPO, headSha: binding.headSha, checkoutRepo: env.CHECKOUT_REPO, runBinding: binding, installationToken: env.GITHUB_TOKEN, policy, fetchImpl });
+  const checkoutIdentity = await readCheckoutIdentity({ cwd: env.TARGET_REPO_PATH || 'target-repo', expectedRepo: env.TARGET_REPO, expectedHeadSha: binding.headSha, ...(runGit ? { runGit } : {}) });
+  const grant = await authorizeDecisionEgress({ targetRepo: env.TARGET_REPO, headSha: binding.headSha, checkoutIdentity, runBinding: binding, installationToken: env.GITHUB_TOKEN, policy, fetchImpl });
   let egressStatus = grant.allowed ? 'allowed' : 'denied';
   let decision = { status: 'not_requested', latencyMs: null, cost: null };
   if (features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
