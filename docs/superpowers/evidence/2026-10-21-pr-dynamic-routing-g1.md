@@ -1,10 +1,18 @@
 # PR別動的LLMルーティング G1 オフライン証跡（2026-10-21 是正版）
 
+> **2026-10-22 correction:** The original “PASS (offline overall)” claim
+> records a test-suite outcome, not complete acceptance coverage or current-code
+> certification. The recorded code SHA differs from the audited master revision;
+> the traceability matrix contains PARTIAL/NOT_RUN requirements. Full G1 acceptance
+> remains **PARTIAL / NOT_ESTABLISHED**. Preserve the original logs as historical
+> evidence. See the [drift-remediation verification record](2026-10-22-routing-drift-remediation-g1.md)
+> for the subsequent fixes and their separately identified verification scope.
+
 ## 状態サマリ
 
 - ブランチ: `2026-10-21-pr-dynamic-routing-remediation`
 - G1 対象コミット: `5564145fdd4ffcef57de8f109771fe3ca1817540`
-- G1 ステータス: **PASS（offline 総合）**
+- G1 ステータス: **PARTIAL（受入要件の全件実証は未成立。初版のoffline総合PASSは撤回）**
 - G2/G3/G4 ステータス: **NOT_RUN / NOT_GRANTED**
 - 証跡作成日: 2026-10-21T00:00:00Z（Asia/Tokyo）
 - 実行者: 自動化エージェント（Sisyphus / OpenCode）

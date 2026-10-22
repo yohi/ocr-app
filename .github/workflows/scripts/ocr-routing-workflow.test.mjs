@@ -29,14 +29,12 @@ test('shadow fallback requires startup approval and handles absent prepared rout
   const host = step('Run Antigravity review host');
   assert.match(host, /if:.*!cancelled\(\)/);
   assert.match(host, /if:.*steps\.target\.outputs\.internal == 'true'.*\(env\.DECISION_ROUTING_MODE == 'off' \|\| steps\.routing-start\.outputs\.ROUTING_START_AUTHORIZED == 'true'\)/);
-  assert.match(host, /readRoute: \(\) => fs\.existsSync\(routePath\) \? readSelectedReviewRoute/);
+  assert.match(host, /if \(!fs\.existsSync\(routePath\)\) return null/);
   assert.match(host, /writeOutput: value => fs\.appendFileSync\(process\.env\.GITHUB_OUTPUT/);
-  assert.match(host, /if \(mode === 'shadow' && result\.status === 'failed' && result\.message === 'NO_SELECTED_REVIEW_ROUTE'\)/);
-  assert.doesNotMatch(host, /result\.message === 'ROUTING_EXECUTION_CONTEXT_INVALID'/);
-  assert.match(host, /ROUTE_GUARD_FAILED=false/);
+  assert.doesNotMatch(host, /result\.message === 'NO_SELECTED_REVIEW_ROUTE'/);
   assert.match(routingReview, /if \(writeOutput\) await writeOutput\('ROUTE_GUARD_FAILED=true'\)/);
-  assert.match(routingReview, /if \(!route\) denied\('NO_SELECTED_REVIEW_ROUTE'\)/);
-  assert.match(host, /result = await runHost\(\{ cwd: 'target-repo', prompt, routingMode: 'shadow', onProgress:/);
+  assert.match(routingReview, /if \(mode !== 'shadow'\) denied\('NO_SELECTED_REVIEW_ROUTE'\)/);
+  assert.match(routingReview, /return host\(\{ \.\.\.legacy, routingMode: 'shadow' \}\)/);
   assert.match(step('Resolve fixed review threads'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /DECISION_ROUTING_MODE == 'off'.*DECISION_ROUTING_MODE == 'shadow'/);
@@ -47,14 +45,15 @@ test('shadow fallback requires startup approval and handles absent prepared rout
 test('non-off startup requires positive authorization and shadow does not ignore failure', () => {
   assert.match(step('Prepare dynamic routing'), /ROUTING_START_AUTHORIZED == 'true'/);
   assert.match(step('Run Antigravity review host'), /ROUTING_START_AUTHORIZED == 'true'/);
-  assert.doesNotMatch(step('Prepare dynamic routing'), /continue-on-error/);
+  assert.doesNotMatch(step('Authorize routing start'), /continue-on-error/);
+  assert.match(step('Prepare dynamic routing'), /continue-on-error: \$\{\{ env\.DECISION_ROUTING_MODE == 'shadow' \}\}/);
 });
 
 test('routing evidence upload requires fresh upload authorization', () => {
   assert.match(step('Reauthorize routing audit upload'), /AUTHORIZED=\$\{authorized\}/);
   assert.match(step('Reauthorize routing audit upload'), /output\(authorized \? 'true' : 'false'\)/);
   assert.match(step('Upload routing audit'), /reauthorize-upload\.outputs\.AUTHORIZED == 'true'/);
-  assert.match(step('Upload routing audit'), /execution-context\.json/);
+  assert.doesNotMatch(step('Upload routing audit'), /execution-context\.json/);
   assert.match(step('Reauthorize routing audit upload'), /SHADOW_AUDIT_UNAVAILABLE=true/);
   assert.match(step('Reauthorize routing audit upload'), /SHADOW_AUDIT_UNAVAILABLE/);
   assert.match(step('Upload routing audit'), /SHADOW_AUDIT_UNAVAILABLE != 'true'/);
@@ -79,7 +78,8 @@ test('enforce has one publish boundary and legacy posting is off or shadow only'
   assert.match(step('Post review comments'), /DECISION_ROUTING_MODE == 'off'.*DECISION_ROUTING_MODE == 'shadow'/);
   assert.doesNotMatch(step('Post review comments'), /DECISION_ROUTING_MODE == 'enforce'/);
   assert.match(step('Publish enforce review'), /publish-routing-review\.mjs/);
-  assert.match(step('Publish enforce review'), /PUBLISHED=true/);
+  assert.match(step('Publish enforce review'), /postReview,/);
+  assert.doesNotMatch(step('Publish enforce review'), /PUBLISHED=true|postReview: async \(\) => 0/);
   assert.match(step('Publish enforce review'), /post-ocr-comments\.mjs/);
   const publisher = step('Publish enforce review');
   assert.match(publisher, /policySha256:/);

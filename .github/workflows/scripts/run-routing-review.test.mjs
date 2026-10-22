@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -270,12 +271,37 @@ test('Given shadow route binding mismatch, When invoked, Then no Host runs and o
   assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
 });
 
-test('Given shadow route absence, When invoked, Then it reports a distinct fixed reason and does not run Host', async () => {
+test('Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer', async () => {
   const outputs = [];
+  const order = [];
   const fixture = input({ env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: '/tmp/run' },
-    readRoute: async () => null, writeOutput: async value => outputs.push(value) });
+    readRoute: async () => null,
+    readExecutionContext: async () => { throw new Error('missing context must not be read for absent route'); },
+    fetchCurrentAuthorization: async () => { order.push('authorize'); return { registry: {} }; },
+    runHost: async options => { order.push('host'); assert.equal(options.onAttemptEvent, undefined); return { status: 'success' }; },
+    writeOutput: async value => outputs.push(value) });
   const result = await runRoutingReview(fixture.args);
-  assert.equal(result.message, 'NO_SELECTED_REVIEW_ROUTE');
+  assert.equal(result.status, 'success');
+  assert.deepEqual(order, ['authorize', 'host']);
+  assert.deepEqual(outputs, []);
+});
+
+test('shadow missing route cannot bypass freshly revoked activation', async () => {
+  const fixture = input({ env: { DECISION_ROUTING_MODE: 'shadow' }, readRoute: async () => null,
+    fetchCurrentAuthorization: async () => ({ registry: {} }), evaluateStartup: () => ({ authorized: false }) });
+  assert.equal((await runRoutingReview(fixture.args)).message, 'ROUTING_ACTIVATION_DENIED');
   assert.deepEqual(fixture.calls, []);
-  assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
+});
+
+test('off runs in a clean process with routing dependencies unavailable', () => {
+  const loader = `export async function resolve(specifier, context, next) {
+    if (specifier.startsWith('ajv')) throw new Error('routing dependency unavailable');
+    return next(specifier, context);
+  }`;
+  const moduleUrl = new URL('./run-routing-review.mjs', import.meta.url).href;
+  const child = spawnSync(process.execPath, ['--experimental-loader', `data:text/javascript,${encodeURIComponent(loader)}`,
+    '--input-type=module', '-e', `const {runRoutingReview} = await import(${JSON.stringify(moduleUrl)});
+      const result = await runRoutingReview({env:{DECISION_ROUTING_MODE:'off'},runHost:async()=>({status:'success'})});
+      if(result.status!=='success') process.exit(1);`], { encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stderr);
 });

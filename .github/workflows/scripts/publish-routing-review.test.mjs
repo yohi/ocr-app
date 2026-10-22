@@ -39,16 +39,14 @@ const decisionRecord = {
   decision_latency_ms: null, decision_api_cost: null, policy_version: '1.0.0', feature_schema_version: '3',
   decision_state_version: '1', model_catalog_version: catalog.catalog_version,
 };
-const event = (fields) => ({ schema_version: '1', run_attempt_id: 'c'.repeat(32), run_attempt: runBinding.runAttempt,
+const event = (fields) => ({ schema_version: '1', run_attempt_id: 'c'.repeat(32),
   attempt_index: 1, event: 'attempt_started', model: selectedModel, result: null,
   timestamp: '2026-10-21T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 const attemptRecord = [
-  { event: 'startup', run_attempt: 2, mode: 'enforce', binding: runBinding },
   event({}), event({ event: 'attempt_completed', result: 'model_reported_failure', duration_ms: 5 }),
   event({ event: 'attempt_started', attempt_index: 2, model: fallbackModel }),
   event({ event: 'attempt_completed', attempt_index: 2, model: fallbackModel, result: 'host_validated_success', duration_ms: 5 }),
   event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
-  { event: 'publication', run_attempt: runBinding.runAttempt },
 ];
 const delivery = { outcome: 'success', artifactId: 'artifact-1', runId: runBinding.workflowRunId, runAttempt: runBinding.runAttempt };
 const sealed = { cli_binary_sha256: 'c'.repeat(64) };
@@ -210,13 +208,11 @@ test('execution context revalidation failure does not proceed to Gate, HEAD, or 
 
 test('reverse fallback chain rejects a deep success followed by the fast primary', async () => {
   const reversedChain = [
-    attemptRecord[0],
     event({ model: fallbackModel }),
     event({ event: 'attempt_completed', model: fallbackModel, result: 'host_validated_success', duration_ms: 5 }),
     event({ event: 'attempt_started', attempt_index: 2, model: selectedModel }),
     event({ event: 'attempt_completed', attempt_index: 2, model: selectedModel, result: 'model_reported_failure', duration_ms: 5 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
-    attemptRecord.at(-1),
   ];
   const value = fixture({ chain: reversedChain });
   try {

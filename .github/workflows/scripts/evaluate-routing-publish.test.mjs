@@ -35,12 +35,10 @@ const fastFinalAudit = {
 };
 const selectedRoute = { selected_model_id: primaryModel, fallback_models: [], selected_strategy: 'deep', proposed_strategy: 'deep' };
 const startupAuthorization = { authorized: true, reason: 'ROUTING_ACTIVATION_AUTHORIZED', approvalRefs: ['OWNER-APPROVED'] };
-const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), run_attempt: binding.runAttempt, attempt_index: 1, event: 'attempt_started', model: primaryModel, result: null, timestamp: '2026-10-21T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
+const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: primaryModel, result: null, timestamp: '2026-10-21T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 const attempts = [
-  { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
   event({}), event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 5 }),
   event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 5, host_status: 'success' }),
-  { event: 'publication', run_attempt: binding.runAttempt },
 ];
 const delivery = { outcome: 'success', artifactId: 'artifact-1', runId: binding.workflowRunId, runAttempt: 2 };
 const args = (overrides = {}) => ({ mode: 'enforce', expectedBinding: binding, decisionRecord, finalAudit, delivery, checkRunId: '123', startupAuthorization, headSha: binding.headSha, selectedRoute, attempts, certifiedBundle, ...overrides });
@@ -66,7 +64,15 @@ test('scope gap blocks regardless of unrelated startup approval', () => {
 test('zero-review normal skip is eligible but scope-gap skip is not', () => {
   const zeroAudit = { ...finalAudit, executed_review_model: null, host_success_model: null, attempted_review_models: [], review_quality_measured: false };
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 }, finalAudit: zeroAudit, selectedRoute: { selected_model_id: null, fallback_models: [], selected_strategy: null }, attempts: [], certifiedBundle: null })).authorized, true);
-  assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 }, finalAudit: { ...zeroAudit, review_validation_status: 'not_run', head_validation_status: 'not_run' }, selectedRoute: { selected_model_id: null, fallback_models: [], selected_strategy: null }, attempts: [], certifiedBundle: null })).authorized, true);
+  for (const field of ['review_validation_status', 'head_validation_status']) {
+    for (const status of ['not_run', 'failed']) {
+      const result = evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 },
+        finalAudit: { ...zeroAudit, [field]: status }, selectedRoute: { selected_model_id: null, fallback_models: [], selected_strategy: null },
+        attempts: [], certifiedBundle: null }));
+      assert.equal(result.authorized, false, `${field}=${status} must deny skip publication`);
+      assert.equal(result.reason, field === 'review_validation_status' ? 'REVIEW_VALIDATION_FAILED' : 'HEAD_VALIDATION_FAILED');
+    }
+  }
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 }, finalAudit: { ...zeroAudit, review_scope_gap: true } })).reason, 'REVIEW_SCOPE_GAP_BLOCKED');
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 }, finalAudit: { ...finalAudit, executed_review_model: primaryModel, host_success_model: primaryModel, attempted_review_models: [primaryModel], review_quality_measured: true } })).reason, 'AUDIT_INCOMPLETE');
 });
@@ -120,7 +126,7 @@ test('startup authorization is required for normal publication and skips', () =>
 test('route validation rejects mismatches, invalid chains, and missing Host success', () => {
   assert.equal(evaluatePublishEligibility(args({ selectedRoute: { ...selectedRoute, selected_model_id: 'other-model', fallback_models: [] } })).reason, 'ROUTE_ATTEMPT_MISMATCH');
   assert.equal(evaluatePublishEligibility(args({ attempts: [] })).reason, 'ROUTE_ATTEMPT_MISMATCH');
-  assert.equal(evaluatePublishEligibility(args({ attempts: [ { ...attempts[0], binding: { ...binding, runAttempt: 3 } }, ...attempts.slice(1) ] })).reason, 'ROUTE_ATTEMPT_MISMATCH');
+  assert.equal(evaluatePublishEligibility(args({ attempts: [ { ...attempts[0], run_attempt_id: 'b'.repeat(32) }, ...attempts.slice(1) ] })).reason, 'ROUTE_ATTEMPT_MISMATCH');
   const noSuccess = attempts.map(item => item.event === 'host_completed' ? { ...item, host_status: 'failed' } : item);
   assert.equal(evaluatePublishEligibility(args({ attempts: noSuccess })).reason, 'ROUTE_ATTEMPT_MISMATCH');
 });
@@ -137,9 +143,9 @@ test('fallback order cannot regress from fallback to primary', () => {
   const fallback = deepFallbackModel.model_id;
   const route = { ...selectedRoute, selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'fast' };
   const chain = [
-    attempts[0], event({ model: fallback }), event({ event: 'attempt_completed', model: fallback, result: 'model_reported_failure', duration_ms: 5 }),
+    event({ model: fallback }), event({ event: 'attempt_completed', model: fallback, result: 'model_reported_failure', duration_ms: 5 }),
     event({ event: 'attempt_started', attempt_index: 2, model: primary }), event({ event: 'attempt_completed', attempt_index: 2, model: primary, result: 'host_validated_success', duration_ms: 5 }),
-    event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }), attempts.at(-1),
+    event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: fastDecisionRecord, finalAudit: fastFinalAudit, selectedRoute: route, attempts: chain })).reason, 'ROUTE_ATTEMPT_MISMATCH');
 });
@@ -155,12 +161,11 @@ test('delivery, check run, and route constraints remain publication requirements
 test('fast primary failure followed by allowed deep fallback is publishable', () => {
   const route = { ...selectedRoute, selected_model_id: fastModel.model_id, fallback_models: fastModel.allowed_fallbacks, selected_strategy: 'fast', proposed_strategy: 'fast' };
   const chain = [
-    attempts[0], event({ model: fastModel.model_id }),
+    event({ model: fastModel.model_id }),
     event({ event: 'attempt_completed', model: fastModel.model_id, result: 'model_reported_failure', duration_ms: 5 }),
     event({ event: 'attempt_started', attempt_index: 2, model: deepFallbackModel.model_id }),
     event({ event: 'attempt_completed', attempt_index: 2, model: deepFallbackModel.model_id, result: 'host_validated_success', duration_ms: 5 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
-    attempts.at(-1),
   ];
   assert.deepEqual(evaluatePublishEligibility(args({ decisionRecord: fastDecisionRecord, finalAudit: fastFinalAudit, selectedRoute: route, attempts: chain })), { authorized: true, reason: 'PUBLISH_AUTHORIZED' });
 });

@@ -25,7 +25,7 @@ const catalog = { models: [{ model_id: 'claude-opus-4-6-thinking', capability_ti
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const certifiedRealCatalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'a'.repeat(64)}` })) };
 const realBundle = { catalog: certifiedRealCatalog, evidence: { certification_refs: certifiedRealCatalog.models.map(model => ({ model_id: model.model_id, certification_reference: model.certification_reference })), cli_available_models: certifiedRealCatalog.models.map(model => model.model_id) } };
-const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), run_attempt: binding.runAttempt, attempt_index: 1, event: 'attempt_started', model: 'claude-opus-4-6-thinking', result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
+const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: 'claude-opus-4-6-thinking', result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 
  test('decision record is strict, bound, and frozen', () => {
   const record = decision();
@@ -78,29 +78,23 @@ test('attempt recorder binds generated IDs and enforces attempts.ndjson mode', (
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
-test('attempt recorder persists explicit startup and publication events with the bound attempt', () => {
+test('attempt recorder rejects startup and publication as non-Host events', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
   try {
     const recorder = createAttemptRecorder({ runTemp, mode: 'enforce', catalog, runAttemptId: 'a'.repeat(32), runAttempt: binding.runAttempt });
-    recorder.recordStartup(binding);
-    recorder.recordPublicationAttempt(binding.runAttempt);
-    recorder.seal();
-    const chain = readFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), 'utf8').trim().split('\n').map(JSON.parse);
-    assert.deepEqual(chain, [
-      { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
-      { event: 'publication', run_attempt: binding.runAttempt },
-    ]);
+    assert.throws(() => recorder.onAttemptEvent({ event: 'startup', binding }), /AUDIT_EVENT_INVALID/);
+    assert.throws(() => recorder.onAttemptEvent({ event: 'publication' }), /AUDIT_EVENT_INVALID/);
+    assert.equal(existsSync(join(runTemp, 'ocr-routing', 'attempts.ndjson')), false);
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
-test('attempt recorder rejects invalid run-attempt bindings and startup input', () => {
+test('attempt recorder rejects invalid run-attempt bindings and extra event keys', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
   try {
     assert.throws(() => createAttemptRecorder({ runTemp, mode: 'enforce', catalog, runAttempt: 0 }), { message: 'AUDIT_EVENT_INVALID: runAttempt must be a positive safe integer' });
     assert.throws(() => createAttemptRecorder({ runTemp, mode: 'enforce', catalog }), { message: 'AUDIT_EVENT_INVALID: runAttempt must be a positive safe integer' });
     const recorder = createAttemptRecorder({ runTemp, mode: 'enforce', catalog, runAttempt: binding.runAttempt });
-    assert.throws(() => recorder.recordStartup(null), { message: 'AUDIT_EVENT_INVALID' });
-    assert.throws(() => recorder.recordStartup({ ...binding, mode: 'shadow' }), { message: 'AUDIT_EVENT_INVALID' });
+    assert.throws(() => recorder.onAttemptEvent(event({ run_attempt_id: recorder.runAttemptId, run_attempt: 2 })), { message: 'AUDIT_EVENT_INVALID' });
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
@@ -123,11 +117,9 @@ test('final audit only identifies a validated single host success', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
   try {
   const recorder = createAttemptRecorder({ runTemp, mode: binding.mode, catalog, runAttemptId: 'a'.repeat(32), runAttempt: binding.runAttempt });
-  recorder.recordStartup(binding);
   recorder.onAttemptEvent(event({ event: 'attempt_started', run_attempt_id: recorder.runAttemptId }));
   recorder.onAttemptEvent(event({ event: 'attempt_completed', run_attempt_id: recorder.runAttemptId, result: 'host_validated_success', duration_ms: 10 }));
   recorder.onAttemptEvent(event({ event: 'host_completed', run_attempt_id: recorder.runAttemptId, attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }));
-  recorder.recordPublicationAttempt(binding.runAttempt);
   recorder.seal();
   const attempts = readFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), 'utf8').trim().split('\n').map(JSON.parse);
   const selectedRoute = { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep', proposed_strategy: 'deep' };
@@ -149,17 +141,17 @@ test('final audit only identifies a validated single host success', () => {
   assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
   assert.equal(Object.keys(final).length, 32);
   assert.equal(Object.hasOwn(final, 'reviewable_file_count'), false);
-  assert.throws(() => finalizeRoutingAudit({ decision: record, attempts: attempts.map(item => item.event === 'publication' ? { ...item, run_attempt: 999 } : item), reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp }), { message: 'AUDIT_EVENT_INVALID' });
+  assert.throws(() => finalize({ runBinding: { ...binding, runAttempt: 999 } }), { message: 'RUN_BINDING_MISMATCH' });
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ignored: true }), { message: 'AUDIT_EVENT_INVALID' });
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
-test('final audit requires the context-bound startup and terminal publication chain', () => {
+test('final audit requires a complete Host chain without pre-publication fiction', () => {
   const start = { event: 'startup', run_attempt: binding.runAttempt, mode: 'enforce', binding };
   const publication = { event: 'publication', run_attempt: binding.runAttempt };
-  const started = event({ event: 'attempt_started', run_attempt: binding.runAttempt });
-  const completed = event({ event: 'attempt_completed', run_attempt: binding.runAttempt, result: 'host_validated_success', duration_ms: 10 });
-  const hostCompleted = event({ event: 'host_completed', run_attempt: binding.runAttempt, attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' });
+  const started = event({ event: 'attempt_started' });
+  const completed = event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 });
+  const hostCompleted = event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' });
   const finalize = attempts => {
     const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
     try {
@@ -169,11 +161,11 @@ test('final audit requires the context-bound startup and terminal publication ch
     } finally { rmSync(runTemp, { recursive: true, force: true }); }
   };
 
-  const record = finalize([start, started, completed, hostCompleted, publication]);
+  const record = finalize([started, completed, hostCompleted]);
   assert.equal(record.executed_review_model, 'claude-opus-4-6-thinking');
   for (const invalid of [
     [{ ...start, binding: { ...binding, runAttempt: binding.runAttempt + 1 } }, started, completed, hostCompleted, publication],
-    [started, completed, hostCompleted, publication],
+    [started, completed],
     [start, event({ event: 'host_completed', run_attempt: binding.runAttempt, attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }), publication],
     [start, started, completed, hostCompleted, publication, publication],
     [start, started, completed, publication, hostCompleted],
@@ -197,11 +189,9 @@ test('fallback success is sealed without impersonating the primary model', () =>
   const fallback = certifiedRealCatalog.models.find(model => model.model_id === primary).allowed_fallbacks[0];
   const bundle = realBundle;
   const chain = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     started(1, primary), completed(1, primary, 'model_reported_failure'),
     started(2, fallback), completed(2, fallback, 'host_validated_success'),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 20, host_status: 'success' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   const selectedRoute = { selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'fast', proposed_strategy: 'fast' };
   assert.deepEqual(validateRoutingAttempts({ attempts: chain, selectedRoute, certifiedBundle: bundle }), {
@@ -225,16 +215,25 @@ test('fallback success is sealed without impersonating the primary model', () =>
 
 test('route validation rejects out-of-chain models and unavailable bundle models', () => {
   const chain = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     event({ event: 'attempt_started' }),
     event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   const bundle = { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } };
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'other-model', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: bundle }), { message: 'AUDIT_EVENT_INVALID' });
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, evidence: { ...bundle.evidence, cli_available_models: [] } } }), { message: 'AUDIT_EVENT_INVALID' });
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, catalog: { models: [{ model_id: 'claude-opus-4-6-thinking', capability_tier: 'fast' }] } } }), { message: 'AUDIT_EVENT_INVALID' });
+});
+
+test('route validation accepts failed Host completion without completed attempts', () => {
+  const failedChain = [event({ event: 'host_completed', attempt_index: null, model: null, result: null, host_status: 'failed' })];
+  const bundle = { catalog, evidence: { certification_refs: [], cli_available_models: [] } };
+
+  assert.deepEqual(validateRoutingAttempts({
+    attempts: failedChain,
+    selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' },
+    certifiedBundle: bundle,
+  }), { attemptedModels: [], successModel: null });
 });
 
 test('route validation rejects completed attempts that regress from fallback to primary', () => {
@@ -243,24 +242,20 @@ test('route validation rejects completed attempts that regress from fallback to 
   const route = { selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'deep' };
   const bundle = { catalog: { models: [...catalog.models, { model_id: fallback, capability_tier: 'deep', certification_status: 'certified' }] }, evidence: { certification_refs: [], cli_available_models: [primary, fallback] } };
   const chain = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     event({ event: 'attempt_started', attempt_index: 1, model: fallback }),
     event({ event: 'attempt_completed', attempt_index: 1, model: fallback, result: 'model_reported_failure', duration_ms: 5 }),
     event({ event: 'attempt_started', attempt_index: 2, model: primary }),
     event({ event: 'attempt_completed', attempt_index: 2, model: primary, result: 'host_validated_success', duration_ms: 5 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: route, certifiedBundle: bundle }), { message: 'AUDIT_EVENT_INVALID' });
 });
 
 test('skipped Host completion leaves the success model null', () => {
   const skippedChain = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     event({ event: 'attempt_started' }),
     event({ event: 'attempt_completed', result: 'host_skipped', duration_ms: 1 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 1, host_status: 'skipped' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   assert.equal(validateRoutingAttempts({ attempts: skippedChain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } } }).successModel, null);
 });
@@ -269,11 +264,9 @@ test('same-model retries remain distinct chain attempts while output model list 
   const first = event({ event: 'attempt_started', attempt_index: 1 });
   const second = event({ event: 'attempt_started', attempt_index: 2 });
   const chain = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     first, event({ event: 'attempt_completed', attempt_index: 1, result: 'timeout', duration_ms: 10 }),
     second, event({ event: 'attempt_completed', attempt_index: 2, result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 20, host_status: 'success' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   const validation = validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } } });
   assert.deepEqual(validation.attemptedModels, ['claude-opus-4-6-thinking', 'claude-opus-4-6-thinking']);
@@ -298,9 +291,9 @@ test('shadow successful review records completed, success, and executed models w
   const shadowBinding = { ...binding, mode: 'shadow' };
   const shadowDecision = createRoutingDecisionRecord({ runBinding: shadowBinding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route: { ...route, selectedStrategy: null }, policyVersions: versions });
   const shadowAttempts = [
-    event({ event: 'attempt_started', run_attempt: shadowBinding.runAttempt }),
-    event({ event: 'attempt_completed', run_attempt: shadowBinding.runAttempt, result: 'host_validated_success', duration_ms: 10 }),
-    event({ event: 'host_completed', run_attempt: shadowBinding.runAttempt, attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
+    event({ event: 'attempt_started' }),
+    event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 }),
+    event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
   const audit = finalizeRoutingAudit({ decision: shadowDecision, attempts: shadowAttempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: shadowBinding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog });
   assert.deepEqual(audit.attempted_review_models, ['claude-opus-4-6-thinking']);
@@ -310,14 +303,12 @@ test('shadow successful review records completed, success, and executed models w
 
 test('two successful Host completion events are rejected and cannot execute a model', () => {
   const twoSuccesses = [
-    { event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding },
     event({ event: 'attempt_started', attempt_index: 1 }),
     event({ event: 'attempt_completed', attempt_index: 1, result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'attempt_started', attempt_index: 2 }),
     event({ event: 'attempt_completed', attempt_index: 2, result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 20, host_status: 'success' }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 20, host_status: 'success' }),
-    { event: 'publication', run_attempt: binding.runAttempt },
   ];
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
   try {

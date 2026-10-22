@@ -3,15 +3,14 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBindingEquals } from './ocr-run-binding.mjs';
+import { validateAttemptEvent, validateAttemptOrder, validateRoutingAttempts } from './routing-attempts.mjs';
+export { validateRoutingAttempts } from './routing-attempts.mjs';
 
 const CLASSIFICATIONS = ['allowlisted_docs_only', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete'];
 const STRATEGIES = ['fast', 'deep'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
 const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid_response'];
 const EGRESS_STATUSES = ['allowed', 'denied', 'not_checked'];
-const EVENTS = ['startup', 'attempt_started', 'attempt_completed', 'host_completed', 'publication'];
-const RESULTS = ['spawn_failed', 'timeout', 'transport_error', 'invalid_output', 'model_reported_failure', 'host_validated_success', 'host_skipped', 'other_failure'];
-const TIER_RANK = { fast: 1, deep: 2 };
 const DECISION_KEYS = ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
 const AUDIT_KEYS = ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms'];
 const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
@@ -102,43 +101,6 @@ export function writeRoutingDecision({ runTemp, record, mkdirSync = fs.mkdirSync
   writtenDecisionPaths.add(path);
 }
 
-function validTimestamp(timestamp) {
-  if (typeof timestamp !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(timestamp)) return false;
-  const parsed = Date.parse(timestamp);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 19) === timestamp.slice(0, 19);
-}
-function validateAttemptEvent(event, runAttemptId, catalog) {
-  if (event?.event === 'startup') {
-    exactKeys(event, ['event', 'run_attempt', 'mode', 'binding']);
-    assertRunBindingValid(event.binding);
-    if (event.run_attempt !== event.binding.runAttempt || event.mode !== event.binding.mode) throw new Error('AUDIT_EVENT_INVALID');
-    return event;
-  }
-  if (event?.event === 'publication') {
-    exactKeys(event, ['event', 'run_attempt']);
-    if (!Number.isSafeInteger(event.run_attempt) || event.run_attempt < 1) throw new Error('AUDIT_EVENT_INVALID');
-    return event;
-  }
-  const keys = ['schema_version','run_attempt_id','attempt_index','event','model','result','timestamp','duration_ms','host_status'];
-  keys.push('run_attempt');
-  exactKeys(event, keys);
-  if (event.schema_version !== '1' || event.run_attempt_id !== runAttemptId || !Number.isSafeInteger(event.run_attempt) || event.run_attempt < 1) throw new Error('AUDIT_EVENT_INVALID');
-  enumValue(event.event, EVENTS);
-  if (event.event === 'host_completed' ? event.attempt_index !== null : (!Number.isSafeInteger(event.attempt_index) || event.attempt_index < 1)) throw new Error('AUDIT_EVENT_INVALID');
-  if (!validTimestamp(event.timestamp)) throw new Error('AUDIT_EVENT_INVALID');
-  if (event.duration_ms !== null && (!Number.isSafeInteger(event.duration_ms) || event.duration_ms < 0)) throw new Error('AUDIT_EVENT_INVALID');
-  if (event.event === 'attempt_started' && (event.result !== null || event.duration_ms !== null || event.host_status !== null)) throw new Error('AUDIT_EVENT_INVALID');
-  if (event.event === 'attempt_completed' && (event.result === null || event.host_status !== null)) throw new Error('AUDIT_EVENT_INVALID');
-  if (event.event === 'host_completed' && (event.result !== null || event.host_status === null)) throw new Error('AUDIT_EVENT_INVALID');
-  if (event.result !== null) enumValue(event.result, RESULTS);
-  if (event.host_status !== null) enumValue(event.host_status, ['success','skipped','failed']);
-  if (event.event === 'host_completed') {
-    if (event.model !== null) throw new Error('AUDIT_EVENT_INVALID');
-  } else {
-    if (typeof event.model !== 'string' || !MODEL_ID.test(event.model) || !catalog?.models?.some(item => item?.model_id === event.model && item.certification_status === 'certified')) throw new Error('AUDIT_MODEL_NOT_CERTIFIED');
-  }
-  return event;
-}
 export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, runAttempt, appendFileSync = fs.appendFileSync, mkdirSync = fs.mkdirSync, chmodSync = fs.chmodSync }) {
   if (!['shadow','enforce'].includes(mode)) throw new Error('AUDIT_MODE_INVALID');
   if (!Number.isSafeInteger(runAttempt) || runAttempt < 1) throw new Error('AUDIT_EVENT_INVALID: runAttempt must be a positive safe integer');
@@ -154,12 +116,8 @@ export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, ru
   function onAttemptEvent(event) {
     if (sealed) { markUnavailable('AUDIT_EVENT_INVALID'); return; }
     try {
-      const boundEvent = event?.event === 'attempt_started' || event?.event === 'attempt_completed' || event?.event === 'host_completed'
-        ? { ...event, run_attempt: event.run_attempt ?? runAttempt }
-        : event;
-      if (runAttempt !== undefined && boundEvent.run_attempt !== runAttempt) throw new Error('AUDIT_EVENT_INVALID');
-      validateAttemptEvent(boundEvent, boundRunAttemptId, catalog);
-      appendFileSync(path, `${JSON.stringify(boundEvent)}\n`, { mode: 0o600, flag: 'a' });
+      validateAttemptEvent(event, boundRunAttemptId, catalog, mode === 'enforce');
+      appendFileSync(path, `${JSON.stringify(event)}\n`, { mode: 0o600, flag: 'a' });
       chmodSync(path, 0o600);
     } catch (error) {
       markUnavailable(error instanceof Error && error.message === 'AUDIT_MODEL_NOT_CERTIFIED' ? error.message : 'AUDIT_EVENT_INVALID');
@@ -172,92 +130,7 @@ export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, ru
     try { appendFileSync(path, '', { mode: 0o600, flag: 'a' }); chmodSync(path, 0o600); }
     catch { markUnavailable('AUDIT_EVENT_INVALID'); }
   }
-  function recordStartup(binding) {
-    try { assertRunBindingValid(binding); } catch (cause) { throw new Error('AUDIT_EVENT_INVALID', { cause }); }
-    if (binding.mode !== mode || (runAttempt !== undefined && binding.runAttempt !== runAttempt)) throw new Error('AUDIT_EVENT_INVALID');
-    onAttemptEvent({ event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding });
-  }
-  function recordPublicationAttempt(runAttempt) { onAttemptEvent({ event: 'publication', run_attempt: runAttempt }); }
-  return Object.freeze({ onAttemptEvent, recordStartup, recordPublicationAttempt, seal, health: () => state, runAttemptId: boundRunAttemptId });
-}
-
-function validateAttemptOrder(attempts, binding, allowEmpty, { relaxed = false } = {}) {
-  if (!Array.isArray(attempts) || (attempts.length === 0 && !allowEmpty)) throw new Error('AUDIT_EVENT_INVALID');
-  if (attempts.length === 0) return { valid: true, completed: [], success: null };
-  const started = new Map(); const completed = []; let hostCount = 0; let hostSuccess = null; let successCount = 0; let priorAttempt = 0; let attemptRun = null; let activeAttempt = null; let hostCompletedSeen = false;
-  try {
-    for (const [position, event] of attempts.entries()) {
-      if (event?.event === 'startup') {
-        validateAttemptEvent(event, null, null);
-        if (position !== 0 || event.run_attempt !== binding.runAttempt || event.mode !== binding.mode) throw new Error('AUDIT_EVENT_INVALID');
-        assertRunBindingEquals(binding, event.binding);
-        continue;
-      }
-      if ((!relaxed && (position === 0 || attempts[0]?.event !== 'startup')) || event?.run_attempt !== binding.runAttempt) throw new Error('AUDIT_EVENT_INVALID');
-      if (event?.event === 'publication') {
-        validateAttemptEvent(event, null, null);
-        if (position !== attempts.length - 1 || activeAttempt !== null || started.size !== completed.length) throw new Error('AUDIT_EVENT_INVALID');
-        continue;
-      }
-      if (hostCompletedSeen) throw new Error('AUDIT_EVENT_INVALID');
-      const eventId = event?.run_attempt_id;
-      validateAttemptEvent(event, eventId, { models: [{ model_id: event?.model, certification_status: 'certified' }] });
-      if (attemptRun !== null && attemptRun !== eventId) throw new Error('AUDIT_EVENT_INVALID');
-      attemptRun = eventId;
-      if (event.event === 'attempt_started') {
-        if (activeAttempt !== null || event.attempt_index <= priorAttempt || started.has(event.attempt_index)) throw new Error('AUDIT_EVENT_INVALID');
-        priorAttempt = event.attempt_index; started.set(event.attempt_index, event); activeAttempt = event.attempt_index;
-      } else if (event.event === 'attempt_completed') {
-        if (activeAttempt !== event.attempt_index || event.model !== started.get(event.attempt_index).model) throw new Error('AUDIT_EVENT_INVALID');
-        completed.push(event); activeAttempt = null;
-      } else {
-        hostCount += 1;
-        if (hostCount > 1 || activeAttempt !== null || started.size === 0 || completed.length !== started.size) throw new Error('AUDIT_EVENT_INVALID');
-        hostCompletedSeen = true;
-        if (event.host_status === 'success') {
-          const eligible = completed.filter(item => item.result === 'host_validated_success');
-          if (eligible.length !== 1) throw new Error('AUDIT_EVENT_INVALID');
-          successCount += 1;
-          if (successCount > 1) throw new Error('AUDIT_EVENT_INVALID');
-          hostSuccess = eligible[0];
-        }
-      }
-    }
-    if (hostCount !== 1 || started.size === 0 || completed.length !== started.size || successCount > 1
-      || (!relaxed && attempts.at(-1)?.event !== 'publication')) throw new Error('AUDIT_EVENT_INVALID');
-    return { valid: true, completed, success: hostSuccess };
-  } catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' }); }
-}
-
-export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBundle }) {
-  const binding = attempts?.[0]?.binding;
-  let order;
-  try {
-    if (!binding) throw new Error('AUDIT_EVENT_INVALID');
-    order = validateAttemptOrder(attempts, binding, false);
-    const allowed = [selectedRoute?.selected_model_id, ...(selectedRoute?.fallback_models ?? [])];
-    if (!selectedRoute || !Array.isArray(selectedRoute.fallback_models) || typeof selectedRoute.selected_model_id !== 'string') throw new Error('AUDIT_EVENT_INVALID');
-    const available = certifiedBundle?.evidence?.cli_available_models;
-    const attemptedModels = order.completed.map(item => item.model);
-    if (attemptedModels.some(model => !allowed.includes(model))) throw new Error('AUDIT_EVENT_INVALID');
-    let priorModelIndex = -1;
-    for (const model of attemptedModels) {
-      const modelIndex = allowed.indexOf(model);
-      if (modelIndex < priorModelIndex) throw new Error('AUDIT_EVENT_INVALID');
-      priorModelIndex = modelIndex;
-    }
-    if (certifiedBundle && (!Array.isArray(available) || attemptedModels.some(model => !available.includes(model)))) throw new Error('AUDIT_EVENT_INVALID');
-    const successModel = order.success?.model ?? null;
-    if (successModel !== null && (!allowed.includes(successModel) || (Array.isArray(available) && !available.includes(successModel)))) throw new Error('AUDIT_EVENT_INVALID');
-    const desiredTier = selectedRoute.selected_strategy ?? selectedRoute.proposed_strategy;
-    const successEntry = certifiedBundle?.catalog?.models?.find(model => model?.model_id === successModel);
-    if (successModel !== null && desiredTier && successEntry?.capability_tier
-      && TIER_RANK[successEntry.capability_tier] < TIER_RANK[desiredTier]) throw new Error('AUDIT_EVENT_INVALID');
-    return { attemptedModels, successModel };
-  } catch (cause) {
-    if (cause instanceof Error && cause.message === 'AUDIT_EVENT_INVALID') throw cause;
-    throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' });
-  }
+  return Object.freeze({ onAttemptEvent, seal, health: () => state, runAttemptId: boundRunAttemptId });
 }
 
 export function finalizeRoutingAudit(input) {
@@ -280,15 +153,13 @@ export function finalizeRoutingAudit(input) {
       chain = lines.map(line => JSON.parse(line));
       if (!isDeepStrictEqual(chain, attempts)) throw new Error('AUDIT_EVENT_INVALID');
     } catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_unavailable' }); }
-    try { assertRunBindingEquals(runBinding, chain[0]?.binding); }
-    catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' }); }
     validatedAttempts = validateRoutingAttempts({ attempts: chain, selectedRoute, certifiedBundle });
   }
   let order = { valid: false, completed: [], success: null };
   if (enforced && decision.reviewable_file_count > 0) {
     order = validateAttemptOrder(chain, runBinding, false);
   } else if (!enforced && Array.isArray(attempts) && attempts.length > 0) {
-    order = validateAttemptOrder(attempts, runBinding, false, { relaxed: true });
+    order = validateAttemptOrder(attempts, runBinding, false);
     validatedAttempts = { attemptedModels: order.completed.map(item => item.model), successModel: order.success?.model ?? null };
   } else if (enforced && reviewResult?.status === 'skipped' && decision.reviewable_file_count === 0) {
     order = validateAttemptOrder(chain, runBinding, true);
