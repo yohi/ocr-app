@@ -1,0 +1,12 @@
+
+> ocr-github-app-worker@1.0.0 test
+> vitest run
+
+
+ RUN  v4.1.10 [workspace]/cloudflare-worker
+
+
+ Test Files  1 passed (1)
+      Tests  31 passed (31)
+   Start at  19:55:53
+   Duration  234ms (transform 51ms, setup 0ms, import 67ms, tests 49ms, environment 0ms)
