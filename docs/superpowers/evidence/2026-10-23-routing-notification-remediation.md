@@ -2,8 +2,13 @@
 
 ## Scope and assessment
 
-- Scope: TARGET-001 (final Check Run failure reasons) and TARGET-002
+- Scope: NOTIFY-001 (final Check Run failure reasons) and NOTIFY-002
   (untrusted exception diagnostics in enforce upload and publication gates).
+- ID correction: these notification IDs were previously named TARGET-001/002.
+  Those TARGET IDs retain their certification/CLI and stage-specific Owner
+  authorization meanings in the [remediation plan](../plans/2026-10-21-pr-dynamic-routing-remediation.md#acceptance-and-self-review-checklist).
+- This is the original 483-test snapshot record. Later fixes and their separate
+  verification are recorded in the [notification follow-up](2026-10-23-routing-notification-follow-up.md).
 - Base HEAD: `42d11f5cef6e6c751791982d94daeafb212353ce`.
 - Tested source: the **uncommitted working-tree snapshot**, not the base HEAD.
   The [source manifest](2026-10-23-routing-notification-remediation/source-manifest.sha256)
@@ -24,7 +29,7 @@ It identifies exact tested bytes without inventing a new commit SHA.
 
 ## Corrections
 
-### TARGET-001: final Check Run reasons
+### NOTIFY-001: final Check Run reasons
 
 The completed Check Run receives the gate reason, publisher reason, final HEAD
 revalidation outcome, and publisher outcome from the actual workflow steps.
@@ -46,7 +51,7 @@ The final HEAD CLI distinguishes a confirmed mismatch (`HEAD_CHANGED`) from
 inability to validate (`HEAD_VALIDATION_FAILED`), emitting only a fixed enum in
 enforce mode. Off/shadow CLI diagnostics retain their previous behavior.
 
-### TARGET-002: enforce diagnostics
+### NOTIFY-002: enforce diagnostics
 
 Upload reauthorization in enforce and the enforce publish gate log only the
 fixed denial `ROUTING_ACTIVATION_DENIED`, without interpolating exception
