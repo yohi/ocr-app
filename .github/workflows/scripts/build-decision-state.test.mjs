@@ -54,4 +54,5 @@ test('validator rejects inherited properties, unknown keys, and bogus outbound b
   assert.throws(() => validateDecisionState({ ...expected, extra: true }));
   assert.throws(() => validateDecisionState(Object.assign(Object.create({ leaked: true }), expected)));
   assert.throws(() => validateDecisionState({ ...expected, additions_bucket: 'bogus' }));
+  assert.throws(() => validateDecisionState({ ...expected, schema_version: '2' }));
 });

@@ -28,8 +28,9 @@ function isKnownStatus(status) {
 }
 
 function isNormalTextChange(file) {
+  const normalOldMode = file.status === 'added' ? file.oldMode === '000000' : file.oldMode === file.mode;
   return ['added', 'modified'].includes(file.status) && file.mode === '100644' &&
-    file.oldMode === '100644' && file.oldMode === file.mode && file.binary === false &&
+    normalOldMode && file.binary === false &&
     file.additions !== null && file.deletions !== null && file.oldPath === undefined;
 }
 
@@ -48,7 +49,7 @@ function collectFileSummary(files) {
     known &&= isKnownStatus(file.status);
     normalText &&= isNormalTextChange(file);
   }
-  const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || file.oldMode !== file.mode));
+  const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || (file.status !== 'added' && file.oldMode !== file.mode)));
   return { paths, validRecords, code, known, normalText, unsafeMode };
 }
 

@@ -18,9 +18,13 @@ test('allows only fully reviewable README markdown modifications as fast', () =>
   const result = classifyPRRisk(base(), policy);
   assert.equal(result.classification_status, 'allowlisted_docs_only');
   assert.equal(result.risk_floor, 'fast');
-  const added = classifyPRRisk(base('README.md', { all_changed_files: [{ path: 'README.md', status: 'added', oldMode: '000000', mode: '100644', additions: 1, deletions: 0, binary: false }] }), policy);
-  assert.equal(added.risk_floor, 'deep');
   assert.equal(classifyPRRisk(base('README.md', { review_scope_gap: true }), policy).risk_floor, 'deep');
+});
+
+test('allows an added allowlisted README markdown file as fast', () => {
+  const added = classifyPRRisk(base('README.md', { all_changed_files: [{ path: 'README.md', status: 'added', oldMode: '000000', mode: '100644', additions: 1, deletions: 0, binary: false }] }), policy);
+  assert.equal(added.classification_status, 'allowlisted_docs_only');
+  assert.equal(added.risk_floor, 'fast');
 });
 
 test('deny paths override allow paths and code or mixed changes remain deep', () => {
