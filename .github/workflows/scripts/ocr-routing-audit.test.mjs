@@ -186,6 +186,8 @@ test('final audit requires the context-bound startup and terminal publication ch
     [start, started, completed, event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 }), hostCompleted, publication],
   ]) assert.throws(() => finalize(invalid), { message: 'AUDIT_EVENT_INVALID' });
   assert.throws(() => finalize([]), { message: 'AUDIT_EVENT_INVALID' });
+  assert.throws(() => finalize([start, started, completed, publication, hostCompleted]), error =>
+    error.message === 'AUDIT_EVENT_INVALID' && error.reason === 'attempt_chain_invalid');
 });
 
 test('fallback success is sealed without impersonating the primary model', () => {
