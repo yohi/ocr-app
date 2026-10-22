@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBindingEquals } from './ocr-run-binding.mjs';
 
 const CLASSIFICATIONS = ['allowlisted_docs_only', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete'];
@@ -8,8 +9,9 @@ const STRATEGIES = ['fast', 'deep'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
 const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid_response'];
 const EGRESS_STATUSES = ['allowed', 'denied', 'not_checked'];
-const EVENTS = ['attempt_started', 'attempt_completed', 'host_completed'];
+const EVENTS = ['startup', 'attempt_started', 'attempt_completed', 'host_completed', 'publication'];
 const RESULTS = ['spawn_failed', 'timeout', 'transport_error', 'invalid_output', 'model_reported_failure', 'host_validated_success', 'host_skipped', 'other_failure'];
+const TIER_RANK = { fast: 1, deep: 2 };
 const DECISION_KEYS = ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
 const AUDIT_KEYS = ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms'];
 const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
@@ -106,9 +108,21 @@ function validTimestamp(timestamp) {
   return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 19) === timestamp.slice(0, 19);
 }
 function validateAttemptEvent(event, runAttemptId, catalog) {
+  if (event?.event === 'startup') {
+    exactKeys(event, ['event', 'run_attempt', 'mode', 'binding']);
+    assertRunBindingValid(event.binding);
+    if (event.run_attempt !== event.binding.runAttempt || event.mode !== event.binding.mode) throw new Error('AUDIT_EVENT_INVALID');
+    return event;
+  }
+  if (event?.event === 'publication') {
+    exactKeys(event, ['event', 'run_attempt']);
+    if (!Number.isSafeInteger(event.run_attempt) || event.run_attempt < 1) throw new Error('AUDIT_EVENT_INVALID');
+    return event;
+  }
   const keys = ['schema_version','run_attempt_id','attempt_index','event','model','result','timestamp','duration_ms','host_status'];
+  keys.push('run_attempt');
   exactKeys(event, keys);
-  if (event.schema_version !== '1' || event.run_attempt_id !== runAttemptId) throw new Error('AUDIT_EVENT_INVALID');
+  if (event.schema_version !== '1' || event.run_attempt_id !== runAttemptId || !Number.isSafeInteger(event.run_attempt) || event.run_attempt < 1) throw new Error('AUDIT_EVENT_INVALID');
   enumValue(event.event, EVENTS);
   if (event.event === 'host_completed' ? event.attempt_index !== null : (!Number.isSafeInteger(event.attempt_index) || event.attempt_index < 1)) throw new Error('AUDIT_EVENT_INVALID');
   if (!validTimestamp(event.timestamp)) throw new Error('AUDIT_EVENT_INVALID');
@@ -125,8 +139,9 @@ function validateAttemptEvent(event, runAttemptId, catalog) {
   }
   return event;
 }
-export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, appendFileSync = fs.appendFileSync, mkdirSync = fs.mkdirSync, chmodSync = fs.chmodSync }) {
+export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, runAttempt, appendFileSync = fs.appendFileSync, mkdirSync = fs.mkdirSync, chmodSync = fs.chmodSync }) {
   if (!['shadow','enforce'].includes(mode)) throw new Error('AUDIT_MODE_INVALID');
+  if (!Number.isSafeInteger(runAttempt) || runAttempt < 1) throw new Error('AUDIT_EVENT_INVALID: runAttempt must be a positive safe integer');
   const boundRunAttemptId = runAttemptId ?? randomBytes(16).toString('hex');
   if (typeof boundRunAttemptId !== 'string' || !/^[a-f0-9]{32}$/.test(boundRunAttemptId)) throw new Error('AUDIT_EVENT_INVALID');
   const directory = join(runTemp, 'ocr-routing'); const path = join(directory, 'attempts.ndjson');
@@ -139,8 +154,12 @@ export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, ap
   function onAttemptEvent(event) {
     if (sealed) { markUnavailable('AUDIT_EVENT_INVALID'); return; }
     try {
-      validateAttemptEvent(event, boundRunAttemptId, catalog);
-      appendFileSync(path, `${JSON.stringify(event)}\n`, { mode: 0o600, flag: 'a' });
+      const boundEvent = event?.event === 'attempt_started' || event?.event === 'attempt_completed' || event?.event === 'host_completed'
+        ? { ...event, run_attempt: event.run_attempt ?? runAttempt }
+        : event;
+      if (runAttempt !== undefined && boundEvent.run_attempt !== runAttempt) throw new Error('AUDIT_EVENT_INVALID');
+      validateAttemptEvent(boundEvent, boundRunAttemptId, catalog);
+      appendFileSync(path, `${JSON.stringify(boundEvent)}\n`, { mode: 0o600, flag: 'a' });
       chmodSync(path, 0o600);
     } catch (error) {
       markUnavailable(error instanceof Error && error.message === 'AUDIT_MODEL_NOT_CERTIFIED' ? error.message : 'AUDIT_EVENT_INVALID');
@@ -153,14 +172,34 @@ export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, ap
     try { appendFileSync(path, '', { mode: 0o600, flag: 'a' }); chmodSync(path, 0o600); }
     catch { markUnavailable('AUDIT_EVENT_INVALID'); }
   }
-  return Object.freeze({ onAttemptEvent, seal, health: () => state, runAttemptId: boundRunAttemptId });
+  function recordStartup(binding) {
+    try { assertRunBindingValid(binding); } catch (cause) { throw new Error('AUDIT_EVENT_INVALID', { cause }); }
+    if (binding.mode !== mode || (runAttempt !== undefined && binding.runAttempt !== runAttempt)) throw new Error('AUDIT_EVENT_INVALID');
+    onAttemptEvent({ event: 'startup', run_attempt: binding.runAttempt, mode: binding.mode, binding });
+  }
+  function recordPublicationAttempt(runAttempt) { onAttemptEvent({ event: 'publication', run_attempt: runAttempt }); }
+  return Object.freeze({ onAttemptEvent, recordStartup, recordPublicationAttempt, seal, health: () => state, runAttemptId: boundRunAttemptId });
 }
 
-function validateAttemptOrder(attempts) {
-  if (!Array.isArray(attempts) || attempts.length === 0) return { valid: false, completed: [], success: null };
-  const started = new Map(); const completed = []; let hostCount = 0; let hostSuccess = null; let priorAttempt = 0; let attemptRun = null; let activeAttempt = null;
+function validateAttemptOrder(attempts, binding, allowEmpty, { relaxed = false } = {}) {
+  if (!Array.isArray(attempts) || (attempts.length === 0 && !allowEmpty)) throw new Error('AUDIT_EVENT_INVALID');
+  if (attempts.length === 0) return { valid: true, completed: [], success: null };
+  const started = new Map(); const completed = []; let hostCount = 0; let hostSuccess = null; let successCount = 0; let priorAttempt = 0; let attemptRun = null; let activeAttempt = null; let hostCompletedSeen = false;
   try {
     for (const [position, event] of attempts.entries()) {
+      if (event?.event === 'startup') {
+        validateAttemptEvent(event, null, null);
+        if (position !== 0 || event.run_attempt !== binding.runAttempt || event.mode !== binding.mode) throw new Error('AUDIT_EVENT_INVALID');
+        assertRunBindingEquals(binding, event.binding);
+        continue;
+      }
+      if ((!relaxed && (position === 0 || attempts[0]?.event !== 'startup')) || event?.run_attempt !== binding.runAttempt) throw new Error('AUDIT_EVENT_INVALID');
+      if (event?.event === 'publication') {
+        validateAttemptEvent(event, null, null);
+        if (position !== attempts.length - 1 || activeAttempt !== null || started.size !== completed.length) throw new Error('AUDIT_EVENT_INVALID');
+        continue;
+      }
+      if (hostCompletedSeen) throw new Error('AUDIT_EVENT_INVALID');
       const eventId = event?.run_attempt_id;
       validateAttemptEvent(event, eventId, { models: [{ model_id: event?.model, certification_status: 'certified' }] });
       if (attemptRun !== null && attemptRun !== eventId) throw new Error('AUDIT_EVENT_INVALID');
@@ -173,28 +212,92 @@ function validateAttemptOrder(attempts) {
         completed.push(event); activeAttempt = null;
       } else {
         hostCount += 1;
-        if (hostCount > 1 || activeAttempt !== null || position !== attempts.length - 1) throw new Error('AUDIT_EVENT_INVALID');
+        if (hostCount > 1 || activeAttempt !== null || started.size === 0 || completed.length !== started.size) throw new Error('AUDIT_EVENT_INVALID');
+        hostCompletedSeen = true;
         if (event.host_status === 'success') {
           const eligible = completed.filter(item => item.result === 'host_validated_success');
-          if (eligible.length === 1) hostSuccess = eligible[0];
+          if (eligible.length !== 1) throw new Error('AUDIT_EVENT_INVALID');
+          successCount += 1;
+          if (successCount > 1) throw new Error('AUDIT_EVENT_INVALID');
+          hostSuccess = eligible[0];
         }
       }
     }
-    if (hostCount !== 1 || completed.length !== started.size) throw new Error('AUDIT_EVENT_INVALID');
+    if (hostCount !== 1 || started.size === 0 || completed.length !== started.size || successCount > 1
+      || (!relaxed && attempts.at(-1)?.event !== 'publication')) throw new Error('AUDIT_EVENT_INVALID');
     return { valid: true, completed, success: hostSuccess };
-  } catch { return { valid: false, completed: [], success: null }; }
+  } catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' }); }
 }
 
-export function finalizeRoutingAudit({ decision, attempts, reviewResult, validation, headCheck, runBinding, policy, catalog = policy?.catalog }) {
+export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBundle }) {
+  const binding = attempts?.[0]?.binding;
+  let order;
+  try {
+    if (!binding) throw new Error('AUDIT_EVENT_INVALID');
+    order = validateAttemptOrder(attempts, binding, false);
+    const allowed = [selectedRoute?.selected_model_id, ...(selectedRoute?.fallback_models ?? [])];
+    if (!selectedRoute || !Array.isArray(selectedRoute.fallback_models) || typeof selectedRoute.selected_model_id !== 'string') throw new Error('AUDIT_EVENT_INVALID');
+    const available = certifiedBundle?.evidence?.cli_available_models;
+    const attemptedModels = order.completed.map(item => item.model);
+    if (attemptedModels.some(model => !allowed.includes(model))) throw new Error('AUDIT_EVENT_INVALID');
+    let priorModelIndex = -1;
+    for (const model of attemptedModels) {
+      const modelIndex = allowed.indexOf(model);
+      if (modelIndex < priorModelIndex) throw new Error('AUDIT_EVENT_INVALID');
+      priorModelIndex = modelIndex;
+    }
+    if (certifiedBundle && (!Array.isArray(available) || attemptedModels.some(model => !available.includes(model)))) throw new Error('AUDIT_EVENT_INVALID');
+    const successModel = order.success?.model ?? null;
+    if (successModel !== null && (!allowed.includes(successModel) || (Array.isArray(available) && !available.includes(successModel)))) throw new Error('AUDIT_EVENT_INVALID');
+    const desiredTier = selectedRoute.selected_strategy ?? selectedRoute.proposed_strategy;
+    const successEntry = certifiedBundle?.catalog?.models?.find(model => model?.model_id === successModel);
+    if (successModel !== null && desiredTier && successEntry?.capability_tier
+      && TIER_RANK[successEntry.capability_tier] < TIER_RANK[desiredTier]) throw new Error('AUDIT_EVENT_INVALID');
+    return { attemptedModels, successModel };
+  } catch (cause) {
+    if (cause instanceof Error && cause.message === 'AUDIT_EVENT_INVALID') throw cause;
+    throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' });
+  }
+}
+
+export function finalizeRoutingAudit(input) {
+  const allowedKeys = ['decision','attempts','reviewResult','validation','headCheck','runBinding','policy','catalog','selectedRoute','certifiedBundle','runTemp','fs'];
+  if (!ownRecord(input) || Reflect.ownKeys(input).some(key => typeof key !== 'string' || !allowedKeys.includes(key))) throw new Error('AUDIT_EVENT_INVALID');
+  const { decision, attempts, reviewResult, validation, headCheck, runBinding, policy, catalog = policy?.catalog, selectedRoute, certifiedBundle, runTemp, fs: fileSystem = fs } = input;
   validateRoutingDecisionRecord(decision); assertRunBindingValid(runBinding); assertSerializedRunBindingMatches(runBinding, decision);
   assertRunBindingEquals(runBinding, { workflowRunId: decision.workflow_run_id, runAttempt: decision.run_attempt, headSha: decision.head_sha, mode: decision.effective_mode });
-  const order = validateAttemptOrder(attempts);
   const enforced = decision.effective_mode === 'enforce';
+  if (enforced && Array.isArray(attempts) && attempts.length === 0 && (decision.reviewable_file_count !== 0 || reviewResult?.status !== 'skipped')) throw new Error('AUDIT_EVENT_INVALID');
+  let chain = attempts;
+  let validatedAttempts = { attemptedModels: [], successModel: null };
+  if (enforced && decision.reviewable_file_count > 0) {
+    if (typeof runTemp !== 'string' || !selectedRoute || !certifiedBundle) throw new Error('AUDIT_EVENT_INVALID');
+    try {
+      const path = join(runTemp, 'ocr-routing', 'attempts.ndjson');
+      const lines = fileSystem.readFileSync(path, 'utf8').split(/\r?\n/);
+      if (lines.at(-1) === '') lines.pop();
+      if (lines.length === 0 || lines.some(line => line.trim() === '')) throw new Error('AUDIT_EVENT_INVALID');
+      chain = lines.map(line => JSON.parse(line));
+      if (!isDeepStrictEqual(chain, attempts)) throw new Error('AUDIT_EVENT_INVALID');
+    } catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_unavailable' }); }
+    try { assertRunBindingEquals(runBinding, chain[0]?.binding); }
+    catch (cause) { throw Object.assign(new Error('AUDIT_EVENT_INVALID', { cause }), { reason: 'attempt_chain_invalid' }); }
+    validatedAttempts = validateRoutingAttempts({ attempts: chain, selectedRoute, certifiedBundle });
+  }
+  let order = { valid: false, completed: [], success: null };
+  if (enforced && decision.reviewable_file_count > 0) {
+    order = validateAttemptOrder(chain, runBinding, false);
+  } else if (!enforced && Array.isArray(attempts) && attempts.length > 0) {
+    order = validateAttemptOrder(attempts, runBinding, false, { relaxed: true });
+    validatedAttempts = { attemptedModels: order.completed.map(item => item.model), successModel: order.success?.model ?? null };
+  } else if (enforced && reviewResult?.status === 'skipped' && decision.reviewable_file_count === 0) {
+    order = validateAttemptOrder(chain, runBinding, true);
+  }
   const status = value => ['passed','failed','not_run'].includes(value) ? value : 'not_run';
   const reviewStatus = status(validation?.status); const headStatus = status(headCheck?.status);
-  const completedModels = order.valid ? order.completed.map(item => enforced ? catalogModel(catalog, item.model, true) : item.model).filter(Boolean) : [];
+  const completedModels = order.valid ? validatedAttempts.attemptedModels.map(item => enforced ? catalogModel(catalog, item, true) : item).filter(Boolean) : [];
   const attempted = [...new Set(completedModels)];
-  const successfulModel = order.valid && order.success ? catalogModel(catalog, order.success.model, enforced) : null;
+  const successfulModel = order.valid && validatedAttempts.successModel ? catalogModel(catalog, validatedAttempts.successModel, enforced) : null;
   const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' && headStatus === 'passed' && successfulModel !== null;
   const model = value => catalogModel(catalog, value ?? null, enforced);
   const repoId = policy?.repoId ?? policy?.repo_id; const repo = policy?.repo ?? policy?.repoName; const pr = policy?.prNumber ?? policy?.pr_number;
