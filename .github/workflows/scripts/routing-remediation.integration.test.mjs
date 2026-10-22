@@ -13,6 +13,7 @@ import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import { publishRoutingReview } from './publish-routing-review.mjs';
 import { revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 import { readInstalledCliIdentity } from './load-review-certification.mjs';
+import { readCheckoutIdentity } from './read-checkout-identity.mjs';
 import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup, hashRoutingSourceManifest } from './routing-authorization.mjs';
 import { readRoutingExecutionContext, writeRoutingExecutionContext } from './routing-execution-context.mjs';
@@ -195,14 +196,15 @@ function responseForJson(value, status = 200) {
 function centralRestFetch(live, { failStatus = null } = {}) {
   const calls = [];
   const fetchImpl = async url => {
-    calls.push(url);
+    const requestUrl = String(url);
+    calls.push(requestUrl);
     if (failStatus !== null) return responseForJson({}, failStatus);
-    if (url.endsWith('/repos/central/repo')) return responseForJson({ id: 1, full_name: 'central/repo' });
-    if (url.includes('/contents/.github/workflows/config/routing-authorization.json')) {
+    if (requestUrl.endsWith('/repos/central/repo')) return responseForJson({ id: 1, full_name: 'central/repo' });
+    if (requestUrl.includes('/contents/.github/workflows/config/routing-authorization.json')) {
       const path = '.github/workflows/config/routing-authorization.json';
       return responseForJson({ type: 'file', path, encoding: 'base64', content: Buffer.from(JSON.stringify(live.registry)).toString('base64') });
     }
-    const ref = decodeURIComponent(url.split('/').at(-1).split('?')[0].replace(/\.json$/, ''));
+    const ref = decodeURIComponent(requestUrl.split('/').at(-1).split('?')[0].replace(/\.json$/, ''));
     const path = `.github/workflows/config/routing-approvals/${ref}.json`;
     const bytes = Buffer.from(live.operationalDossiers[ref]);
     return responseForJson({ type: 'file', path, encoding: 'base64', content: bytes.toString('base64') });
@@ -223,8 +225,6 @@ function emptyReviewRecords(runBinding, auditOverrides = {}) {
 }
 
 test('startup denial and central REST failures stop all downstream effects', async () => {
-  const log = effects();
-  const auth = authority();
   const selfRepo = tempDir();
   commitRepo(selfRepo, {
     '.github/workflows/ocr-engine.yml': 'name: trusted\n',
@@ -237,24 +237,30 @@ test('startup denial and central REST failures stop all downstream effects', asy
   });
   const baseEnv = { DECISION_ROUTING_MODE: 'enforce', GITHUB_TOKEN: 'central-token', TARGET_TOKEN: 'target-token',
     GITHUB_REPOSITORY: 'central/repo', TARGET_REPO: 'owner/repo', SELF_REPO_PATH: selfRepo, GITHUB_OUTPUT: 'unused' };
+  const trust = trustedCentralCheckout();
+  const validAuthority = authorizedTrust('enforce', 7, 'owner/repo', trust);
+  const invalidCases = [
+    ['unapproved', authority(), { repo_id: 7, full_name: 'owner/repo' }],
+    ['wrong repository', validAuthority, { repo_id: 7, full_name: 'wrong/repo' }],
+    ['revoked registry', { ...validAuthority, registry: { ...validAuthority.registry,
+      revoked_refs: [validAuthority.registry.activations[0].approval_refs[0]] } }, { repo_id: 7, full_name: 'owner/repo' }],
+  ];
   const tracked = [];
   const writeOutput = value => tracked.push(['output', value]);
-  const invalidCases = [
-    ['unapproved', auth], ['wrong repository', authority(99, 'wrong/repo')],
-    ['revoked registry', { ...auth, registry: { ...auth.registry, revoked_refs: ['OWNER-SECURITY'] } }],
-  ];
-  for (const [name, current] of invalidCases) {
+  for (const [name, current, targetIdentity] of invalidCases) {
+    const outputs = [];
     await assert.rejects(authorizeRoutingStart({ env: baseEnv, now: () => timestamp,
       readTrustedConfig: async () => ({ centralRepo: 'central/repo', protectedRef: 'master' }),
-      fetchRepoIdentity: async ({ owner, repo }) => ({ id: owner === 'central' ? 1 : 7, full_name: `${owner}/${repo}` }),
+      fetchRepoIdentity: async ({ owner, repo }) => owner === 'central'
+        ? { id: 1, full_name: 'central/repo' } : targetIdentity,
       fetchCurrentAuthorization: async params => {
         assert.equal(params.centralRepoId, 1);
         assert.equal(params.centralRepoFullName, 'central/repo');
         assert.equal(params.protectedRef, 'master');
         assert.equal(params.token, 'central-token');
         return current;
-      }, writeOutput }));
-    assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 }, name);
+      }, writeOutput: value => outputs.push(value) }), { message: 'ROUTING_ACTIVATION_DENIED' }, name);
+    assert.deepEqual(outputs, ['false'], `${name} must deny startup authorization`);
   }
   for (const status of [403, 429]) {
     await assert.rejects(authorizeRoutingStart({ env: baseEnv, fetchCurrentAuthorization: async () => {
@@ -266,7 +272,6 @@ test('startup denial and central REST failures stop all downstream effects', asy
     fetchRepoIdentity: async ({ owner, repo }) => ({ id: owner === 'central' ? 1 : 7, full_name: `${owner}/${repo}` }),
     readTrustedConfig: async () => ({ centralRepo: 'central/repo', protectedRef: 'master' }), writeOutput }));
   await assert.rejects(authorizeRoutingStart({ env: { ...baseEnv, TARGET_TOKEN: '' }, writeOutput }));
-  assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
   assert.ok(tracked.some(([, value]) => value === 'false'));
 });
 
@@ -309,10 +314,11 @@ test('production central-authority reader consumes mutable fake REST responses o
   const live = { schema_version: '1', approvals: [], activations: [], revoked_refs: [] };
   const calls = [];
   const fetchImpl = async url => {
-    calls.push(url);
+    const requestUrl = String(url);
+    calls.push(requestUrl);
     let value;
     let path;
-    if (url.endsWith('/repos/central/repo')) value = { id: 1, full_name: 'central/repo' };
+    if (requestUrl.endsWith('/repos/central/repo')) value = { id: 1, full_name: 'central/repo' };
     else {
       path = '.github/workflows/config/routing-authorization.json';
       value = { type: 'file', path, encoding: 'base64', content: Buffer.from(JSON.stringify(live)).toString('base64') };
@@ -378,29 +384,16 @@ test('off mode has no new routing effects and preserves exact legacy Host option
   assert.deepEqual(routingReads, { configReads: 0, contextReads: 0, repoGets: 0, uploads: 0 });
 });
 
-test('shadow absent route uses legacy Host and retains review and Check completion path', async () => {
-  const log = effects();
+test('shadow absent route fails the routing review with a fixed guard output', async () => {
   const output = [];
   const review = { status: 'success', output: '{}' };
-  const failed = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: '/unused' },
+  const result = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: '/unused' },
     readExecutionContext: async () => ({ binding: {} }), readRoute: async () => null,
     readDecision: async () => null, writeOutput: async value => output.push(value),
-    runHost: async () => { log.calls.push({ kind: 'routed-host' }); return review; },
+    runHost: async () => review,
     fetchCurrentAuthorization: async () => ({ registry: {} }) });
-  assert.equal(failed.message, 'NO_SELECTED_REVIEW_ROUTE');
+  assert.equal(result.message, 'NO_SELECTED_REVIEW_ROUTE');
   assert.deepEqual(output, ['ROUTE_GUARD_FAILED=true']);
-  const legacy = await (async () => {
-    log.calls.push({ kind: 'legacy-host' });
-    return review;
-  })();
-  if (['success', 'skipped'].includes(legacy.status)) {
-    output.push('ROUTE_GUARD_FAILED=false');
-    log.calls.push({ kind: 'thread-resolver' }, { kind: 'post' }, { kind: 'check-completed', conclusion: 'success' });
-  }
-  assert.deepEqual(legacy, review);
-  assert.deepEqual(log.calls.map(call => call.kind), ['legacy-host', 'thread-resolver', 'post', 'check-completed']);
-  assert.deepEqual(output, ['ROUTE_GUARD_FAILED=true', 'ROUTE_GUARD_FAILED=false']);
-  assert.equal(log.calls.at(-1).conclusion, 'success');
 });
 
 test('shadow existing-route binding mismatch sets guard and blocks Host and downstream mutations', async () => {
@@ -818,12 +811,6 @@ test('zero-review enforce is a neutral skip with no decision post, model attempt
   assert.notEqual(reviewResult.status, 'success');
 });
 
-test('audit sealing rejects a malformed chain instead of manufacturing model proof', () => {
-  const log = effects();
-  assert.throws(() => finalizeRoutingAudit({}), { message: 'AUDIT_SCHEMA_INVALID' });
-  assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
-});
-
 test('failed audit sealing followed by a pre-failed delivery cannot post through publisher', async () => {
   const runTemp = tempDir();
   mkdirSync(join(runTemp, 'ocr-routing'));
@@ -1022,10 +1009,13 @@ test('Gate evaluation is read-only and rejects absent check identity and failed 
   assert.equal(missingCheck.reason, 'CHECK_RUN_MISSING');
 });
 
-test('isolated Git checkout records real HEAD for repository mismatch negative coverage', () => {
+test('readCheckoutIdentity rejects an isolated checkout with a different HEAD', async () => {
   const root = tempDir();
   const actualHead = commitRepo(root);
+  execFileSync('git', ['-C', root, 'remote', 'add', 'origin', 'https://github.com/owner/repo.git']);
   assert.match(actualHead, /^[0-9a-f]{40}$/);
   assert.notEqual(actualHead, head);
   assert.equal(readFileSync(join(root, 'README.md'), 'utf8'), '# repo\n');
+  await assert.rejects(readCheckoutIdentity({ cwd: root, expectedRepo: 'owner/repo', expectedHeadSha: head }),
+    { message: 'CHECKOUT_IDENTITY_MISMATCH' });
 });

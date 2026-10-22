@@ -5,6 +5,7 @@ import test from 'node:test';
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
 const routingReview = fs.readFileSync(new URL('./run-routing-review.mjs', import.meta.url), 'utf8');
 const step = name => workflow.split(`- name: ${name}`)[1]?.split('\n      - name:')[0] ?? '';
+const condition = name => step(name).match(/^        if: (.+)$/m)?.[1] ?? '';
 
 test('off mode retains legacy Host and skips routing steps', () => {
   assert.match(workflow, /DECISION_ROUTING_MODE/);
@@ -64,7 +65,11 @@ test('enforce routing gate revalidates context and startup authorization before 
   const gate = step('Evaluate routing publish eligibility');
   assert.match(gate, /revalidateRoutingExecutionContext/);
   assert.match(gate, /startupAuthorization/);
-  assert.ok(gate.indexOf('const revalidated = revalidateRoutingExecutionContext') < gate.indexOf('const gate = evaluatePublishEligibility'));
+  const revalidateIndex = gate.indexOf('const revalidated = revalidateRoutingExecutionContext');
+  const eligibilityIndex = gate.indexOf('const gate = evaluatePublishEligibility');
+  assert.notEqual(revalidateIndex, -1, 'routing context must be revalidated');
+  assert.notEqual(eligibilityIndex, -1, 'publish eligibility must be evaluated');
+  assert.ok(revalidateIndex < eligibilityIndex, 'context must be revalidated before eligibility');
   assert.match(gate, /startupAuthorization: revalidated\.startupAuthorization,[\s\S]*mode: 'enforce'/);
 });
 
@@ -86,13 +91,15 @@ test('enforce has one publish boundary and legacy posting is off or shadow only'
 
 test('always-run mutations are guarded by authorized startup', () => {
   for (const name of ['Resolve fixed review threads', 'Finalize routing audit', 'Reauthorize routing audit upload', 'Upload routing audit', 'Post review comments', 'Publish enforce review']) {
-    const body = step(name);
-    if (/if:.*always\(\)/.test(body)) assert.match(body, /ROUTING_START_AUTHORIZED == 'true'/, `${name} must require successful startup`);
+    const ifCondition = condition(name);
+    if (/always\(\)/.test(ifCondition)) assert.match(ifCondition, /ROUTING_START_AUTHORIZED == 'true'/, `${name} must require successful startup`);
   }
-  const checkUpdate = step('Update Check Run completed');
-  const debugUpload = step('Upload result artifacts');
-  assert.match(checkUpdate, /if:.*always\(\)/);
-  assert.match(debugUpload, /if:.*always\(\)/);
-  assert.doesNotMatch(checkUpdate, /ROUTING_START_AUTHORIZED != 'true'|PUBLISH_AUTHORIZED != 'true'/);
-  assert.doesNotMatch(debugUpload, /ROUTING_START_AUTHORIZED != 'true'|PUBLISH_AUTHORIZED != 'true'/);
+  const checkUpdate = condition('Update Check Run completed');
+  const debugUpload = condition('Upload result artifacts');
+  assert.match(checkUpdate, /always\(\)/);
+  assert.match(debugUpload, /always\(\)/);
+  for (const [name, ifCondition] of [['Check Run completion', checkUpdate], ['result artifact upload', debugUpload]]) {
+    assert.doesNotMatch(ifCondition, /ROUTING_START_AUTHORIZED\s*==\s*'true'|PUBLISH_AUTHORIZED\s*==\s*'true'/,
+      `${name} must run independently of authorization success`);
+  }
 });
