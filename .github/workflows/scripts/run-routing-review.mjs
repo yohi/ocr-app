@@ -2,7 +2,6 @@ import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
 import { readInstalledCliIdentity as defaultReadInstalledCliIdentity } from './load-review-certification.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
-import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 
 function denied(code) {
   const error = Object.assign(new Error(code), { code });
@@ -38,7 +37,7 @@ export async function runRoutingReview({
   onProgress,
   fetchCurrentAuthorization = fetchCurrentRoutingAuthorization,
   evaluateStartup = evaluateRoutingStartup,
-  resolveModels = resolveCertifiedModels,
+  resolveModels,
   authorityParams,
   trustedInputs,
   repoIdentity,
@@ -52,11 +51,8 @@ export async function runRoutingReview({
   if (mode === 'off') return host(legacy);
 
   try {
-    const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
+    if (!['shadow', 'enforce'].includes(mode)) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     const route = await readRoute();
-    await readDecision();
-    if (!['shadow', 'enforce'].includes(mode) || !sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
-    if (!route) denied('NO_SELECTED_REVIEW_ROUTE');
     const authorization = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
     if (!authorization?.registry) denied('ROUTING_ACTIVATION_DENIED');
     const freshInputs = {
@@ -82,6 +78,13 @@ export async function runRoutingReview({
       now: now(),
     });
     if (!startupAuthorization.authorized) denied('ROUTING_ACTIVATION_DENIED');
+    if (!route) {
+      if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
+      return host({ ...legacy, routingMode: 'shadow' });
+    }
+    const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
+    if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
+    await readDecision();
     let certification = null;
     let cliIdentity = null;
     if (mode === 'enforce' && route.reviewable_file_count > 0) {
@@ -94,7 +97,8 @@ export async function runRoutingReview({
       const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
       const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs,
         cliAvailableModels: [...available] };
-      const resolved = resolveModels({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
+      const resolver = resolveModels ?? (await import('./validate-review-model-catalog.mjs')).resolveCertifiedModels;
+      const resolved = resolver({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
       if (resolved.primaryModelId !== route.selected_model_id
         || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
       certification = { ...freshInputs.catalog, models };

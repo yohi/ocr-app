@@ -154,6 +154,7 @@ jobs:
       - name: Prepare dynamic routing
         id: prepare-routing
         if: steps.target.outputs.internal == 'true' && steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
+        continue-on-error: ${{ env.DECISION_ROUTING_MODE == 'shadow' }}
         env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
@@ -161,6 +162,7 @@ jobs:
           OCR_PREVIEW_PATH: ${{ runner.temp }}/ocr-preview.json
           RUNNER_TEMP: ${{ runner.temp }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
@@ -232,11 +234,12 @@ jobs:
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           TARGET_REPO_PATH: target-repo
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
           import { runHost } from './self-repo/.github/workflows/scripts/antigravity-host.mjs';
-          import { createRunBindingFromEnv, readSelectedReviewRoute } from './self-repo/.github/workflows/scripts/prepare-review-routing.mjs';
+          import { createRunBindingFromEnv } from './self-repo/.github/workflows/scripts/ocr-run-binding.mjs';
           import { createAttemptRecorder } from './self-repo/.github/workflows/scripts/ocr-routing-audit.mjs';
           import { runRoutingReview } from './self-repo/.github/workflows/scripts/run-routing-review.mjs';
           import { hashRoutingSourceManifest } from './self-repo/.github/workflows/scripts/routing-authorization.mjs';
@@ -293,15 +296,18 @@ jobs:
             prompt,
             cwd: 'target-repo',
             runHost: options => runHost({ cwd: 'target-repo', ...options, ...(mode === 'enforce' ? { routingMode: 'enforce' } : {}) }),
-            readRoute: () => fs.existsSync(routePath) ? readSelectedReviewRoute({ runBinding, runTemp: process.env.RUNNER_TEMP }) : null,
+            readRoute: async () => {
+              if (!fs.existsSync(routePath)) return null;
+              const { readSelectedReviewRoute } = await import('./self-repo/.github/workflows/scripts/prepare-review-routing.mjs');
+              return readSelectedReviewRoute({ runBinding, runTemp: process.env.RUNNER_TEMP });
+            },
             readDecision: () => fs.existsSync(decisionPath) ? JSON.parse(fs.readFileSync(decisionPath, 'utf8')) : null,
             expectedBinding: runBinding,
             trustedInputs,
             repoIdentity,
-            authorityParams: mode === 'off' ? undefined : { centralRepoFullName: process.env.GITHUB_REPOSITORY, centralRepoId: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], { encoding: 'utf8' }).trim()), token: process.env.GITHUB_TOKEN },
+            authorityParams: mode === 'off' ? undefined : { centralRepoFullName: process.env.GITHUB_REPOSITORY, centralRepoId: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], { encoding: 'utf8' }).trim()), token: process.env.CENTRAL_GITHUB_TOKEN, protectedRef: 'master', fetchImpl: fetch },
             createRecorder: options => {
               attemptRecorder = createAttemptRecorder({ runTemp: process.env.RUNNER_TEMP, runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), ...options });
-              attemptRecorder.recordStartup(runBinding);
               return attemptRecorder;
             },
             writeResult: async value => fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(value)),
@@ -309,15 +315,6 @@ jobs:
             onProgress: chunk => process.stderr.write(chunk),
           });
           attemptRecorder?.seal();
-          if (mode === 'shadow' && result.status === 'failed' && result.message === 'NO_SELECTED_REVIEW_ROUTE') {
-            console.error('[OpenCodeReview] Routing context unavailable; continuing with diagnostic-only shadow review');
-            try {
-              result = await runHost({ cwd: 'target-repo', prompt, routingMode: 'shadow', onProgress: chunk => process.stderr.write(chunk) });
-              if (['success', 'skipped'].includes(result?.status)) fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ROUTE_GUARD_FAILED=false\n');
-            } catch (error) {
-              console.error(`[OpenCodeReview] Shadow review failed: ${error?.message ?? 'unknown error'}`);
-            }
-          }
           fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
           if (mode === 'enforce' && result.status === 'failed') process.exitCode = 1;
           EOF
@@ -380,6 +377,7 @@ jobs:
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
           VALIDATION_STATUS: ${{ steps.validate-review.outcome == 'success' && 'passed' || 'failed' }}
           HEAD_STATUS: ${{ steps.validate-head.outcome == 'success' && 'passed' || 'failed' }}
         run: |
@@ -388,6 +386,11 @@ jobs:
           import { execFileSync } from 'node:child_process';
           const { createRunBindingFromEnv, readSelectedReviewRoute } = await import('./self-repo/.github/workflows/scripts/prepare-review-routing.mjs');
           import { finalizeRoutingAudit, writeRoutingAudit } from './self-repo/.github/workflows/scripts/ocr-routing-audit.mjs';
+          import { createHash } from 'node:crypto';
+          import { resolve, relative, isAbsolute, sep } from 'node:path';
+          import { fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } from './self-repo/.github/workflows/scripts/routing-authorization.mjs';
+          import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './self-repo/.github/workflows/scripts/routing-execution-context.mjs';
+          import { readInstalledCliIdentity } from './self-repo/.github/workflows/scripts/load-review-certification.mjs';
           const runBinding = createRunBindingFromEnv(process.env);
           const directory = `${process.env.RUNNER_TEMP}/ocr-routing`;
           const decision = JSON.parse(fs.readFileSync(`${directory}/decision.json`, 'utf8'));
@@ -399,7 +402,30 @@ jobs:
           const repositoryId = Number(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`, '--jq', '.id'], { encoding: 'utf8' }).trim());
           const catalog = JSON.parse(fs.readFileSync('./self-repo/.github/workflows/config/review-model-catalog.json', 'utf8'));
           const proposedReviewModel = route.proposed_strategy === null ? null : catalog.strategies[route.proposed_strategy]?.preferred_model_id ?? null;
-          const record = finalizeRoutingAudit({ decision, attempts, reviewResult: result, validation: { status: process.env.VALIDATION_STATUS }, headCheck: { status: process.env.HEAD_STATUS }, runBinding, policy: { repoId: repositoryId, repo: process.env.TARGET_REPO, prNumber: Number(process.env.PR_NUMBER), ...routingState, ownerApprovalRef: routingState.owner_approval_ref, selectedReviewModel: route.selected_model_id, proposedReviewModel }, catalog });
+          const trustedRoot = resolve('self-repo');
+          const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
+          const current = await fetchCurrentRoutingAuthorization({ centralRepoId: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], { encoding: 'utf8' }).trim()),
+            centralRepoFullName: process.env.GITHUB_REPOSITORY, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN, fetchImpl: fetch, now: new Date().toISOString() });
+          if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
+          const readEvidence = path => {
+            const root = resolve(trustedRoot, '.github/workflows/config/routing-evidence');
+            const file = resolve(root, path);
+            const rel = relative(root, file);
+            if (!path || isAbsolute(path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('REVIEW_CERTIFICATION_INVALID');
+            const stat = fs.lstatSync(file);
+            if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('REVIEW_CERTIFICATION_INVALID');
+            return fs.readFileSync(file);
+          };
+          const trustedInputs = { ...current, catalog, readEvidence, needsModel: runBinding.mode === 'enforce' && decision.reviewable_file_count > 0,
+            policySha256: digest(resolve(trustedRoot, '.github/workflows/config/review-risk-policy.json')),
+            catalogSha256: digest(resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json')),
+            index: JSON.parse(fs.readFileSync(resolve(trustedRoot, '.github/workflows/config/review-certification-index.json'), 'utf8')),
+            sourceManifestSha256: hashRoutingSourceManifest({ trustedRoot, readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
+              listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) }) };
+          const cli = trustedInputs.needsModel ? readInstalledCliIdentity({ env: process.env, targetRoot: resolve('target-repo') }) : null;
+          const revalidated = revalidateRoutingExecutionContext({ context: readRoutingExecutionContext({ runTemp: process.env.RUNNER_TEMP, expectedBinding: runBinding }),
+            expectedBinding: runBinding, trustedInputs, repoIdentity: { repo_id: repositoryId, full_name: process.env.TARGET_REPO }, now: new Date().toISOString(), cliBinarySha256: cli?.binarySha256 ?? null });
+          const record = finalizeRoutingAudit({ decision, attempts, reviewResult: result, validation: { status: process.env.VALIDATION_STATUS }, headCheck: { status: process.env.HEAD_STATUS }, runBinding, policy: { repoId: repositoryId, repo: process.env.TARGET_REPO, prNumber: Number(process.env.PR_NUMBER), ...routingState, ownerApprovalRef: routingState.owner_approval_ref, selectedReviewModel: route.selected_model_id, proposedReviewModel }, catalog, selectedRoute: route, certifiedBundle: revalidated.certifiedBundle, runTemp: process.env.RUNNER_TEMP });
           writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
           EOF
 
@@ -437,7 +463,7 @@ jobs:
             const attempts = fs.readFileSync(`${runTemp}/ocr-routing/attempts.ndjson`, 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
             validateRoutingDecisionRecord(decision);
             validateRoutingAudit(finalAudit);
-            if (!attempts.length || !fs.existsSync(`${runTemp}/ocr-routing-execution-context.json`)) throw new Error('SHADOW_AUDIT_UNAVAILABLE');
+            if ((!attempts.length && decision.reviewable_file_count > 0) || !fs.existsSync(`${runTemp}/ocr-routing-execution-context.json`)) throw new Error('SHADOW_AUDIT_UNAVAILABLE');
             const sealed = readRoutingExecutionContext({ runTemp, expectedBinding: binding });
             auditAvailable = true;
             const targetRoot = resolve('target-repo');
@@ -451,7 +477,7 @@ jobs:
               readFile: path => fs.readFileSync(resolve(centralRoot, path)),
               listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
             const current = await fetchCurrentRoutingAuthorization({ centralRepoId: central.id,
-              centralRepoFullName: central.full_name, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN });
+              centralRepoFullName: central.full_name, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN, fetchImpl: fetch, now: new Date().toISOString() });
             if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
             const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
             const evidenceRoot = resolve(centralRoot, '.github/workflows/config/routing-evidence');
@@ -492,7 +518,6 @@ jobs:
             ${{ runner.temp }}/ocr-routing/decision.json
             ${{ runner.temp }}/ocr-routing/attempts.ndjson
             ${{ runner.temp }}/ocr-routing/final.json
-            ${{ runner.temp }}/ocr-routing-execution-context.json
           if-no-files-found: error
           retention-days: 30
 
@@ -541,7 +566,7 @@ jobs:
               readFile: path => fs.readFileSync(resolve(centralRoot, path)),
               listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
             const current = await fetchCurrentRoutingAuthorization({ centralRepoId: centralRepo.id,
-              centralRepoFullName: centralRepo.full_name, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN });
+              centralRepoFullName: centralRepo.full_name, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN, fetchImpl: fetch, now: new Date().toISOString() });
             if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
             const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
             const index = JSON.parse(fs.readFileSync(resolve(centralRoot, '.github/workflows/config/review-certification-index.json'), 'utf8'));
@@ -608,6 +633,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          OCR_RESULT_PATH: /tmp/ocr-result.json
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
@@ -616,6 +642,7 @@ jobs:
           import { resolve, relative, isAbsolute, sep } from 'node:path';
           import { createRunBindingFromEnv, readSelectedReviewRoute } from './self-repo/.github/workflows/scripts/prepare-review-routing.mjs';
           import { publishRoutingReview } from './self-repo/.github/workflows/scripts/publish-routing-review.mjs';
+          import { run as postReview } from './self-repo/.github/workflows/scripts/post-ocr-comments.mjs';
           import { hashRoutingSourceManifest } from './self-repo/.github/workflows/scripts/routing-authorization.mjs';
           const runBinding = createRunBindingFromEnv(process.env);
           const runTemp = process.env.RUNNER_TEMP;
@@ -658,19 +685,12 @@ jobs:
               repoIdentity: { repo_id: targetRepo.id, full_name: targetRepo.full_name },
               policySha256: digest(policyPath), catalogSha256: digest(catalogPath), sourceManifestSha256,
               catalog, index, readEvidence },
-            postReview: async () => 0,
+            postReview,
             writeOutput: async ({ content }) => fs.appendFileSync(process.env.GITHUB_OUTPUT, content),
           });
           if (!result.published) {
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `PUBLISH_REASON=${result.reason}\n`);
             process.exitCode = 1;
-          } else {
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'PUBLISHED=true\n');
-            const { run } = await import('./self-repo/.github/workflows/scripts/post-ocr-comments.mjs');
-            const status = await run({ args: ['--repo', process.env.TARGET_REPO, '--pr', process.env.PR_NUMBER, '--result', '/tmp/ocr-result.json'],
-              token: process.env.GITHUB_TOKEN, botLogin: process.env.GH_APP_SLUG, expectedSha: process.env.COMMIT_SHA,
-              outputPath: process.env.GITHUB_OUTPUT });
-            if (status !== 0) process.exitCode = 1;
           }
           EOF
 

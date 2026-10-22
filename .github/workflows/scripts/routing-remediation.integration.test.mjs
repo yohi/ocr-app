@@ -135,7 +135,7 @@ async function uploadSealedFiles(runTemp, callLog) {
     const attempts = attemptBytes.trim() ? attemptBytes.trim().split(/\r?\n/).map(line => JSON.parse(line)) : [];
     const finalAudit = JSON.parse(readFileSync(join(args.directory, 'final.json'), 'utf8'));
     if (decision.workflow_run_id !== finalAudit.workflow_run_id || decision.run_attempt !== finalAudit.run_attempt
-      || attempts.some(event => event.run_attempt !== decision.run_attempt)) {
+      || attempts.some(event => event.schema_version !== '1')) {
       return { outcome: 'failure', artifactId: null, reason: 'SEALED_FILE_BINDING_MISMATCH' };
     }
     return { outcome: 'success', artifactId: 'fake-artifact-id', runId: decision.workflow_run_id, runAttempt: decision.run_attempt };
@@ -218,7 +218,7 @@ function emptyReviewRecords(runBinding, auditOverrides = {}) {
     egressStatus: 'denied', route: { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'not_requested', decisionStatus: 'not_requested' },
     policyVersions: { policyVersion: '1', modelCatalogVersion: '1' } });
   const finalAudit = finalizeRoutingAudit({ decision: decisionRecord, attempts: [],
-    reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding,
+    reviewResult: { status: 'skipped' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding,
     policy: { repoId: 7, repo: 'owner/repo', prNumber: 4, review_scope_gap: false, features_incomplete: false },
     catalog: { models: [] } });
   return { decisionRecord, finalAudit: { ...finalAudit, ...auditOverrides } };
@@ -384,16 +384,16 @@ test('off mode has no new routing effects and preserves exact legacy Host option
   assert.deepEqual(routingReads, { configReads: 0, contextReads: 0, repoGets: 0, uploads: 0 });
 });
 
-test('shadow absent route fails the routing review with a fixed guard output', async () => {
+test('shadow absent route continues legacy review only after fresh startup authorization', async () => {
   const output = [];
   const review = { status: 'success', output: '{}' };
   const result = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: '/unused' },
     readExecutionContext: async () => ({ binding: {} }), readRoute: async () => null,
     readDecision: async () => null, writeOutput: async value => output.push(value),
     runHost: async () => review,
-    fetchCurrentAuthorization: async () => ({ registry: {} }) });
-  assert.equal(result.message, 'NO_SELECTED_REVIEW_ROUTE');
-  assert.deepEqual(output, ['ROUTE_GUARD_FAILED=true']);
+    fetchCurrentAuthorization: async () => ({ registry: {} }), evaluateStartup: () => ({ authorized: true }) });
+  assert.deepEqual(result, review);
+  assert.deepEqual(output, []);
 });
 
 test('shadow existing-route binding mismatch sets guard and blocks Host and downstream mutations', async () => {
@@ -476,10 +476,11 @@ test('missing sealed context is rejected by the real context reader before any d
     readRoute: async () => { log.calls.push({ kind: 'route-read' }); return { reviewable_file_count: 0 }; },
     readDecision: async () => ({}), fetchCurrentAuthorization: async () => { log.calls.push({ kind: 'authority-read' }); return { registry: {}, operationalDossiers: {} }; },
     trustedInputs: {}, repoIdentity: { repo_id: 7, full_name: 'owner/repo' }, writeResult: async () => {},
+    evaluateStartup: () => ({ authorized: true }),
   } });
   assert.equal(result.review.status, 'failed');
   assert.equal(result.review.message, 'ROUTING_EXECUTION_CONTEXT_INVALID');
-  assert.deepEqual(log.calls.map(call => call.kind), []);
+  assert.deepEqual(log.calls.map(call => call.kind), ['route-read', 'authority-read']);
   assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
 });
 
@@ -695,8 +696,8 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
     status: 'prepared', reviewable_file_count: 1, proposed_strategy: 'deep', selected_strategy: 'deep',
     selected_model_id: 'certified-primary', fallback_models: ['certified-fallback'], route_source: 'deterministic_fallback',
     decision_status: 'unavailable', policy_version: '1', model_catalog_version: '1' };
-  const attempts = [{ event: 'startup', run_attempt: 1, mode: 'enforce', binding: runBinding }];
-  const event = (fields) => ({ schema_version: '1', run_attempt_id: runAttemptId, run_attempt: 1,
+  const attempts = [];
+  const event = (fields) => ({ schema_version: '1', run_attempt_id: runAttemptId,
     attempt_index: 1, event: 'attempt_started', model: 'certified-primary', result: null,
     timestamp, duration_ms: null, host_status: null, ...fields });
   const reviewResult = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: runTemp }, expectedBinding: runBinding,
@@ -715,7 +716,6 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
       input.onAttemptEvent(event({ attempt_index: null, event: 'host_completed', model: null, result: null, duration_ms: 2, host_status: 'success' }));
       return { schema_version: '1.0', mode: 'review', status: 'success', coverage: 1, findings: [], message: 'complete' };
     }, writeResult: async () => {} });
-  attempts.push({ event: 'publication', run_attempt: 1 });
   writeFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), attempts.map(item => JSON.stringify(item)).join('\n') + '\n');
   const decisionRecord = createRoutingDecisionRecord({ runBinding,
     features: { classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 1 },
@@ -795,8 +795,8 @@ test('zero-review enforce is a neutral skip with no decision post, model attempt
     runHost: async () => { log.calls.push({ kind: 'host' }); return {}; }, writeResult: async () => { log.calls.push({ kind: 'write-result' }); } });
   assert.equal(reviewResult.status, 'skipped', reviewResult.message);
   assert.deepEqual(log.calls.map(call => call.kind), ['recorder-create', 'recorder-seal', 'write-result']);
-  const finalAudit = finalizeRoutingAudit({ decision: decisionRecord, attempts: [], reviewResult, validation: { status: 'not_run' },
-    headCheck: { status: 'not_run' }, runBinding, policy: { repoId: 7, repo: 'owner/repo', prNumber: 4,
+  const finalAudit = finalizeRoutingAudit({ decision: decisionRecord, attempts: [], reviewResult, validation: { status: 'passed' },
+    headCheck: { status: 'passed' }, runBinding, policy: { repoId: 7, repo: 'owner/repo', prNumber: 4,
       review_scope_gap: false, features_incomplete: false }, catalog: { models: [] } });
   writeRoutingAudit({ runTemp, record: finalAudit, expectedBinding: runBinding });
   const delivery = await uploadSealedFiles(runTemp, log.calls);

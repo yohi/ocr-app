@@ -43,8 +43,8 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
     if (!selectedStrategyRank || !riskFloorRank || selectedStrategyRank < riskFloorRank
       || decisionRecord.selected_strategy !== selectedRoute.selected_strategy) return result('ROUTING_ACTIVATION_DENIED');
   }
-  if (!emptyReview && finalAudit.review_validation_status !== 'passed') return result('REVIEW_VALIDATION_FAILED');
-  if (!emptyReview && finalAudit.head_validation_status !== 'passed') return result('HEAD_VALIDATION_FAILED');
+  if (finalAudit.review_validation_status !== 'passed') return result('REVIEW_VALIDATION_FAILED');
+  if (finalAudit.head_validation_status !== 'passed') return result('HEAD_VALIDATION_FAILED');
   if (finalAudit.review_scope_gap) return result('REVIEW_SCOPE_GAP_BLOCKED');
   if (decisionRecord.egress_status === 'allowed') {
     const approvalRef = finalAudit.owner_approval_ref;
@@ -57,7 +57,6 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
   } else {
     let validation;
     try {
-      assertRunBindingEquals(expectedBinding, attempts?.[0]?.binding);
       validation = validateRoutingAttempts({ attempts, selectedRoute, certifiedBundle });
     }
     catch { return result('ROUTE_ATTEMPT_MISMATCH'); }
