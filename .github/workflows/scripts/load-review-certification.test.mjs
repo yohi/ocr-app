@@ -125,7 +125,13 @@ test('rejects wrong model, tier, and version after refreshed evidence and approv
   for (const field of ['model_id', 'capability_tier', 'catalog_version']) {
     const f = fixture();
     try {
-      f.certification[field] = field === 'model_id' ? 'other-model' : field === 'capability_tier' ? 'deep' : '9.9.9';
+      if (field === 'model_id') {
+        f.certification[field] = 'other-model';
+      } else if (field === 'capability_tier') {
+        f.certification[field] = 'deep';
+      } else {
+        f.certification[field] = '9.9.9';
+      }
       refreshCertification(f);
       if (field === 'model_id') {
         f.inventory.models = ['other-model'];

@@ -141,9 +141,14 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   });
   const repoIdentity = await identityLoader({ fullName: repoFullName, token: env.GITHUB_TOKEN });
   const centralFullName = trustedInputs.centralRepoFullName ?? env.GITHUB_REPOSITORY ?? repoIdentity.full_name;
-  const centralIdentity = trustedInputs.centralRepoId ? { id: trustedInputs.centralRepoId, full_name: centralFullName }
-    : centralFullName.toLowerCase() === repoIdentity.full_name.toLowerCase() ? repoIdentity
-      : await identityLoader({ fullName: centralFullName, token: centralToken });
+  let centralIdentity;
+  if (trustedInputs.centralRepoId) {
+    centralIdentity = { id: trustedInputs.centralRepoId, full_name: centralFullName };
+  } else if (centralFullName.toLowerCase() === repoIdentity.full_name.toLowerCase()) {
+    centralIdentity = repoIdentity;
+  } else {
+    centralIdentity = await identityLoader({ fullName: centralFullName, token: centralToken });
+  }
   const authorityParams = { centralRepoId: centralIdentity.id, centralRepoFullName: centralIdentity.full_name,
     protectedRef: trustedInputs.protectedRef ?? 'master', token: centralToken, fetchImpl, now: now() };
   const trustedKeys = ['registry', 'operationalDossiers', 'policySha256', 'catalogSha256',
