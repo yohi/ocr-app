@@ -418,7 +418,12 @@ test('default enforce preparation loads and verifies evidence from central confi
       fetchImpl: async (_url, options) => options.method === 'POST'
         ? { ok: false, status: 503 }
         : { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: false, visibility: 'public' }) },
-      listTrackedPaths: () => CENTRAL_MANIFEST_PATHS,
+      execGit: (command, args, options) => {
+        assert.equal(command, '/usr/bin/git');
+        assert.deepEqual(args, ['-C', selfRepo, 'ls-files', '-z']);
+        assert.deepEqual(options, { encoding: 'utf8' });
+        return `${CENTRAL_MANIFEST_PATHS.join('\0')}\0`;
+      },
       runGit: runGitFixture(sha, oldSha),
     });
     assert.equal(result.route.selected_model_id, 'certified-primary');

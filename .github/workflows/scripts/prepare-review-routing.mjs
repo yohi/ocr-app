@@ -116,7 +116,7 @@ export function writeSelectedReviewRoute({ runTemp, result, fs: fileSystem = fs 
 }
 
 export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs, fetchImpl = fetch, runGit,
-  trustedInputs = {}, now = () => new Date().toISOString(), readEvidence, readCliIdentity, fetchRepoIdentity,
+  trustedInputs = {}, now = () => new Date().toISOString(), readEvidence, readCliIdentity, fetchRepoIdentity, execGit = execFileSync,
   fetchCurrentAuthorization = fetchCurrentRoutingAuthorization, listTrackedPaths }) {
   if (env?.DECISION_ROUTING_MODE === 'off') return { route: null, decisionRecord: null, egressStatus: 'not_checked' };
   const binding = runBinding ?? createRunBindingFromEnv(env);
@@ -165,7 +165,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       readFile: (path, root) => fileSystem.readFileSync(resolve(root, path)),
       listTrackedPaths: root => listTrackedPaths
         ? listTrackedPaths(root)
-        : execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
+        : execGit('/usr/bin/git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
     const inputsFromDisk = {
       policySha256: digestFile('.github/workflows/config/review-risk-policy.json'),
       catalogSha256: digestFile('.github/workflows/config/review-model-catalog.json'), sourceManifestSha256,
