@@ -8,6 +8,7 @@ import { createRoutingDecisionRecord, finalizeRoutingAudit, validateRoutingAudit
 import { publishRoutingReview } from './publish-routing-review.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
+import * as checkRun from './update-check-run.mjs';
 
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
 const step = name => workflow.split(`- name: ${name}\n`)[1]?.split('\n      - name:')[0] ?? '';
@@ -31,7 +32,9 @@ async function execute(name, imports, env = {}) {
       `const ${names.startsWith('{') ? names.replace(/ as /g, ': ') : `{ default: ${names} }`} = await imports('${source}');`)
     .replace(/\bimport\(/g, 'imports(');
   const process = { env, exitCode: 0, cwd: () => '.' };
-  await new (Object.getPrototypeOf(async function () {}).constructor)('imports', 'process', code)(imports, process);
+  process.logs = [];
+  const console = { error: (...values) => process.logs.push(values.join(' ')) };
+  await new (Object.getPrototypeOf(async function () {}).constructor)('imports', 'process', 'console', code)(imports, process, console);
   return process;
 }
 
@@ -92,6 +95,7 @@ function fixture(count = 1) {
     'routing-execution-context.mjs': { readRoutingExecutionContext: () => ({}), revalidateRoutingExecutionContext: revalidate },
     'load-review-certification.mjs': { readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
+    'update-check-run.mjs': checkRun,
     'ocr-routing-audit.mjs': { finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }),
       writeRoutingAudit: ({ record }) => files.set('/run/ocr-routing/final.json', JSON.stringify(record)),
       validateRoutingDecisionRecord, validateRoutingAudit },
@@ -102,10 +106,11 @@ function fixture(count = 1) {
         fs.writeFileSync(path.join(runTemp, 'ocr-routing/decision.json'), JSON.stringify(decision));
         return await publishRoutingReview({ ...input, runTemp,
           readExecutionContext: () => ({}), fetchAuthorization: authority, revalidateExecutionContext: revalidate,
-          evaluateGate: () => ({ authorized: true }), checkHead: () => binding.headSha,
+          evaluateGate: () => ({ authorized: true }), checkHead: modules['check-pr-head.mjs'].fetchCurrentHead,
           readCliIdentity: () => ({ binarySha256: undefined }) });
       } finally { fs.rmSync(runTemp, { recursive: true, force: true }); }
     } },
+    'check-pr-head.mjs': { fetchCurrentHead: () => binding.headSha },
     'post-ocr-comments.mjs': { run: async input => {
       assert.deepEqual(input.args, ['--repo', 'owner/repo', '--pr', '1', '--result', '/tmp/ocr-result.json']);
       assert.equal(input.expectedSha, binding.headSha);
@@ -194,4 +199,138 @@ test('routing artifact upload contains exactly the three public audit files', ()
     .trim().split('\n').map(line => line.trim());
   assert.deepEqual(files, ['${{ runner.temp }}/ocr-routing/decision.json',
     '${{ runner.temp }}/ocr-routing/attempts.ndjson', '${{ runner.temp }}/ocr-routing/final.json']);
+});
+
+// Resolve the final step's actual Actions output references, so missing YAML
+// wiring cannot be hidden by supplying the intended environment directly.
+async function completedCheck(value, steps) {
+  const env = { ...value.env, CONCLUSION: 'failure', RESULT_PATH: '/nonexistent-routing-test-result',
+    DETAILS_URL: 'https://github.com/central/repo/actions/runs/123' };
+  const block = step('Update Check Run completed');
+  for (const match of block.matchAll(/^          ([A-Z_]+): \$\{\{ (steps\.[^\n]+?) \}\}$/gm)) {
+    env[match[1]] = match[2].split(' || ').map(reference => {
+      const [, id, field, key] = reference.match(/^steps\.([\w-]+)\.(outputs|outcome)(?:\.([\w-]+))?$/) ?? [];
+      return field === 'outputs' ? steps[id]?.outputs?.[key] : steps[id]?.outcome;
+    }).find(Boolean) ?? '';
+  }
+  let body;
+  await checkRun.updateCheckRun({ env, fetchImpl: async (_url, options) => {
+    body = JSON.parse(options.body);
+    return { ok: true };
+  } });
+  return body;
+}
+
+function stepResult(value, result) {
+  return { outcome: result.exitCode ? 'failure' : 'success', outputs: Object.fromEntries(
+    value.outputs.flatMap(output => output.trim().split('\n')).map(line => {
+      const index = line.indexOf('=');
+      return [line.slice(0, index), line.slice(index + 1)];
+    })) };
+}
+
+test('production failed post reaches the completed Check Run as PUBLISH_FAILED', async () => {
+  const value = fixture(0);
+  const result = await execute('Publish enforce review', value.imports, value.env);
+  const body = await completedCheck(value, {
+    'routing-gate': { outcome: 'success', outputs: { ROUTING_FAILURE_REASON: '' } },
+    'publish-enforce': stepResult(value, result),
+  });
+  assert.equal(body.conclusion, 'failure');
+  assert.match(body.output.summary, /理由: PUBLISH_FAILED\./);
+});
+
+test('production final HEAD revalidation failure reaches the Check Run as HEAD_CHANGED', async () => {
+  const value = fixture(0);
+  const body = await completedCheck(value, {
+    'routing-gate': { outcome: 'success', outputs: { ROUTING_FAILURE_REASON: '' } },
+    'revalidate-before-publish': { outcome: 'failure', outputs: { HEAD_FAILURE_REASON: 'HEAD_CHANGED' } },
+    'publish-enforce': { outcome: 'skipped' },
+  });
+  assert.match(body.output.summary, /理由: HEAD_CHANGED\./);
+});
+
+test('final HEAD revalidation without a mismatch reason reports HEAD_VALIDATION_FAILED', async () => {
+  const value = fixture(0);
+  const body = await completedCheck(value, { 'revalidate-before-publish': { outcome: 'failure' } });
+  assert.match(body.output.summary, /理由: HEAD_VALIDATION_FAILED\./);
+});
+
+for (const [outcome, artifactId] of [['failure', 'artifact'], ['success', '']]) {
+  test(`production artifact delivery ${outcome}/${artifactId || 'missing ID'} reports ROUTING_AUDIT_MISSING`, async () => {
+    const value = fixture(0);
+    const result = await execute('Evaluate routing publish eligibility', value.imports,
+      { ...value.env, DELIVERY_OUTCOME: outcome, ARTIFACT_ID: artifactId });
+    assert.equal(result.exitCode, 1);
+    const body = await completedCheck(value, { 'routing-gate': stepResult(value, result) });
+    assert.match(body.output.summary, /理由: ROUTING_AUDIT_MISSING\./);
+    assert.match(body.output.summary, /actions\/runs\/123/);
+  });
+}
+
+for (const name of ['Reauthorize routing audit upload', 'Evaluate routing publish eligibility']) {
+  for (const failure of ['filesystem', 'json', 'api', 'code']) {
+    test(`${name} suppresses untrusted ${failure} diagnostics`, async () => {
+      const value = fixture(0);
+      const marker = 'PR_BODY_SECRET_SENTINEL';
+      if (failure === 'filesystem') {
+        value.modules['node:fs'].default.readFileSync = () => { throw new Error(marker); };
+      } else if (failure === 'json') {
+        value.files.set('/run/ocr-routing/decision.json', marker);
+      } else {
+        value.modules['routing-authorization.mjs'].fetchCurrentRoutingAuthorization = async () => {
+          throw Object.assign(new Error(marker), failure === 'code' ? { code: marker } : {});
+        };
+      }
+      const result = await execute(name, value.imports, value.env);
+      assert.equal(result.exitCode, 1);
+      assert.doesNotMatch(result.logs.join('\n'), /PR_BODY_SE|Unexpected token|not valid JSON/);
+      assert.match(result.logs.join('\n'), /ROUTING_ACTIVATION_DENIED/);
+    });
+  }
+}
+
+test('publisher HEAD change after the workflow recheck reaches the Check Run as HEAD_CHANGED', async () => {
+  const value = fixture(0);
+  value.modules['check-pr-head.mjs'].fetchCurrentHead = () => 'b'.repeat(40);
+  const result = await execute('Publish enforce review', value.imports, value.env);
+  assert.equal(result.exitCode, 1);
+  assert.ok(!value.calls.includes('post'));
+  const body = await completedCheck(value, { 'publish-enforce': stepResult(value, result) });
+  assert.match(body.output.summary, /理由: HEAD_CHANGED\./);
+});
+
+test('a publisher entrypoint JSON failure emits only a fixed reason and reaches the Check Run', async () => {
+  const value = fixture(0);
+  value.files.set('/run/ocr-routing/final.json', 'PR_BODY_SECRET_SENTINEL');
+  const result = await execute('Publish enforce review', value.imports, value.env);
+  assert.equal(result.exitCode, 1);
+  assert.doesNotMatch(result.logs.join('\n'), /PR_BODY_SE|Unexpected token/);
+  assert.ok(!value.calls.includes('post'));
+  const body = await completedCheck(value, { 'publish-enforce': stepResult(value, result) });
+  assert.match(body.output.summary, /理由: PUBLISH_FAILED\./);
+});
+
+test('failed gate reason is retained when later publication steps are skipped', async () => {
+  const value = fixture(0);
+  const body = await completedCheck(value, {
+    'routing-gate': { outcome: 'failure', outputs: { ROUTING_FAILURE_REASON: 'REVIEW_SCOPE_GAP_BLOCKED' } },
+    'revalidate-before-publish': { outcome: 'skipped' }, 'publish-enforce': { outcome: 'skipped' },
+  });
+  assert.match(body.output.summary, /理由: REVIEW_SCOPE_GAP_BLOCKED\./);
+});
+
+test('publisher failure with no output still reports PUBLISH_FAILED', async () => {
+  const value = fixture(0);
+  const body = await completedCheck(value, { 'publish-enforce': { outcome: 'failure', outputs: {} } });
+  assert.match(body.output.summary, /理由: PUBLISH_FAILED\./);
+});
+
+test('shadow upload diagnostics retain their existing behavior', async () => {
+  const value = fixture(0);
+  value.modules['node:fs'].default.readFileSync = () => { throw new Error('shadow diagnostic'); };
+  const result = await execute('Reauthorize routing audit upload', value.imports,
+    { ...value.env, DECISION_ROUTING_MODE: 'shadow' });
+  assert.equal(result.exitCode, 0);
+  assert.match(result.logs.join('\n'), /shadow diagnostic/);
 });

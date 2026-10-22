@@ -498,7 +498,9 @@ jobs:
               repoIdentity: { repo_id: repo.id, full_name: repo.full_name }, now: new Date().toISOString(), cliBinarySha256: cli?.binarySha256 ?? null });
             authorized = true;
           } catch (error) {
-            console.error(`Routing upload authorization denied: ${error?.code ?? error?.message ?? 'unknown'}`);
+            console.error(process.env.DECISION_ROUTING_MODE === 'enforce'
+              ? 'Routing upload authorization denied: ROUTING_ACTIVATION_DENIED'
+              : `Routing upload authorization denied: ${error?.code ?? error?.message ?? 'unknown'}`);
             if (process.env.DECISION_ROUTING_MODE === 'shadow' && !auditAvailable) {
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'SHADOW_AUDIT_UNAVAILABLE=true\n');
             }
@@ -597,8 +599,8 @@ jobs:
             output(`PUBLISH_AUTHORIZED=${gate.authorized}`);
             output(`ROUTING_FAILURE_REASON=${gate.authorized ? '' : gate.reason}`);
             if (!gate.authorized) process.exitCode = 1;
-          } catch (error) {
-            console.error(`Enforce publish gate denied: ${error?.code ?? error?.message ?? 'unknown'}`);
+          } catch {
+            console.error('Enforce publish gate denied: ROUTING_ACTIVATION_DENIED');
             output('PUBLISH_AUTHORIZED=false');
             output('ROUTING_FAILURE_REASON=ROUTING_ACTIVATION_DENIED');
             process.exitCode = 1;
@@ -644,52 +646,58 @@ jobs:
           import { publishRoutingReview } from './self-repo/.github/workflows/scripts/publish-routing-review.mjs';
           import { run as postReview } from './self-repo/.github/workflows/scripts/post-ocr-comments.mjs';
           import { hashRoutingSourceManifest } from './self-repo/.github/workflows/scripts/routing-authorization.mjs';
-          const runBinding = createRunBindingFromEnv(process.env);
-          const runTemp = process.env.RUNNER_TEMP;
-          const attemptPath = `${runTemp}/ocr-routing/attempts.ndjson`;
-          const attemptRecord = fs.readFileSync(attemptPath, 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
-          const selectedRoute = readSelectedReviewRoute({ runBinding, runTemp });
-          const finalAudit = JSON.parse(fs.readFileSync(`${runTemp}/ocr-routing/final.json`, 'utf8'));
-          const targetRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`], { encoding: 'utf8' }));
-          const centralRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], { encoding: 'utf8' }));
-          const trustedRoot = resolve('self-repo');
-          const policyPath = resolve(trustedRoot, '.github/workflows/config/review-risk-policy.json');
-          const catalogPath = resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json');
-          const indexPath = resolve(trustedRoot, '.github/workflows/config/review-certification-index.json');
-          const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
-          const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-          const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-          const evidenceRoot = resolve(trustedRoot, '.github/workflows/config/routing-evidence');
-          const readEvidence = path => {
-            const evidencePath = resolve(evidenceRoot, path);
-            const relPath = relative(evidenceRoot, evidencePath);
-            if (!path || isAbsolute(path) || relPath === '..' || relPath.startsWith(`..${sep}`) || isAbsolute(relPath)) throw new Error('REVIEW_CERTIFICATION_INVALID');
-            const stat = fs.lstatSync(evidencePath);
-            if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('REVIEW_CERTIFICATION_INVALID');
-            return fs.readFileSync(evidencePath);
-          };
-          const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot,
-            readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
-            listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
-          const result = await publishRoutingReview({
-            env: process.env,
-            runBinding,
-            runTemp,
-            selectedRoute,
-            attemptRecord,
-            finalAudit,
-            delivery: { outcome: process.env.DELIVERY_OUTCOME, artifactId: process.env.ARTIFACT_ID || null,
-              runId: String(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT) },
-            checkRunId: process.env.CHECK_RUN_ID,
-            trustedInputs: { centralRepoId: centralRepo.id, centralRepoFullName: centralRepo.full_name, protectedRef: 'master',
-              repoIdentity: { repo_id: targetRepo.id, full_name: targetRepo.full_name },
-              policySha256: digest(policyPath), catalogSha256: digest(catalogPath), sourceManifestSha256,
-              catalog, index, readEvidence },
-            postReview,
-            writeOutput: async ({ content }) => fs.appendFileSync(process.env.GITHUB_OUTPUT, content),
-          });
-          if (!result.published) {
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, `PUBLISH_REASON=${result.reason}\n`);
+          try {
+            const runBinding = createRunBindingFromEnv(process.env);
+            const runTemp = process.env.RUNNER_TEMP;
+            const attemptPath = `${runTemp}/ocr-routing/attempts.ndjson`;
+            const attemptRecord = fs.readFileSync(attemptPath, 'utf8').split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line));
+            const selectedRoute = readSelectedReviewRoute({ runBinding, runTemp });
+            const finalAudit = JSON.parse(fs.readFileSync(`${runTemp}/ocr-routing/final.json`, 'utf8'));
+            const targetRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`], { encoding: 'utf8' }));
+            const centralRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], { encoding: 'utf8' }));
+            const trustedRoot = resolve('self-repo');
+            const policyPath = resolve(trustedRoot, '.github/workflows/config/review-risk-policy.json');
+            const catalogPath = resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json');
+            const indexPath = resolve(trustedRoot, '.github/workflows/config/review-certification-index.json');
+            const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
+            const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+            const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+            const evidenceRoot = resolve(trustedRoot, '.github/workflows/config/routing-evidence');
+            const readEvidence = path => {
+              const evidencePath = resolve(evidenceRoot, path);
+              const relPath = relative(evidenceRoot, evidencePath);
+              if (!path || isAbsolute(path) || relPath === '..' || relPath.startsWith(`..${sep}`) || isAbsolute(relPath)) throw new Error('REVIEW_CERTIFICATION_INVALID');
+              const stat = fs.lstatSync(evidencePath);
+              if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('REVIEW_CERTIFICATION_INVALID');
+              return fs.readFileSync(evidencePath);
+            };
+            const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot,
+              readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
+              listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
+            const result = await publishRoutingReview({
+              env: process.env,
+              runBinding,
+              runTemp,
+              selectedRoute,
+              attemptRecord,
+              finalAudit,
+              delivery: { outcome: process.env.DELIVERY_OUTCOME, artifactId: process.env.ARTIFACT_ID || null,
+                runId: String(process.env.GITHUB_RUN_ID), runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT) },
+              checkRunId: process.env.CHECK_RUN_ID,
+              trustedInputs: { centralRepoId: centralRepo.id, centralRepoFullName: centralRepo.full_name, protectedRef: 'master',
+                repoIdentity: { repo_id: targetRepo.id, full_name: targetRepo.full_name },
+                policySha256: digest(policyPath), catalogSha256: digest(catalogPath), sourceManifestSha256,
+                catalog, index, readEvidence },
+              postReview,
+              writeOutput: async ({ content }) => fs.appendFileSync(process.env.GITHUB_OUTPUT, content),
+            });
+            if (!result.published) {
+              fs.appendFileSync(process.env.GITHUB_OUTPUT, `PUBLISH_REASON=${result.reason}\n`);
+              process.exitCode = 1;
+            }
+          } catch {
+            console.error('Enforce publication failed: PUBLISH_FAILED');
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'PUBLISH_REASON=PUBLISH_FAILED\n');
             process.exitCode = 1;
           }
           EOF
@@ -731,5 +739,9 @@ jobs:
           RESULT_PATH: /tmp/ocr-result.json
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           ROUTING_FAILURE_REASON: ${{ steps.routing-gate.outputs.ROUTING_FAILURE_REASON }}
+          PUBLISH_FAILURE_REASON: ${{ steps.publish-enforce.outputs.PUBLISH_REASON }}
+          PUBLISH_HEAD_OUTCOME: ${{ steps.revalidate-before-publish.outcome }}
+          PUBLISH_HEAD_REASON: ${{ steps.revalidate-before-publish.outputs.HEAD_FAILURE_REASON }}
+          PUBLISH_OUTCOME: ${{ steps.publish-enforce.outcome }}
         run: |
           node self-repo/.github/workflows/scripts/update-check-run.mjs

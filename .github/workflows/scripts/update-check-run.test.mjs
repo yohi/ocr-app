@@ -55,7 +55,7 @@ describe('buildCheckRunUpdate', () => {
       routingFailureReason: 'ARTIFACT_UPLOAD_FAILED',
     });
     assert.doesNotMatch(update.output.summary, /PR secret|Bearer hidden/);
-    assert.match(update.output.summary, /ARTIFACT_UPLOAD_FAILED/);
+    assert.match(update.output.summary, /ROUTING_AUDIT_MISSING/);
     assert.match(update.output.summary, /actions\/runs\/123/);
   });
 
@@ -68,4 +68,13 @@ describe('buildCheckRunUpdate', () => {
     assert.match(update.output.summary, /REVIEW_EXECUTION_FAILED/);
     assert.doesNotMatch(update.output.summary, /injected|secret/);
   });
+
+  for (const reason of ['ROUTING_ACTIVATION_DENIED', 'ROUTE_ATTEMPT_MISMATCH', 'ROUTING_AUTHORITY_UNAVAILABLE']) {
+    it(`preserves the trusted ${reason} denial`, () => {
+      const update = buildCheckRunUpdate({ conclusion: 'failure', enforce: true,
+        targetRepo: 'owner/repo', prNumber: '42', detailsUrl: 'https://github.com/central/repo/actions/runs/123',
+        routingFailureReason: reason });
+      assert.match(update.output.summary, new RegExp(`理由: ${reason}\\.`));
+    });
+  }
 });
