@@ -71,6 +71,12 @@ test('zero-review normal skip is eligible but scope-gap skip is not', () => {
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, reviewable_file_count: 0 }, finalAudit: { ...finalAudit, executed_review_model: primaryModel, host_success_model: primaryModel, attempted_review_models: [primaryModel], review_quality_measured: true } })).reason, 'AUDIT_INCOMPLETE');
 });
 
+test('reviewable files require route validation even when no model is selected', () => {
+  assert.equal(evaluatePublishEligibility(args({
+    selectedRoute: { selected_model_id: null, fallback_models: [], selected_strategy: null },
+  })).reason, 'ROUTING_ACTIVATION_DENIED');
+});
+
 test('publish gate rejects incomplete schemas and mismatched decision/audit fields', () => {
   assert.equal(evaluatePublishEligibility(args({ finalAudit: { ...finalAudit, injected: true } })).reason, 'AUDIT_INCOMPLETE');
   assert.equal(evaluatePublishEligibility(args({ decisionRecord: { ...decisionRecord, policy_version: undefined } })).reason, 'AUDIT_INCOMPLETE');

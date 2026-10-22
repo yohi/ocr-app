@@ -36,8 +36,7 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
     assertRunBindingEquals(expectedBinding, { workflowRunId: finalAudit.workflow_run_id, runAttempt: finalAudit.run_attempt, headSha: finalAudit.head_sha, mode: finalAudit.effective_mode });
   } catch { return result('RUN_BINDING_MISMATCH'); }
   if (finalAudit.audit_status !== 'sealed') return result('AUDIT_NOT_SEALED');
-  const emptyReview = decisionRecord.reviewable_file_count === 0
-    || (selectedRoute?.selected_model_id == null && selectedRoute?.fallback_models?.length === 0);
+  const emptyReview = decisionRecord.reviewable_file_count === 0;
   if (!emptyReview) {
     const selectedStrategyRank = tierRank[selectedRoute?.selected_strategy];
     const riskFloorRank = tierRank[decisionRecord.risk_floor];
