@@ -67,9 +67,8 @@ export async function authorizeRoutingStart({
     const sourceManifestSha256 = hashRoutingSourceManifest({
       trustedRoot: root,
       readFile: path => fileSystem.readFileSync(path),
-      listTrackedPaths: trustedRoot => execFileSync('git', ['-C', trustedRoot, 'ls-files', '-z'], {
+      listTrackedPaths: trustedRoot => execFileSync('/usr/bin/git', ['-C', trustedRoot, 'ls-files', '-z'], {
         encoding: 'utf8',
-        env: { ...process.env, PATH: '/usr/bin:/bin' },
       }).split('\0').filter(Boolean),
     });
     const policySha256 = sha256File(resolve(root, '.github/workflows/config/review-risk-policy.json'));
