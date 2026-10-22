@@ -37,7 +37,7 @@ npm ci --prefix .github/workflows --ignore-scripts
 node --test .github/workflows/scripts/*.test.mjs
 ```
 
-- 結果: 441/441 PASS、exit 0
+- 結果: 443/443 PASS、exit 0
 - 対象コミット: `5564145fdd4ffcef57de8f109771fe3ca1817540`
 - 備考: `prepare-review-routing.test.mjs`、`run-routing-review.test.mjs`、
   `routing-remediation.integration.test.mjs`、`routing-traceability.test.mjs`
