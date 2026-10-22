@@ -37,7 +37,9 @@ function sha256File(path) {
 
 function writeGithubOutput(env, value) {
   if (!env.GITHUB_OUTPUT) throw new Error(ERROR_DENIED);
-  writeFileSync(env.GITHUB_OUTPUT, `ROUTING_START_AUTHORIZED=${value}\n`, { flag: 'a' });
+  writeFileSync(env.GITHUB_OUTPUT,
+    `ROUTING_START_AUTHORIZED=${value}\nROUTING_START_FAILURE_REASON=${value === 'false' ? ERROR_DENIED : ''}\n`,
+    { flag: 'a' });
 }
 
 export async function authorizeRoutingStart({
