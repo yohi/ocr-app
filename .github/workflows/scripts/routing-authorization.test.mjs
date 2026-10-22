@@ -245,13 +245,14 @@ test('central authority uses authenticated fixed-ref GETs and returns exact raw 
   const calls = [];
   const fetchImpl = async (url, options) => {
     calls.push({ url, options });
-    if (url === 'https://api.github.com/repos/central/repo') {
+    const href = String(url);
+    if (href === 'https://api.github.com/repos/central/repo') {
       return new Response(JSON.stringify({ id: 9, full_name: 'central/repo' }));
     }
-    const dossierRef = url.endsWith('routing-approvals/OWNER-OWNER-OPERATION.json?ref=master')
+    const dossierRef = href.endsWith('routing-approvals/OWNER-OWNER-OPERATION.json?ref=master')
       ? 'OWNER-OWNER-OPERATION'
-      : url.endsWith('routing-approvals/OWNER-SECURITY.json?ref=master') ? 'OWNER-SECURITY' : 'OWNER-AUDIT-OPERATION';
-    if (url.endsWith('routing-authorization.json?ref=master')) {
+      : href.endsWith('routing-approvals/OWNER-SECURITY.json?ref=master') ? 'OWNER-SECURITY' : 'OWNER-AUDIT-OPERATION';
+    if (href.endsWith('routing-authorization.json?ref=master')) {
       return new Response(JSON.stringify({ type: 'file', path: '.github/workflows/config/routing-authorization.json', encoding: 'base64', content: registryBytes.toString('base64') }));
     }
     const bytes = input.operationalDossiers[dossierRef];
@@ -262,8 +263,19 @@ test('central authority uses authenticated fixed-ref GETs and returns exact raw 
   assert.equal(Object.hasOwn(result, 'reason'), false);
   assert.equal(calls.length, 5);
   assert.ok(calls.every(({ options }) => options.method === 'GET' && options.headers.Authorization === 'Bearer token'));
-  assert.ok(calls.every(({ url }) => url.includes('ref=master') || url === 'https://api.github.com/repos/central/repo'));
+  assert.ok(calls.every(({ url }) => url.origin === 'https://api.github.com'));
+  assert.ok(calls.every(({ url }) => url.searchParams.get('ref') === 'master' || url.pathname === '/repos/central/repo'));
   assert.equal(Buffer.isBuffer(result.operationalDossiers['OWNER-OWNER-OPERATION']), true);
   const startup = evaluateRoutingStartup({ ...input, registry: result.registry, operationalDossiers: result.operationalDossiers });
   assert.equal(startup.authorized, true);
+});
+
+test('central authority rejects repository names that could change the GitHub API origin', async () => {
+  let calls = 0;
+  const result = await fetchCurrentRoutingAuthorization({
+    centralRepoId: 9, centralRepoFullName: 'github.com@attacker.example/repo', protectedRef: 'master', token: 'token',
+    fetchImpl: async () => { calls += 1; return new Response('{}'); }, now,
+  });
+  assert.deepEqual(result, { authorized: false, reason: 'ROUTING_AUTHORITY_UNAVAILABLE' });
+  assert.equal(calls, 0);
 });

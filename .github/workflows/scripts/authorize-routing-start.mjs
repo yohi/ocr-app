@@ -11,7 +11,7 @@ import {
 
 const ERROR_DENIED = 'ROUTING_ACTIVATION_DENIED';
 
-function defaultReadTrustedConfig(env) {
+async function defaultReadTrustedConfig(env) {
   const [owner, repo] = (env.GITHUB_REPOSITORY ?? '').split('/');
   if (!owner || !repo) throw new Error(ERROR_DENIED);
   return { centralRepo: `${owner}/${repo}`, protectedRef: 'master' };
@@ -67,7 +67,9 @@ export async function authorizeRoutingStart({
     const sourceManifestSha256 = hashRoutingSourceManifest({
       trustedRoot: root,
       readFile: path => fileSystem.readFileSync(path),
-      listTrackedPaths: trustedRoot => execFileSync('git', ['-C', trustedRoot, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean),
+      listTrackedPaths: trustedRoot => execFileSync('/usr/bin/git', ['-C', trustedRoot, 'ls-files', '-z'], {
+        encoding: 'utf8',
+      }).split('\0').filter(Boolean),
     });
     const policySha256 = sha256File(resolve(root, '.github/workflows/config/review-risk-policy.json'));
     const catalogSha256 = sha256File(resolve(root, '.github/workflows/config/review-model-catalog.json'));
