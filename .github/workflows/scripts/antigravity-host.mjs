@@ -189,7 +189,7 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress }) {
+function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress, executablePath, routingMode }) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -207,7 +207,11 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     };
     let child;
     try {
-      child = spawn('agy', [
+      if (routingMode === 'enforce' && typeof executablePath !== 'string') {
+        return earlyFinish({ error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' });
+      }
+      const command = routingMode === 'enforce' ? executablePath : 'agy';
+      child = spawn(command, [
         '--add-dir', workspace,
         '--sandbox',
         '--disable-slash-commands',
@@ -351,6 +355,7 @@ async function runMode({
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   printTimeoutMs,
   onProgress,
+  executablePath,
 }) {
   const enforce = routingMode === 'enforce';
   const auditId = typeof runAttemptId === 'string' && /^[a-f0-9]{32}$/i.test(runAttemptId)
@@ -452,6 +457,8 @@ async function runMode({
           mode,
           model: currentModel,
           onProgress: progressSink,
+          executablePath,
+          routingMode,
         });
       } catch (error) {
         childResult = { error };

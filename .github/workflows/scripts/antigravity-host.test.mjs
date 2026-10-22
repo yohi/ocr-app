@@ -658,6 +658,33 @@ test('runHost ignores a fallback model that normalizes to the primary model', as
   assert.equal(result.status, 'failed');
 });
 
+test('enforce spawns the attested absolute executable while off and shadow retain agy lookup', async () => {
+  for (const [routingMode, executablePath, expected] of [
+    ['enforce', '/attested/bin/agy', '/attested/bin/agy'],
+    ['shadow', '/attested/bin/agy', 'agy'],
+    ['off', '/attested/bin/agy', 'agy'],
+  ]) {
+    let command;
+    await runHost({ prompt: 'Review.', cwd: '/tmp/trusted', routingMode, model: 'cert-primary',
+      executablePath, modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {},
+      spawn: value => { command = value; return childFor(JSON.stringify(validReview)); } });
+    assert.equal(command, expected);
+  }
+});
+
+test('enforce without an attested executable fails without spawning', async () => {
+  let spawnCount = 0;
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {},
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(spawnCount, 0);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.schema_version, '1.0');
+  assert.equal(result.message, 'REVIEW_EXECUTION_FAILED');
+});
+
 test('enforce requires explicit valid fallbackModels before spawning', async () => {
   for (const fallbackModels of [null, undefined, 'fallback', ['cert-fallback-a', 'cert-fallback-a'], ['cert-primary'], ['unknown'], ['uncertified'], ['lower-tier'], ['cert-disallowed'], [42]]) {
     let spawnCount = 0;
@@ -689,7 +716,7 @@ test('enforce fallbackModels array controls ordered fallback attempts and empty 
     const seenModels = [];
     const result = await runHost({
       prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-      modelCatalog: certifiedCatalog, fallbackModels, maxRetries: 0, onAttemptEvent: () => {},
+      modelCatalog: certifiedCatalog, fallbackModels, executablePath: '/attested/agy', maxRetries: 0, onAttemptEvent: () => {},
       spawn: (_command, args) => {
         const actual = args[args.indexOf('--model') + 1];
         seenModels.push(actual);
@@ -750,7 +777,7 @@ test('shadow observer errors are ignored and enforce observer errors fail closed
 
   const enforce = await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [],
+    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy',
     onAttemptEvent: () => { throw new Error('private observer failure'); },
     spawn: spawnWith(JSON.stringify(validReview)),
   });
@@ -775,7 +802,7 @@ test('enforce observer records timeout and spawn_failed results', async () => {
   const timeoutEvents = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [], maxRetries: 0, timeoutMs: 5,
+    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy', maxRetries: 0, timeoutMs: 5,
     onAttemptEvent: event => timeoutEvents.push(event),
     spawn: spawnWith(undefined, { delayMs: 50 }),
   });
@@ -788,7 +815,7 @@ test('enforce observer records timeout and spawn_failed results', async () => {
   const spawnEvents = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [], maxRetries: 0,
+    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy', maxRetries: 0,
     onAttemptEvent: event => spawnEvents.push(event),
     spawn: () => { throw new Error('spawn failed'); },
   });
@@ -804,7 +831,7 @@ test('enforce observer records ordered fallback attempt sequence', async () => {
   const seenModels = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: ['cert-fallback-a'], maxRetries: 0, retryDelayMs: 1,
+    modelCatalog: certifiedCatalog, fallbackModels: ['cert-fallback-a'], executablePath: '/attested/agy', maxRetries: 0, retryDelayMs: 1,
     onAttemptEvent: event => events.push(event),
     spawn: (_command, args) => {
       const actual = args[args.indexOf('--model') + 1];
