@@ -97,6 +97,7 @@ for (const mode of ['shadow', 'enforce']) {
           return { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: true, visibility: 'private' }) };
         },
         runGit: async (_command, args) => {
+          if (args[0] === 'config') return Buffer.from(`${environment.CHECKOUT_REPO}\n`);
           if (args[0] === 'rev-parse') return Buffer.from(`${'a'.repeat(40)}\n`);
           if (args[0] === 'merge-base') return Buffer.from(`${'b'.repeat(40)}\n`);
           return Buffer.alloc(0);
@@ -113,3 +114,21 @@ for (const mode of ['shadow', 'enforce']) {
     } finally { rmSync(runTemp, { recursive: true, force: true }); }
   });
 }
+
+test('routing rejects a checkout whose origin does not match the target repository', async () => {
+  const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-identity-'));
+  try {
+    const environment = { ...env('shadow'), RUNNER_TEMP: runTemp, OCR_PREVIEW_PATH: join(runTemp, 'preview.json'), BASE_REF: 'main', TARGET_REPO: 'owner/repo', CHECKOUT_REPO: 'https://github.com/owner/repo.git', GITHUB_TOKEN: 'test-token' };
+    writeFileSync(environment.OCR_PREVIEW_PATH, JSON.stringify({ reviewable_files: [] }));
+    await assert.rejects(prepareRoutingStep({
+      env: environment,
+      fetchImpl: async () => ({ ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: true, visibility: 'private' }) }),
+      runGit: async (_command, args) => {
+        if (args[0] === 'config') return Buffer.from('https://github.com/other/repo.git\n');
+        if (args[0] === 'rev-parse') return Buffer.from(`${'a'.repeat(40)}\n`);
+        if (args[0] === 'merge-base') return Buffer.from(`${'b'.repeat(40)}\n`);
+        return Buffer.alloc(0);
+      },
+    }), { message: 'CHECKOUT_IDENTITY_MISMATCH' });
+  } finally { rmSync(runTemp, { recursive: true, force: true }); }
+});
