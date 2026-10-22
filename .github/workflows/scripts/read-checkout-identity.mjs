@@ -19,7 +19,7 @@ function parseOrigin(value) {
   if (typeof value !== 'string' || value.length > MAX_BUFFER) return null;
   const normalized = value.endsWith('\n') ? value.slice(0, -1) : value;
   if (/[\r\n]/.test(normalized)) return null;
-  const match = /^(?:https:\/\/github\.com\/|git@github\.com:)([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+?)(?:\.git)?$/i.exec(normalized);
+  const match = /^(?:https:\/\/github\.com\/|git@github\.com:)([a-z0-9-]+)\/([a-z0-9._-]+?)(?:\.git)?$/i.exec(normalized);
   if (!match?.[2] || match[2] === '.' || match[2] === '..') return null;
   return `${match[1]}/${match[2]}`;
 }
@@ -45,6 +45,6 @@ export async function readCheckoutIdentity({ cwd, expectedRepo, expectedHeadSha,
   const headText = gitOutputText(head);
   const headSha = /^[0-9a-f]{40}\n?$/.test(headText) ? headText.trim() : '';
   const normalizedExpectedHead = typeof expectedHeadSha === 'string' ? expectedHeadSha.toLowerCase() : '';
-  if (!fullName || fullName.toLowerCase() !== normalizedExpectedRepo || !/^[0-9a-f]{40}$/.test(headSha) || headSha !== normalizedExpectedHead) mismatch();
+  if (fullName?.toLowerCase() !== normalizedExpectedRepo || !/^[0-9a-f]{40}$/.test(headSha) || headSha !== normalizedExpectedHead) mismatch();
   return { fullName, headSha };
 }
