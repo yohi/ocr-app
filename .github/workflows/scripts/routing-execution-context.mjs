@@ -52,7 +52,8 @@ export function writeRoutingExecutionContext({ runTemp, context, fileSystem = { 
   } catch { failure(INVALID); }
   finally {
     if (temp) {
-      try { fileSystem.unlinkSync(temp); } catch (cleanupError) { void cleanupError; }
+      // Ignore cleanup failures so they do not replace the normalized error above.
+      try { fileSystem.unlinkSync(temp); } catch { }
     }
   }
 }
