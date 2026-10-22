@@ -4,6 +4,11 @@ import test from 'node:test';
 
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
 
+function stepCondition(name) {
+  const step = workflow.split(`- name: ${name}`)[1]?.split(/\n\s+- name:/)[0] ?? '';
+  return step.match(/^\s+if:\s*(.+)$/m)?.[1] ?? '';
+}
+
 test('workflow preserves off mode and confines routing dependency and secret setup', () => {
   assert.match(workflow, /DECISION_ROUTING_MODE/);
   assert.match(workflow, /npm ci --prefix self-repo\/\.github\/workflows --ignore-scripts/);
@@ -29,8 +34,18 @@ test('enforce publication requires a successful audit artifact gate and fresh HE
   assert.match(workflow, /name: Evaluate routing publish eligibility/);
   assert.match(workflow, /PUBLISH_AUTHORIZED/);
   assert.match(workflow, /name: Revalidate PR head immediately before enforce publication/);
-  assert.match(workflow, /if:.*PUBLISH_AUTHORIZED.*true/);
+  assert.match(stepCondition('Revalidate PR head immediately before enforce publication'), /always\(\)/);
+  assert.match(stepCondition('Revalidate PR head immediately before enforce publication'), /steps\.routing-gate\.outputs\.PUBLISH_AUTHORIZED == 'true'/);
   assert.match(workflow, /steps\.target\.outputs\.internal == 'true'.*DECISION_ROUTING_MODE.*off/);
+});
+
+test('completion check update and debug artifact upload run regardless of routing authorization', () => {
+  for (const name of ['Update Check Run completed', 'Upload result artifacts']) {
+    const condition = stepCondition(name);
+    assert.match(condition, /always\(\)/, `${name} must run after earlier steps fail`);
+    assert.doesNotMatch(condition, /ROUTING_START_AUTHORIZED|PUBLISH_AUTHORIZED/,
+      `${name} must not depend on routing authorization`);
+  }
 });
 
 test('upload failure cannot authorize success and thread resolution is excluded from enforce', () => {
