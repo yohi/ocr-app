@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
+import { isAbsolute, normalize, resolve, sep } from 'node:path';
 
 const EVIDENCE_LIMIT = 65_536;
 const CLI_LIMIT = 256 * 1024 * 1024;

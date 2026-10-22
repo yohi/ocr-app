@@ -21,6 +21,15 @@ const preparation = () => ({
 });
 const route = () => serializeSelectedReviewRoute(preparation());
 const hash = value => createHash('sha256').update(value).digest('hex');
+const runGitFixture = (sha, oldSha) => async (_command, args) => {
+  if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
+  if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
+  if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
+  if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
+  if (args.includes('--numstat')) return Buffer.from('1\t0\tsrc/example.js\0');
+  if (args.includes('--raw')) return Buffer.from(`:100644 100644 ${oldSha} ${sha} M\0src/example.js\0`);
+  return Buffer.alloc(0);
+};
 const riskPolicyFixture = JSON.parse(readFileSync(new URL('../config/review-risk-policy.json', import.meta.url), 'utf8'));
 const catalogFixture = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const egressPolicyFixture = JSON.parse(readFileSync(new URL('../config/decision-egress-policy.json', import.meta.url), 'utf8'));
@@ -361,15 +370,7 @@ test('enforce preparation uses a verified certification bundle end to end', asyn
       fetchImpl: async (_url, options) => options.method === 'POST'
         ? { ok: false, status: 503 }
         : { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: false, visibility: 'public' }) },
-      runGit: async (_command, args) => {
-        if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
-        if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
-        if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
-        if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
-        if (args.includes('--numstat')) return Buffer.from('1\t0\tsrc/example.js\0');
-        if (args.includes('--raw')) return Buffer.from(`:100644 100644 ${oldSha} ${sha} M\0src/example.js\0`);
-        return Buffer.alloc(0);
-      },
+      runGit: runGitFixture(sha, oldSha),
     });
     assert.equal(result.route.selected_model_id, 'certified-primary');
     assert.deepEqual(result.route.fallback_models, ['certified-fallback']);
@@ -418,15 +419,7 @@ test('default enforce preparation loads and verifies evidence from central confi
         ? { ok: false, status: 503 }
         : { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: false, visibility: 'public' }) },
       listTrackedPaths: () => CENTRAL_MANIFEST_PATHS,
-      runGit: async (_command, args) => {
-        if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
-        if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
-        if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
-        if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
-        if (args.includes('--numstat')) return Buffer.from('1\t0\tsrc/example.js\0');
-        if (args.includes('--raw')) return Buffer.from(`:100644 100644 ${oldSha} ${sha} M\0src/example.js\0`);
-        return Buffer.alloc(0);
-      },
+      runGit: runGitFixture(sha, oldSha),
     });
     assert.equal(result.route.selected_model_id, 'certified-primary');
     assert.deepEqual(result.route.fallback_models, ['certified-fallback']);
@@ -453,15 +446,7 @@ test('enforce preparation rejects omitted model certification evidence before De
         return options.method === 'POST' ? { ok: false, status: 503 }
           : { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: false, visibility: 'public' }) };
       },
-      runGit: async (_command, args) => {
-        if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
-        if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
-        if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
-        if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
-        if (args.includes('--numstat')) return Buffer.from('1\t0\tsrc/example.js\0');
-        if (args.includes('--raw')) return Buffer.from(`:100644 100644 ${oldSha} ${sha} M\0src/example.js\0`);
-        return Buffer.alloc(0);
-      },
+      runGit: runGitFixture(sha, oldSha),
     }), { message: 'REVIEW_CERTIFICATION_INVALID' });
     assert.equal(decisionPosts, 0);
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
@@ -486,15 +471,7 @@ test('shadow startup revocation is re-evaluated before a Decision POST', async (
         if (options.method === 'POST') decisionPosts++;
         return { ok: true, json: async () => ({ id: 1, full_name: 'owner/repo', private: false, visibility: 'public' }) };
       },
-      runGit: async (_command, args) => {
-        if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
-        if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
-        if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
-        if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
-        if (args.includes('--numstat')) return Buffer.from('1\t0\tsrc/example.js\0');
-        if (args.includes('--raw')) return Buffer.from(`:100644 100644 ${oldSha} ${sha} M\0src/example.js\0`);
-        return Buffer.alloc(0);
-      },
+      runGit: runGitFixture(sha, oldSha),
     }), { code: 'ROUTING_ACTIVATION_DENIED' });
     assert.equal(freshReads, 1);
     assert.equal(decisionPosts, 0);

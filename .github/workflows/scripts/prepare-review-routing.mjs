@@ -12,10 +12,9 @@ import { requestReviewDecision } from './decision-provider.mjs';
 import { selectReviewRoute } from './select-review-model.mjs';
 import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
-import { evaluateRoutingStartup, fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
+import { evaluateRoutingStartup, fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } from './routing-authorization.mjs';
 import { loadVerifiedCertification, readInstalledCliIdentity } from './load-review-certification.mjs';
 import { readRoutingExecutionContext, writeRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
-import { hashRoutingSourceManifest } from './routing-authorization.mjs';
 
 const ROUTE_KEYS = Object.freeze([
   'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status',
