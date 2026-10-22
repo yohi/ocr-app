@@ -225,6 +225,17 @@ test('route validation rejects out-of-chain models and unavailable bundle models
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, catalog: { models: [{ model_id: 'claude-opus-4-6-thinking', capability_tier: 'fast' }] } } }), { message: 'AUDIT_EVENT_INVALID' });
 });
 
+test('route validation accepts failed Host completion without completed attempts', () => {
+  const failedChain = [event({ event: 'host_completed', attempt_index: null, model: null, result: null, host_status: 'failed' })];
+  const bundle = { catalog, evidence: { certification_refs: [], cli_available_models: [] } };
+
+  assert.deepEqual(validateRoutingAttempts({
+    attempts: failedChain,
+    selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' },
+    certifiedBundle: bundle,
+  }), { attemptedModels: [], successModel: null });
+});
+
 test('route validation rejects completed attempts that regress from fallback to primary', () => {
   const primary = 'claude-opus-4-6-thinking';
   const fallback = 'claude-sonnet-4-6';

@@ -51,7 +51,7 @@ export function validateAttemptOrder(attempts, _binding, allowEmpty) {
         completed.push(event);
         active = null;
       } else {
-        if (active || completed.length === 0) invalid();
+        if (active || (completed.length === 0 && event.host_status !== 'failed')) invalid();
         terminal = true;
         const successes = completed.filter(item => item.result === 'host_validated_success');
         if (successes.length > 1 || (event.host_status === 'success' && successes.length !== 1)) invalid();
