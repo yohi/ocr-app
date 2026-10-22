@@ -70,6 +70,7 @@ function fixture({
   writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), JSON.stringify(decisionRecord));
   const calls = [];
   const outputs = [];
+  const resultPaths = [];
   let postCalls = 0;
   let fetchCalls = 0;
   let revalidationCalls = 0;
@@ -120,6 +121,7 @@ function fixture({
     postReview: async input => {
       calls.push('post');
       postCalls += 1;
+      resultPaths.push(input.args.at(-1));
       assert.equal(input.expectedSha, runBinding.headSha);
       assert.deepEqual(input.args.slice(0, 4), ['--repo', 'owner/repo', '--pr', '7']);
       if (postError) throw postError;
@@ -131,7 +133,7 @@ function fixture({
     },
     now: () => '2026-10-21T12:00:00.000Z',
   };
-  return { args, calls, outputs, get postCalls() { return postCalls; }, get fetchCalls() { return fetchCalls; },
+  return { args, calls, outputs, resultPaths, get postCalls() { return postCalls; }, get fetchCalls() { return fetchCalls; },
     get revalidationCalls() { return revalidationCalls; }, cleanup: () => rmSync(runTemp, { recursive: true, force: true }) };
 }
 
@@ -144,6 +146,16 @@ test('valid fallback publishes in gate, head, post order', async () => {
     assert.deepEqual(value.calls, ['gate', 'head', 'post']);
     assert.equal(value.postCalls, 1);
     assert.equal(value.outputs[0].content, 'PUBLISHED=true\n');
+  } finally { value.cleanup(); }
+});
+
+test('publication uses the run-scoped result path when OCR_RESULT_PATH is unset', async () => {
+  const value = fixture();
+  delete value.args.env.OCR_RESULT_PATH;
+  try {
+    const result = await publishRoutingReview(value.args);
+    assert.equal(result.published, true);
+    assert.equal(value.resultPaths[0], join(value.args.runTemp, 'ocr-result.json'));
   } finally { value.cleanup(); }
 });
 

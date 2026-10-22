@@ -102,7 +102,7 @@ export async function publishRoutingReview({
       if (currentHead !== runBinding.headSha) {
         reason = 'HEAD_MISMATCH';
       } else {
-        const resultPath = env.OCR_RESULT_PATH ?? '/tmp/ocr-result.json';
+        const resultPath = env.OCR_RESULT_PATH ?? join(runTemp, 'ocr-result.json');
         let postResult;
         try {
           postResult = await postReview({
