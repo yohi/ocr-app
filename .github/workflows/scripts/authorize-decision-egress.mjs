@@ -59,7 +59,7 @@ function classifyVisibility(body, apiValid) {
   return visibility;
 }
 
-export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRepo, runBinding, installationToken, policy, fetchImpl }) {
+export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutIdentity, runBinding, installationToken, policy, fetchImpl }) {
   let validBinding = true;
   try { assertRunBindingValid(runBinding); } catch { validBinding = false; }
   const target = parseTarget(targetRepo);
@@ -69,7 +69,7 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutRep
     : await fetchRepository({ owner, repoName, installationToken, fetchImpl });
   const visibility = classifyVisibility(body, apiValid);
   const entry = policyEntries(policy).find(item => item && typeof item === 'object' && item.id === body?.id && item.full_name === body?.full_name && approvalValid(item.approval_ref, policy?.approval_reference_format));
-  const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && checkoutName(checkoutRepo) === target.toLowerCase() && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
+  const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && typeof checkoutIdentity?.fullName === 'string' && checkoutIdentity.fullName.toLowerCase() === target.toLowerCase() && checkoutIdentity.headSha === headSha && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
   return {
     schema_version: '1', allowed, reason: allowed ? REASONS.authorized : REASONS.denied, visibility,
     repo_id: apiValid ? body.id : 0, full_name: apiValid ? body.full_name : target,
