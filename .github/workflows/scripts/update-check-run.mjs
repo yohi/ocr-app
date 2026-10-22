@@ -23,6 +23,7 @@ function finalRoutingFailureReason(env) {
   if (env.PUBLISH_FAILURE_REASON) return env.PUBLISH_FAILURE_REASON;
   // The publisher may fail before it can emit an output (file/API/JSON errors).
   if (env.PUBLISH_OUTCOME === 'failure') return 'PUBLISH_FAILED';
+  if (env.ROUTING_START_OUTCOME === 'failure') return env.ROUTING_START_FAILURE_REASON || 'ROUTING_ACTIVATION_DENIED';
   return 'REVIEW_EXECUTION_FAILED';
 }
 
@@ -97,7 +98,7 @@ export async function updateCheckRun({ env = process.env, fetchImpl = fetch } = 
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   updateCheckRun().catch((error) => {
-    console.error(process.env.DECISION_ROUTING_MODE === 'enforce' ? 'Check Run update failed' : error.message);
+    console.error(process.env.DECISION_ROUTING_MODE === 'enforce' ? 'CHECK_UPDATE_FAILED' : error.message);
     process.exitCode = 1;
   });
 }

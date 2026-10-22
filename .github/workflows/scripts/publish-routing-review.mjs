@@ -97,7 +97,7 @@ export async function publishRoutingReview({
           expectedSha: runBinding.headSha,
         });
       } catch {
-        reason = 'HEAD_MISMATCH';
+        throw Object.assign(new Error('HEAD_VALIDATION_FAILED'), { code: 'HEAD_VALIDATION_FAILED' });
       }
       if (currentHead !== runBinding.headSha) {
         reason = 'HEAD_MISMATCH';
@@ -126,6 +126,7 @@ export async function publishRoutingReview({
     }
   } catch (error) {
     const knownDenials = new Set([
+      'HEAD_VALIDATION_FAILED',
       'ROUTING_AUTHORITY_UNAVAILABLE',
       'ROUTING_EXECUTION_CONTEXT_INVALID',
       'ROUTING_ACTIVATION_DENIED',

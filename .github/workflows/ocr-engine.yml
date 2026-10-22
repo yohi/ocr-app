@@ -743,5 +743,7 @@ jobs:
           PUBLISH_HEAD_OUTCOME: ${{ steps.revalidate-before-publish.outcome }}
           PUBLISH_HEAD_REASON: ${{ steps.revalidate-before-publish.outputs.HEAD_FAILURE_REASON }}
           PUBLISH_OUTCOME: ${{ steps.publish-enforce.outcome }}
+          ROUTING_START_OUTCOME: ${{ steps.routing-start.outcome }}
+          ROUTING_START_FAILURE_REASON: ${{ steps.routing-start.outputs.ROUTING_START_FAILURE_REASON }}
         run: |
           node self-repo/.github/workflows/scripts/update-check-run.mjs

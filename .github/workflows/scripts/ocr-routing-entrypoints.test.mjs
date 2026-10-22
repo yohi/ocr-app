@@ -9,6 +9,7 @@ import { publishRoutingReview } from './publish-routing-review.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import * as checkRun from './update-check-run.mjs';
+import { authorizeRoutingStart } from './authorize-routing-start.mjs';
 
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
 const step = name => workflow.split(`- name: ${name}\n`)[1]?.split('\n      - name:')[0] ?? '';
@@ -333,4 +334,57 @@ test('shadow upload diagnostics retain their existing behavior', async () => {
     { ...value.env, DECISION_ROUTING_MODE: 'shadow' });
   assert.equal(result.exitCode, 0);
   assert.match(result.logs.join('\n'), /shadow diagnostic/);
+});
+
+test('startup denial reaches the completed Check Run through actual startup outputs', async () => {
+  const directory = fs.mkdtempSync(path.join(tmpdir(), 'routing-start-output-'));
+  try {
+    const value = fixture(0);
+    const outputPath = path.join(directory, 'output');
+    await assert.rejects(authorizeRoutingStart({
+      env: { ...value.env, TARGET_TOKEN: '', GITHUB_OUTPUT: outputPath },
+    }), { message: 'ROUTING_ACTIVATION_DENIED' });
+    const outputs = Object.fromEntries(fs.readFileSync(outputPath, 'utf8').trim().split('\n').map(line => line.split('=')));
+    assert.equal(outputs.ROUTING_START_AUTHORIZED, 'false');
+    assert.equal(outputs.ROUTING_START_FAILURE_REASON, 'ROUTING_ACTIVATION_DENIED');
+    const body = await completedCheck(value, {
+      'routing-start': { outcome: 'failure', outputs },
+      'routing-gate': { outcome: 'skipped' }, 'revalidate-before-publish': { outcome: 'skipped' },
+      'publish-enforce': { outcome: 'skipped' },
+    });
+    assert.equal(body.conclusion, 'failure');
+    assert.match(body.output.summary, /理由: ROUTING_ACTIVATION_DENIED\./);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('startup failure without outputs has a fixed activation-denied fallback', async () => {
+  const body = await completedCheck(fixture(0), { 'routing-start': { outcome: 'failure' } });
+  assert.match(body.output.summary, /理由: ROUTING_ACTIVATION_DENIED\./);
+});
+
+for (const [steps, reason] of [
+  [{ 'routing-gate': { outputs: { ROUTING_FAILURE_REASON: 'ROUTING_AUDIT_MISSING' } } }, 'ROUTING_AUDIT_MISSING'],
+  [{ 'revalidate-before-publish': { outcome: 'failure', outputs: { HEAD_FAILURE_REASON: 'HEAD_CHANGED' } } }, 'HEAD_CHANGED'],
+  [{ 'publish-enforce': { outcome: 'failure', outputs: { PUBLISH_REASON: 'HEAD_VALIDATION_FAILED' } } }, 'HEAD_VALIDATION_FAILED'],
+  [{ 'publish-enforce': { outcome: 'failure' } }, 'PUBLISH_FAILED'],
+]) {
+  test(`startup fallback cannot replace the higher-priority ${reason} reason`, async () => {
+    const body = await completedCheck(fixture(0), {
+      'routing-start': { outcome: 'failure', outputs: { ROUTING_START_FAILURE_REASON: 'ROUTING_ACTIVATION_DENIED' } },
+      ...steps,
+    });
+    assert.match(body.output.summary, new RegExp(`理由: ${reason}\\.`));
+  });
+}
+
+test('publisher HEAD retrieval failure reports HEAD_VALIDATION_FAILED without posting', async () => {
+  const value = fixture(0);
+  value.modules['check-pr-head.mjs'].fetchCurrentHead = () => { throw new Error('PR_BODY_SECRET_SENTINEL'); };
+  const result = await execute('Publish enforce review', value.imports, value.env);
+  assert.equal(result.exitCode, 1);
+  assert.ok(!value.calls.includes('post'));
+  const body = await completedCheck(value, { 'publish-enforce': stepResult(value, result) });
+  assert.equal(body.conclusion, 'failure');
+  assert.match(body.output.summary, /理由: HEAD_VALIDATION_FAILED\./);
+  assert.doesNotMatch(body.output.summary + result.logs.join('\n'), /PR_BODY_SECRET_SENTINEL|HEAD_CHANGED/);
 });
