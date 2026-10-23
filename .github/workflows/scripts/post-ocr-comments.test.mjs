@@ -979,3 +979,33 @@ test('shadow review posting stops before the GitHub mutation when fresh authoriz
 
   assert.deepEqual(requests, []);
 });
+
+test('direct enforce adapter invocation remains denied without publisher authorization', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([]);
+
+  await assert.rejects(run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+  }), /ROUTING_ACTIVATION_DENIED/);
+
+  assert.deepEqual(requests, []);
+});
+
+test('enforce adapter posts when the publisher supplies its post-Gate authorization', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([{ data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-1' }, status: 201 }]);
+
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+    authorizeBeforeMutation: async () => true,
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+});

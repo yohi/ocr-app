@@ -107,12 +107,16 @@ export async function publishRoutingReview({
         try {
           postResult = await postReview({
             env,
-          args: ['--repo', env.TARGET_REPO, '--pr', String(env.PR_NUMBER), '--result', resultPath],
-          token: env.GITHUB_TOKEN,
-          botLogin: env.GH_APP_SLUG,
-          expectedSha: runBinding.headSha,
-          outputPath: env.GITHUB_OUTPUT,
-        });
+            args: ['--repo', env.TARGET_REPO, '--pr', String(env.PR_NUMBER), '--result', resultPath],
+            token: env.GITHUB_TOKEN,
+            botLogin: env.GH_APP_SLUG,
+            expectedSha: runBinding.headSha,
+            outputPath: env.GITHUB_OUTPUT,
+            ...(runBinding.mode === 'enforce' ? {
+              authorizeBeforeMutation: async () => gateResult.authorized === true
+                && currentHead === runBinding.headSha,
+            } : {}),
+          });
         } catch {
           reason = 'PUBLISH_FAILED';
         }

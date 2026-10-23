@@ -154,6 +154,20 @@ test('valid fallback publishes in gate, head, post order', async () => {
   } finally { value.cleanup(); }
 });
 
+test('Given an authorized enforce publication, When the post adapter checks mutation authority, Then the publisher grants the checked mutation', async () => {
+  const value = fixture();
+  let authorizeBeforeMutation;
+  value.args.postReview = async input => {
+    authorizeBeforeMutation = input.authorizeBeforeMutation;
+    return 0;
+  };
+  try {
+    const result = await publishRoutingReview(value.args);
+    assert.equal(result.published, true);
+    assert.equal(await authorizeBeforeMutation(), true);
+  } finally { value.cleanup(); }
+});
+
 test('publication uses the run-scoped result path when OCR_RESULT_PATH is unset', async () => {
   const value = fixture();
   delete value.args.env.OCR_RESULT_PATH;
