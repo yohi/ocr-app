@@ -24,7 +24,12 @@ const zeroReviewDecision = runBinding => createRoutingDecisionRecord({ runBindin
 const catalog = { models: [{ model_id: 'claude-opus-4-6-thinking', capability_tier: 'deep', certification_status: 'certified' }] };
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const certifiedRealCatalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'a'.repeat(64)}` })) };
-const realBundle = { catalog: certifiedRealCatalog, evidence: { certification_refs: certifiedRealCatalog.models.map(model => ({ model_id: model.model_id, certification_reference: model.certification_reference })), cli_available_models: certifiedRealCatalog.models.map(model => model.model_id) } };
+const realBundle = { catalog: certifiedRealCatalog, evidence: {
+  certification_refs: certifiedRealCatalog.models.map(model => ({ model_id: model.model_id,
+    certification_reference: model.certification_reference, capability_tier: model.capability_tier,
+    catalog_version: model.catalog_version })),
+  cli_available_models: certifiedRealCatalog.models.map(model => model.model_id),
+} };
 const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: 'claude-opus-4-6-thinking', result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 
  test('decision record is strict, bound, and frozen', () => {

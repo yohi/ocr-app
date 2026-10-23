@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -11,6 +14,7 @@ import {
   runHost,
   runThreadHost,
 } from './antigravity-host.mjs';
+import { readInstalledCliIdentity } from './load-review-certification.mjs';
 
 function childFor(output, { stderr = '', stderrChunks = [], exitCode = 0, delayMs = 0 } = {}) {
   const child = new EventEmitter();
@@ -37,6 +41,12 @@ function childFor(output, { stderr = '', stderrChunks = [], exitCode = 0, delayM
 
 function spawnWith(output, options = {}) {
   return () => childFor(output, options);
+}
+
+function attestedExecutable(executablePath = '/attested/agy') {
+  const executableIdentity = { resolvedPath: executablePath, binarySha256: 'a'.repeat(64) };
+  return { executablePath, executableIdentity, targetRoot: '/tmp/trusted',
+    readCliIdentity: () => executableIdentity };
 }
 
 const certifiedCatalog = {
@@ -666,10 +676,25 @@ test('enforce spawns the attested absolute executable while off and shadow retai
   ]) {
     let command;
     await runHost({ prompt: 'Review.', cwd: '/tmp/trusted', routingMode, model: 'cert-primary',
-      executablePath, modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {},
+      ...(routingMode === 'enforce' ? attestedExecutable(executablePath) : { executablePath }),
+      modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {},
       spawn: value => { command = value; return childFor(JSON.stringify(validReview)); } });
     assert.equal(command, expected);
   }
+});
+
+test('enforce awaits asynchronous CLI identity before spawning', async () => {
+  let spawnCount = 0;
+  const { executablePath, executableIdentity, targetRoot } = attestedExecutable();
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    executablePath, executableIdentity, targetRoot,
+    readCliIdentity: async () => executableIdentity,
+    modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {}, maxRetries: 0,
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(spawnCount, 1);
+  assert.equal(result.status, 'success');
 });
 
 test('enforce without an attested executable fails without spawning', async () => {
@@ -716,7 +741,8 @@ test('enforce fallbackModels array controls ordered fallback attempts and empty 
     const seenModels = [];
     const result = await runHost({
       prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-      modelCatalog: certifiedCatalog, fallbackModels, executablePath: '/attested/agy', maxRetries: 0, onAttemptEvent: () => {},
+      modelCatalog: certifiedCatalog, fallbackModels, ...attestedExecutable(),
+      maxRetries: 0, onAttemptEvent: () => {},
       spawn: (_command, args) => {
         const actual = args[args.indexOf('--model') + 1];
         seenModels.push(actual);
@@ -727,6 +753,42 @@ test('enforce fallbackModels array controls ordered fallback attempts and empty 
     });
     assert.deepEqual(seenModels, expected);
     assert.equal(result.status, expected.length === 1 ? 'failed' : 'success');
+  }
+});
+
+test('enforce rechecks the attested CLI digest before each fallback spawn', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-cli-attestation-'));
+  const home = join(root, 'home');
+  const targetRoot = join(root, 'target');
+  const executablePath = join(home, '.local', 'bin', 'agy');
+  const env = { HOME: home };
+  mkdirSync(join(home, '.local', 'bin'), { recursive: true });
+  mkdirSync(targetRoot);
+  writeFileSync(executablePath, 'original-cli');
+  chmodSync(executablePath, 0o755);
+  const executableIdentity = readInstalledCliIdentity({ env, targetRoot });
+  const spawnedModels = [];
+
+  try {
+    const result = await runHost({
+      prompt: 'Review.', cwd: targetRoot, env, targetRoot, routingMode: 'enforce',
+      model: 'cert-primary', fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+      executablePath: executableIdentity.resolvedPath, executableIdentity, maxRetries: 0,
+      onAttemptEvent: () => {},
+      spawn: (_command, args) => {
+        spawnedModels.push(args[args.indexOf('--model') + 1]);
+        if (spawnedModels.length === 1) {
+          writeFileSync(executablePath, 'replaced-cli');
+          return childFor(JSON.stringify({ error: 'No capacity available' }));
+        }
+        return childFor(JSON.stringify(validReview));
+      },
+    });
+
+    assert.deepEqual(spawnedModels, ['cert-primary']);
+    assert.equal(result.status, 'failed');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -776,8 +838,9 @@ test('shadow observer errors are ignored and enforce observer errors fail closed
   assert.equal(shadow.status, 'success');
 
   const enforce = await runHost({
+    ...attestedExecutable(),
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy',
+    modelCatalog: certifiedCatalog, fallbackModels: [],
     onAttemptEvent: () => { throw new Error('private observer failure'); },
     spawn: spawnWith(JSON.stringify(validReview)),
   });
@@ -802,7 +865,7 @@ test('enforce observer records timeout and spawn_failed results', async () => {
   const timeoutEvents = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy', maxRetries: 0, timeoutMs: 5,
+    modelCatalog: certifiedCatalog, fallbackModels: [], ...attestedExecutable(), maxRetries: 0, timeoutMs: 5,
     onAttemptEvent: event => timeoutEvents.push(event),
     spawn: spawnWith(undefined, { delayMs: 50 }),
   });
@@ -815,7 +878,7 @@ test('enforce observer records timeout and spawn_failed results', async () => {
   const spawnEvents = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: [], executablePath: '/attested/agy', maxRetries: 0,
+    modelCatalog: certifiedCatalog, fallbackModels: [], ...attestedExecutable(), maxRetries: 0,
     onAttemptEvent: event => spawnEvents.push(event),
     spawn: () => { throw new Error('spawn failed'); },
   });
@@ -831,7 +894,8 @@ test('enforce observer records ordered fallback attempt sequence', async () => {
   const seenModels = [];
   await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
-    modelCatalog: certifiedCatalog, fallbackModels: ['cert-fallback-a'], executablePath: '/attested/agy', maxRetries: 0, retryDelayMs: 1,
+    modelCatalog: certifiedCatalog, fallbackModels: ['cert-fallback-a'], ...attestedExecutable(),
+    maxRetries: 0, retryDelayMs: 1,
     onAttemptEvent: event => events.push(event),
     spawn: (_command, args) => {
       const actual = args[args.indexOf('--model') + 1];

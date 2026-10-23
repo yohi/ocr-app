@@ -13,6 +13,12 @@ const selectedModel = fastEntry.model_id;
 const fallbackModel = fastEntry.allowed_fallbacks[0];
 const certifiedCatalog = { ...catalog, models: catalog.models.map(model => ({ ...model,
   certification_status: 'certified', certification_reference: `sha256:${'b'.repeat(64)}` })) };
+const verifiedCertificationRefs = certifiedCatalog.models.map(model => ({
+  certification_reference: model.certification_reference,
+  model_id: model.model_id,
+  capability_tier: model.capability_tier,
+  catalog_version: model.catalog_version,
+}));
 const selectedRoute = {
   schema_version: '1', workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt,
   head_sha: runBinding.headSha, effective_mode: 'enforce', status: 'prepared', reviewable_file_count: 1,
@@ -103,7 +109,8 @@ function fixture({
       if (revalidateError) throw revalidateError;
       assert.equal(input.trustedInputs.needsModel, true);
       return { startupAuthorization: authorization, certifiedBundle: { catalog: certifiedCatalog,
-        evidence: { certification_refs: [], cli_available_models: certifiedCatalog.models.map(model => model.model_id) } } };
+        evidence: { certification_refs: verifiedCertificationRefs,
+          cli_available_models: certifiedCatalog.models.map(model => model.model_id) } } };
     },
     evaluateGate: async input => {
       calls.push('gate');

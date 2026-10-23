@@ -13,7 +13,13 @@ const decisionRecord = {
 };
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const catalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'b'.repeat(64)}` })) };
-const certifiedBundle = { catalog, evidence: { certification_refs: catalog.models.map(model => ({ model_id: model.model_id, certification_reference: model.certification_reference })), cli_available_models: catalog.models.map(model => model.model_id) } };
+const certifiedBundle = { catalog, evidence: {
+  verifiedCertificationRefs: catalog.models.map(model => ({ model_id: model.model_id,
+    certification_reference: model.certification_reference, capability_tier: model.capability_tier,
+    catalog_version: model.catalog_version })),
+  cliAvailableModels: catalog.models.map(model => model.model_id),
+  cli_available_models: catalog.models.map(model => model.model_id),
+} };
 const primaryModel = catalog.strategies.deep.preferred_model_id;
 const fastModel = catalog.models.find(model => model.capability_tier === 'fast');
 const deepFallbackModel = catalog.models.find(model => model.model_id === fastModel.allowed_fallbacks[0]);
@@ -168,4 +174,21 @@ test('fast primary failure followed by allowed deep fallback is publishable', ()
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
   assert.deepEqual(evaluatePublishEligibility(args({ decisionRecord: fastDecisionRecord, finalAudit: fastFinalAudit, selectedRoute: route, attempts: chain })), { authorized: true, reason: 'PUBLISH_AUTHORIZED' });
+});
+
+test('publish gate rejects a saved fallback outside the current certified route', () => {
+  const extraDeepModel = { ...catalog.models.find(model => model.capability_tier === 'deep'),
+    model_id: 'extra-deep-model', certification_reference: `sha256:${'c'.repeat(64)}`, allowed_fallbacks: [] };
+  const routeCatalog = { ...catalog, models: [...catalog.models, extraDeepModel] };
+  const routeBundle = { catalog: routeCatalog, evidence: {
+    verifiedCertificationRefs: [...certifiedBundle.evidence.verifiedCertificationRefs,
+      { model_id: extraDeepModel.model_id, certification_reference: extraDeepModel.certification_reference,
+        capability_tier: extraDeepModel.capability_tier, catalog_version: extraDeepModel.catalog_version }],
+    cliAvailableModels: [...certifiedBundle.evidence.cliAvailableModels, extraDeepModel.model_id],
+    cli_available_models: [...certifiedBundle.evidence.cli_available_models, extraDeepModel.model_id],
+  } };
+  const route = { ...selectedRoute, fallback_models: [extraDeepModel.model_id] };
+
+  const result = evaluatePublishEligibility(args({ selectedRoute: route, certifiedBundle: routeBundle }));
+  assert.equal(result.authorized, false, result.reason);
 });

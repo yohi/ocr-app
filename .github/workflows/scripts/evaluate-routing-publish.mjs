@@ -1,5 +1,6 @@
 import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBindingEquals } from './ocr-run-binding.mjs';
 import { validateRoutingAudit, validateRoutingDecisionRecord, validateRoutingAttempts } from './ocr-routing-audit.mjs';
+import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 
 const result = reason => ({ authorized: false, reason });
 const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
@@ -76,6 +77,22 @@ export function evaluatePublishEligibility({ mode, expectedBinding, decisionReco
       || finalAudit.host_success_model !== successModel || finalAudit.selected_review_model !== primary
       || !successEntry || !tierRank[successEntry.capability_tier] || tierRank[successEntry.capability_tier] < tierRank[requiredTier]
       || tierRank[successEntry.capability_tier] < tierRank[decisionRecord.risk_floor]) return result('MODEL_NOT_CERTIFIED');
+    const evidence = certifiedBundle?.evidence;
+    let canonicalRoute;
+    try {
+      canonicalRoute = resolveCertifiedModels(certifiedBundle?.catalog, selectedRoute.selected_strategy, {
+        verifiedCertificationRefs: evidence?.verifiedCertificationRefs ?? evidence?.certification_refs,
+        cliAvailableModels: evidence?.cliAvailableModels ?? evidence?.cli_available_models,
+      });
+    } catch {
+      return result('ROUTE_ATTEMPT_MISMATCH');
+    }
+    if (selectedRoute.selected_model_id !== canonicalRoute.primaryModelId
+      || !Array.isArray(selectedRoute.fallback_models)
+      || selectedRoute.fallback_models.length !== canonicalRoute.allowedFallbackModels.length
+      || selectedRoute.fallback_models.some((model, index) => model !== canonicalRoute.allowedFallbackModels[index])) {
+      return result('ROUTE_ATTEMPT_MISMATCH');
+    }
   }
   if (delivery?.outcome !== 'success') return result('ARTIFACT_UPLOAD_FAILED');
   if (typeof delivery.artifactId !== 'string' || delivery.artifactId.length === 0) return result('MISSING_ARTIFACT_ID');

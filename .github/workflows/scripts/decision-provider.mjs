@@ -15,7 +15,7 @@ function result(status, reason, fields = {}) {
 function validExpectedBinding(binding) {
   try {
     assertRunBindingValid(binding);
-    return binding.destination === 'openrouter-decisions';
+    return true;
   } catch {
     return false;
   }

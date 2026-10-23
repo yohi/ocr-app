@@ -9,7 +9,7 @@ const state = {
   security_signal: 'metadata_not_observed', migration_signal: 'metadata_not_observed', review_scope_gap: false,
   features_incomplete: false, classification_status: 'allowlisted_docs_only',
 };
-const expectedBinding = { workflowRunId: '123', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'shadow', destination: 'openrouter-decisions' };
+const expectedBinding = { workflowRunId: '123', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'shadow' };
 const grant = { schema_version: '1', allowed: true, reason: 'authorized', visibility: 'public', repo_id: 1, full_name: 'org/repo', head_sha: expectedBinding.headSha, workflow_run_id: '123', run_attempt: 2, destination: 'openrouter-decisions', policy_version: '1', approval_ref: 'APPROVED-1', checked_at: '2026-01-01T00:00:00.000Z' };
 const answer = { answers: { review_strategy: { type: 'choice', choice: 'fast', probabilities: { fast: 0.8, deep: 0.2 }, confidence: 0.8 } } };
 const response = (body = answer, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) });
