@@ -2,6 +2,8 @@ import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
 import { readInstalledCliIdentity as defaultReadInstalledCliIdentity } from './load-review-certification.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
+import { assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
+import { validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
 
 function denied(code) {
   const error = Object.assign(new Error(code), { code });
@@ -84,7 +86,15 @@ export async function runRoutingReview({
     }
     const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
-    await readDecision();
+    let decision;
+    try {
+      decision = await readDecision();
+      validateRoutingDecisionRecord(decision);
+      assertSerializedRunBindingMatches(expectedBinding, decision);
+    } catch (error) {
+      if (error?.code === 'RUN_BINDING_INVALID' || error?.code === 'RUN_BINDING_MISMATCH') throw error;
+      denied('RUN_BINDING_INVALID');
+    }
     let certification = null;
     let cliIdentity = null;
     if (mode === 'enforce' && route.reviewable_file_count > 0) {
@@ -135,7 +145,7 @@ export async function runRoutingReview({
       ...(isThread ? { onProgress: mode === 'enforce' ? undefined : onProgress } : {}),
     });
   } catch (error) {
-    const code = ['ROUTING_ACTIVATION_DENIED', 'ROUTING_EXECUTION_CONTEXT_INVALID', 'NO_SELECTED_REVIEW_ROUTE'].includes(error?.code)
+    const code = ['ROUTING_ACTIVATION_DENIED', 'ROUTING_EXECUTION_CONTEXT_INVALID', 'NO_SELECTED_REVIEW_ROUTE', 'RUN_BINDING_INVALID', 'RUN_BINDING_MISMATCH'].includes(error?.code)
       ? error.code
       : 'ROUTING_ACTIVATION_DENIED';
     if (writeOutput) await writeOutput('ROUTE_GUARD_FAILED=true');
