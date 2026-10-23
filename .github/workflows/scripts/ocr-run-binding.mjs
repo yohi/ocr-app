@@ -12,7 +12,8 @@ function canonicalDecimal(value, maxDigits = 32) {
 }
 
 export function assertRunBindingValid(binding) {
-  if (!binding || typeof binding !== 'object' || typeof binding.workflowRunId !== 'string' || !canonicalDecimal(binding.workflowRunId) || !Number.isSafeInteger(binding.runAttempt) || binding.runAttempt < 1 || typeof binding.headSha !== 'string' || !/^[0-9a-f]{40}$/.test(binding.headSha) || !['shadow', 'enforce'].includes(binding.mode)) fail(RUN_BINDING_INVALID);
+  const keys = ['workflowRunId', 'runAttempt', 'headSha', 'mode'];
+  if (!binding || typeof binding !== 'object' || Array.isArray(binding) || Object.getPrototypeOf(binding) !== Object.prototype || Reflect.ownKeys(binding).length !== keys.length || Reflect.ownKeys(binding).some(key => typeof key !== 'string' || !keys.includes(key)) || typeof binding.workflowRunId !== 'string' || !canonicalDecimal(binding.workflowRunId) || !Number.isSafeInteger(binding.runAttempt) || binding.runAttempt < 1 || typeof binding.headSha !== 'string' || !/^[0-9a-f]{40}$/.test(binding.headSha) || !['shadow', 'enforce'].includes(binding.mode)) fail(RUN_BINDING_INVALID);
 }
 
 export function createRunBindingFromEnv(env) {

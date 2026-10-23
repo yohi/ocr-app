@@ -240,7 +240,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     if (!freshStartup.authorized) activationDenied();
   }
   if (features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
-    decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: { ...binding, destination: 'openrouter-decisions' }, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
+    decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
   }
   const resolved = selectReviewRoute({ mode: binding.mode, features, decision,
     certifiedCatalog: binding.mode === 'enforce' && features.reviewable_file_count > 0 ? verifiedBundle : catalog,

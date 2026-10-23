@@ -56,3 +56,9 @@ test('validator rejects inherited properties, unknown keys, and bogus outbound b
   assert.throws(() => validateDecisionState({ ...expected, additions_bucket: 'bogus' }));
   assert.throws(() => validateDecisionState({ ...expected, schema_version: '2' }));
 });
+
+test('validator rejects duplicate or unsorted outbound classification arrays', () => {
+  assert.throws(() => validateDecisionState({ ...expected, language_families: ['yaml', 'yaml'] }));
+  assert.throws(() => validateDecisionState({ ...expected, language_families: ['yaml', 'typescript'] }));
+  assert.throws(() => validateDecisionState({ ...expected, change_areas: ['ci', 'auth'] }));
+});

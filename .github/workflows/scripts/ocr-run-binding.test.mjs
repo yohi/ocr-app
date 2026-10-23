@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createRunBindingFromEnv, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
+import { createRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 
 const sha = 'A'.repeat(40);
 const env = (overrides = {}) => ({ GITHUB_RUN_ID: '9007199254740993', GITHUB_RUN_ATTEMPT: '2', COMMIT_SHA: sha, DECISION_ROUTING_MODE: 'shadow', ...overrides });
@@ -55,4 +55,11 @@ test('rejects empty and incomplete bindings', () => {
   const binding = createRunBindingFromEnv(env());
   assert.throws(() => assertRunBindingEquals(binding, { ...binding, runAttempt: '2' }), { code: 'RUN_BINDING_MISMATCH' });
   assert.throws(() => assertSerializedRunBindingMatches(binding, { workflow_run_id: binding.workflowRunId, head_sha: binding.headSha }), { code: 'RUN_BINDING_MISMATCH' });
+});
+
+test('rejects run bindings with extra own keys or a non-plain prototype', () => {
+  const binding = createRunBindingFromEnv(env());
+  assert.throws(() => assertRunBindingValid({ ...binding, extra: true }), { code: 'RUN_BINDING_INVALID' });
+  assert.throws(() => assertRunBindingValid(Object.assign(Object.create({ inherited: true }), binding)), { code: 'RUN_BINDING_INVALID' });
+  assert.throws(() => assertRunBindingValid(Object.assign(Object.create(null), binding)), { code: 'RUN_BINDING_INVALID' });
 });

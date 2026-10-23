@@ -22,6 +22,10 @@ function sortedUnique(values, allowed, label) {
   if (!Array.isArray(values) || values.length > 12 || values.some(value => typeof value !== 'string' || !allowed.has(value))) throw new Error(`${label} is invalid`);
   return [...new Set(values)].sort(compareCodeUnits);
 }
+function validateCanonicalArray(values, allowed, label) {
+  const normalized = sortedUnique(values, allowed, label);
+  if (normalized.length !== values.length || normalized.some((value, index) => value !== values[index])) throw new Error(`${label} must be unique and sorted`);
+}
 function validateFeatures(features) {
   ensureRecord(features, FEATURE_KEYS, 'Features');
   if (features.schema_version !== '3' || typeof features.head_sha !== 'string' || !/^[a-f0-9]{40}$/i.test(features.head_sha)) throw new Error('Feature version or head SHA is invalid');
@@ -43,7 +47,7 @@ export function validateDecisionState(state) {
   for (const key of ['all_changed_file_count_bucket', 'reviewable_file_count_bucket', 'excluded_file_count_bucket']) enumValue(state[key], FILE_BUCKETS, key);
   for (const key of ['additions_bucket', 'deletions_bucket']) enumValue(state[key], LINE_BUCKETS, key);
   enumValue(state.change_size, SIZE, 'change_size'); enumValue(state.security_signal, SIGNAL, 'security_signal'); enumValue(state.migration_signal, SIGNAL, 'migration_signal'); enumValue(state.classification_status, CLASSIFICATION, 'classification_status');
-  sortedUnique(state.language_families, LANGUAGE, 'language_families'); sortedUnique(state.change_areas, AREA, 'change_areas');
+  validateCanonicalArray(state.language_families, LANGUAGE, 'language_families'); validateCanonicalArray(state.change_areas, AREA, 'change_areas');
   for (const key of ['test_files_changed', 'review_scope_gap', 'features_incomplete']) {
     if (typeof state[key] !== 'boolean') throw new Error(`${key} is invalid`);
   }
