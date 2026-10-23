@@ -118,8 +118,12 @@ test('Given a missing, invalid, or differently bound decision, When routing runs
       { field: 'head_sha', value: 'b'.repeat(40) },
       { field: 'effective_mode', value: mode === 'shadow' ? 'enforce' : 'shadow' },
     ]) {
+      const outputs = [];
+      let recorderCalls = 0;
       const fixture = input({
         env: { DECISION_ROUTING_MODE: mode },
+        writeOutput: async value => outputs.push(value),
+        createRecorder: async () => { recorderCalls++; return null; },
         readDecision: async () => invalidDecision === null || !invalidDecision.field
           ? invalidDecision
           : { ...fixture.decision, [invalidDecision.field]: invalidDecision.value,
@@ -129,7 +133,11 @@ test('Given a missing, invalid, or differently bound decision, When routing runs
       });
       const result = await runRoutingReview(fixture.args);
       assert.equal(result.status, 'failed', `${mode}: ${JSON.stringify(invalidDecision)}`);
+      assert.equal(result.message, invalidDecision === null || !invalidDecision.field
+        ? 'RUN_BINDING_INVALID' : 'RUN_BINDING_MISMATCH');
       assert.equal(fixture.calls.length, 0, `${mode}: ${JSON.stringify(invalidDecision)}`);
+      assert.equal(recorderCalls, 0, `${mode}: recorder created before decision guard`);
+      assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
     }
   }
 });
