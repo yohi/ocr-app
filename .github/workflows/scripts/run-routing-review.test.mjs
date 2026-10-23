@@ -9,6 +9,7 @@ import test from 'node:test';
 import { runHost } from './antigravity-host.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
 import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
+import { validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
 
 const validContext = { binding: { mode: 'enforce' }, repo_identity: { repoId: 1, fullName: 'owner/repo' } };
 const pendingCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
@@ -30,16 +31,31 @@ const certificationEvidence = {
 
 function input(overrides = {}) {
   const calls = [];
+  const env = { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run', ...(overrides.env ?? {}) };
+  const expectedBinding = overrides.expectedBinding ?? {
+    workflowRunId: '123', runAttempt: 1, headSha: 'a'.repeat(40), mode: env.DECISION_ROUTING_MODE,
+  };
+  const decision = ['shadow', 'enforce'].includes(expectedBinding.mode) ? {
+    schema_version: '1', effective_mode: expectedBinding.mode, head_sha: expectedBinding.headSha,
+    workflow_run_id: expectedBinding.workflowRunId, run_attempt: expectedBinding.runAttempt,
+    classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 2,
+    proposed_strategy: 'deep', selected_strategy: expectedBinding.mode === 'shadow' ? null : 'deep',
+    route_source: 'deterministic_fallback', decision_status: 'unavailable', egress_status: 'denied',
+    observer_status: 'not_started', decision_latency_ms: null, decision_api_cost: null,
+    policy_version: 'v1', feature_schema_version: '3', decision_state_version: '1', model_catalog_version: 'v1',
+  } : null;
+  if (decision) validateRoutingDecisionRecord(decision);
   return {
     calls,
+    decision,
     args: {
-      env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+      env,
       context: validContext,
       prompt: 'review',
       runHost: async options => { calls.push(options); return { status: 'success' }; },
       runThreadHost: async options => { calls.push(options); return { status: 'success' }; },
       readRoute: async () => ({ selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: ['certified-fallback'], reviewable_file_count: 2, status: 'prepared' }),
-      readDecision: async () => null,
+      readDecision: async () => decision,
       readExecutionContext: async () => validContext,
       revalidateExecutionContext: async () => ({ certifiedBundle: { catalog: {}, evidence: { certification_refs: [], cli_available_models: ['certified-primary', 'certified-fallback'] } } }),
       fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
@@ -52,7 +68,7 @@ function input(overrides = {}) {
       writeOutput: async () => undefined,
       onProgress: async () => undefined,
       repoIdentity: { repo_id: 1, full_name: 'owner/repo' },
-      expectedBinding: { mode: 'enforce' },
+      expectedBinding,
       ...overrides,
     },
   };
@@ -90,6 +106,40 @@ test('Given authorized enforce route, When invoked, Then exact certified model a
   assert.equal(fixture.calls[0].runAttemptId, 'a'.repeat(32));
   assert.equal(fixture.calls[0].executablePath, '/attested/bin/agy');
   assert.equal(fixture.calls[0].routingMode, 'enforce');
+});
+
+test('Given a missing, invalid, or differently bound decision, When routing runs, Then neither mode starts Host', async () => {
+  for (const mode of ['shadow', 'enforce']) {
+    for (const invalidDecision of [
+      null,
+      {},
+      { field: 'workflow_run_id', value: '456' },
+      { field: 'run_attempt', value: 2 },
+      { field: 'head_sha', value: 'b'.repeat(40) },
+      { field: 'effective_mode', value: mode === 'shadow' ? 'enforce' : 'shadow' },
+    ]) {
+      const outputs = [];
+      let recorderCalls = 0;
+      const fixture = input({
+        env: { DECISION_ROUTING_MODE: mode },
+        writeOutput: async value => outputs.push(value),
+        createRecorder: async () => { recorderCalls++; return null; },
+        readDecision: async () => invalidDecision === null || !invalidDecision.field
+          ? invalidDecision
+          : { ...fixture.decision, [invalidDecision.field]: invalidDecision.value,
+            ...(invalidDecision.field === 'effective_mode'
+              ? { selected_strategy: invalidDecision.value === 'shadow' ? null : 'deep' }
+              : {}) },
+      });
+      const result = await runRoutingReview(fixture.args);
+      assert.equal(result.status, 'failed', `${mode}: ${JSON.stringify(invalidDecision)}`);
+      assert.equal(result.message, invalidDecision === null || !invalidDecision.field
+        ? 'RUN_BINDING_INVALID' : 'RUN_BINDING_MISMATCH');
+      assert.equal(fixture.calls.length, 0, `${mode}: ${JSON.stringify(invalidDecision)}`);
+      assert.equal(recorderCalls, 0, `${mode}: recorder created before decision guard`);
+      assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
+    }
+  }
 });
 
 test('Given nested certification evidence and the real model resolver, When invoked, Then the certified route reaches Host', async () => {

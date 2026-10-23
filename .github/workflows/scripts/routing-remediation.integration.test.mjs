@@ -83,6 +83,15 @@ function authority(repoId = 7, fullName = 'owner/repo') {
   return { registry: { schema_version: '1', approvals: [], activations: [], revoked_refs: [] }, operationalDossiers: {}, repoIdentity: { repo_id: repoId, full_name: fullName } };
 }
 
+function routingDecision(runBinding, reviewableFileCount = 1) {
+  return createRoutingDecisionRecord({ runBinding,
+    features: { classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: reviewableFileCount },
+    decision: {}, egressStatus: 'denied',
+    route: { proposedStrategy: 'deep', selectedStrategy: runBinding.mode === 'shadow' ? null : 'deep',
+      routeSource: 'deterministic_fallback', decisionStatus: 'unavailable' },
+    policyVersions: { policyVersion: '1', modelCatalogVersion: '1' } });
+}
+
 function authorizedTrust(mode, repoId = 7, fullName = 'owner/repo', digests = {}) {
   const policySha256 = digests.policySha256 ?? `sha256:${'b'.repeat(64)}`;
   const catalogSha256 = digests.catalogSha256 ?? `sha256:${'c'.repeat(64)}`;
@@ -158,9 +167,9 @@ function evaluateGateAndAssertSealed(runTemp, input) {
   return result;
 }
 
-async function runOfflinePipeline({ runReviewArgs, runTemp, callLog, publisherArgs = {} }) {
+async function runOfflinePipeline({ runReviewArgs, runTemp, callLog, publisherArgs = {}, host = async () => ({ status: 'success', output: '{}' }) }) {
   const review = await runRoutingReview({ ...runReviewArgs,
-    runHost: async args => { callLog.push({ kind: 'host', args }); return { status: 'success', output: '{}' }; } });
+    runHost: async args => { callLog.push({ kind: 'host', args }); return host(args); } });
   if (!['success', 'skipped'].includes(review.status)) return { review, delivery: null, publication: null };
   const delivery = await uploadSealedFiles(runTemp, callLog);
   if (delivery.outcome !== 'success') return { review, delivery, publication: null };
@@ -400,11 +409,13 @@ test('shadow existing-route binding mismatch sets guard and blocks Host and down
   const log = effects();
   const outputs = [];
   const runTemp = tempDir();
+  const runBinding = { workflowRunId: '123', runAttempt: 1, headSha: head, mode: 'shadow' };
   const result = await runOfflinePipeline({ runTemp, callLog: log.calls, runReviewArgs: {
     env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: runTemp },
+    expectedBinding: runBinding,
     readExecutionContext: async () => ({ binding: { mode: 'shadow' } }),
     readRoute: async () => ({ selected_model_id: 'proposal', reviewable_file_count: 1 }),
-    readDecision: async () => null,
+    readDecision: async () => routingDecision(runBinding),
     fetchCurrentAuthorization: async () => ({ registry: {} }), evaluateStartup: () => ({ authorized: true }),
     revalidateExecutionContext: async () => { throw Object.assign(new Error('mismatch'), { code: 'ROUTING_EXECUTION_CONTEXT_INVALID' }); },
     writeOutput: async value => outputs.push(value), runHost: async () => { log.calls.push({ kind: 'host' }); return { status: 'success' }; },
@@ -418,18 +429,22 @@ test('shadow existing-route binding mismatch sets guard and blocks Host and down
 test('shadow audit upload failure preserves legacy review and Check result with a fixed diagnostic', async () => {
   const log = effects();
   const runTemp = tempDir();
+  const runBinding = { workflowRunId: '123', runAttempt: 1, headSha: head, mode: 'shadow' };
   mkdirSync(join(runTemp, 'ocr-routing'));
-  writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), '{ malformed');
+  writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), JSON.stringify(routingDecision(runBinding)));
   const review = { status: 'success', output: '{}' };
-  const result = await runOfflinePipeline({ runTemp, callLog: log.calls, runReviewArgs: {
+  const result = await runOfflinePipeline({ runTemp, callLog: log.calls, host: async () => {
+    writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), '{ malformed');
+    return review;
+  }, runReviewArgs: {
     env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: runTemp },
+    expectedBinding: runBinding,
     readExecutionContext: async () => ({ binding: { mode: 'shadow' } }),
     readRoute: async () => ({ selected_model_id: 'proposal', reviewable_file_count: 1 }),
-    readDecision: async () => null,
+    readDecision: async () => routingDecision(runBinding),
     fetchCurrentAuthorization: async () => ({ registry: {} }), evaluateStartup: () => ({ authorized: true }),
     revalidateExecutionContext: async () => ({ certifiedBundle: null }),
     createRecorder: async () => { throw new Error('observer unavailable'); },
-    runHost: async () => { log.calls.push({ kind: 'host' }); return review; },
   } });
   assert.deepEqual(result.review, review);
   assert.equal(result.delivery.outcome, 'failure');
@@ -446,12 +461,14 @@ test('authorized shadow observer failure preserves legacy review result and mode
   const legacyResult = { schema_version: '1.0', mode: 'review', status: 'success', coverage: 1, findings: [], message: 'legacy' };
   const legacyHostOptions = { model: 'legacy-host-model', fallbackModels: ['legacy-host-fallback'], maxRetries: 3 };
   const progress = () => {};
+  const runBinding = { workflowRunId: '123', runAttempt: 1, headSha: head, mode: 'shadow' };
   const result = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'shadow', RUNNER_TEMP: '/unused' },
+    expectedBinding: runBinding,
     ...legacyHostOptions, onProgress: progress,
     readExecutionContext: async () => { log.calls.push({ kind: 'context-read' }); return { binding: { mode: 'shadow' } }; },
     readRoute: async () => { log.calls.push({ kind: 'route-read' }); return { selected_model_id: 'proposal-model',
       fallback_models: ['proposal-fallback'], reviewable_file_count: 1 }; },
-    readDecision: async () => null,
+    readDecision: async () => routingDecision(runBinding),
     fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
     evaluateStartup: () => ({ authorized: true }),
     revalidateExecutionContext: async () => ({ certifiedBundle: null }),
@@ -553,7 +570,7 @@ test('wrong run attempt and missing model certification deny before Host spawn',
   const certificationFailure = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: runTemp }, expectedBinding: binding,
     readExecutionContext: async () => context,
     readRoute: async () => ({ reviewable_file_count: 1, selected_strategy: 'deep', selected_model_id: 'missing-certified-model', fallback_models: [] }),
-    readDecision: async () => ({}), fetchCurrentAuthorization: async () => ({ registry: trust.registry, operationalDossiers: trust.operationalDossiers }),
+    readDecision: async () => routingDecision(binding), fetchCurrentAuthorization: async () => ({ registry: trust.registry, operationalDossiers: trust.operationalDossiers }),
     trustedInputs: trust, repoIdentity: { repo_id: 7, full_name: 'owner/repo' }, readInstalledCliIdentity: async () => ({
       resolvedPath: '/attested/agy', binarySha256: context.cli_binary_sha256 }), runHost: async () => { log.calls.push({ kind: 'host' }); return {}; } });
   assert.equal(certificationFailure.status, 'failed');
@@ -579,7 +596,7 @@ test('CLI substitution and changed trusted digests are denied before the Host bo
   const installedIdentity = readInstalledCliIdentity({ env: { HOME: home, PATH: `${targetRoot}/shadow-bin` }, targetRoot });
   async function run(trustedInputs, installedSha) {
     return runRoutingReview({ env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: runTemp }, expectedBinding: runBinding,
-      readExecutionContext: async () => context, readRoute: async () => route, readDecision: async () => ({}),
+      readExecutionContext: async () => context, readRoute: async () => route, readDecision: async () => routingDecision(runBinding),
       fetchCurrentAuthorization: async () => ({ registry: trust.registry, operationalDossiers: trust.operationalDossiers }),
       evaluateStartup: () => ({ authorized: true }), trustedInputs, repoIdentity: { repo_id: 7, full_name: 'owner/repo' },
       readInstalledCliIdentity: async () => ({ ...installedIdentity, binarySha256: installedSha }),
@@ -626,7 +643,7 @@ test('CLI symlink resolves to its attested realpath and a PATH shadow is never p
       TARGET_REPO_PATH: targetRoot }, expectedBinding: runBinding,
     readExecutionContext: async () => ({ cli_binary_sha256: identity.binarySha256 }),
     readRoute: async () => ({ reviewable_file_count: 1, selected_strategy: 'deep', selected_model_id: 'certified-primary', fallback_models: [] }),
-    readDecision: async () => ({}), fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
+    readDecision: async () => routingDecision(runBinding), fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
     evaluateStartup: () => ({ authorized: true }), trustedInputs, repoIdentity: { repo_id: 7, full_name: 'owner/repo' },
     readInstalledCliIdentity: async args => readInstalledCliIdentity({ ...args, env: { HOME: home, PATH: pathBin }, targetRoot }),
     revalidateExecutionContext: async ({ cliBinarySha256 }) => {
@@ -701,7 +718,7 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
     attempt_index: 1, event: 'attempt_started', model: 'certified-primary', result: null,
     timestamp, duration_ms: null, host_status: null, ...fields });
   const reviewResult = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: runTemp }, expectedBinding: runBinding,
-    readExecutionContext: async () => ({ cli_binary_sha256: 'e'.repeat(64) }), readRoute: async () => route, readDecision: async () => ({}),
+    readExecutionContext: async () => ({ cli_binary_sha256: 'e'.repeat(64) }), readRoute: async () => route, readDecision: async () => routingDecision(runBinding),
     fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }), evaluateStartup: () => ({ authorized: true }),
     trustedInputs, repoIdentity: trustedInputs.repoIdentity, readInstalledCliIdentity: async () => ({ resolvedPath: '/trusted/agy', binarySha256: 'e'.repeat(64) }),
     revalidateExecutionContext: async () => ({ certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['certified-primary', 'certified-fallback'] } } }),
