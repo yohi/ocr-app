@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,12 +9,14 @@ import {
   createRoutingDecisionRecord,
   writeRoutingDecision,
   createAttemptRecorder,
-  finalizeRoutingAudit,
+  finalizeRoutingAudit as finalizeRoutingAuditCore,
   writeRoutingAudit,
   validateRoutingDecisionRecord,
   validateRoutingAudit,
   validateRoutingAttempts,
 } from './ocr-routing-audit.mjs';
+
+const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
 
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const features = { classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 2, review_scope_gap: false, features_incomplete: false };
@@ -31,6 +34,49 @@ const realBundle = { catalog: certifiedRealCatalog, evidence: {
   cli_available_models: certifiedRealCatalog.models.map(model => model.model_id),
 } };
 const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: 'claude-opus-4-6-thinking', result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+
+async function loadResultEvidenceVerifier() {
+  const audit = await import('./ocr-routing-audit.mjs');
+  assert.equal(typeof audit.verifyValidatedResultEvidence, 'function');
+  return audit.verifyValidatedResultEvidence;
+}
+
+test('preserves passed validation for matching result bytes', async () => {
+  const verify = await loadResultEvidenceVerifier();
+  const rawBytes = Buffer.from('{"status":"success"}\n');
+  assert.deepEqual(verify({ rawBytes, validatedResultSha256: sha256(rawBytes), validationStatus: 'passed' }), {
+    reviewValidationStatus: 'passed', resultSha256: sha256(rawBytes),
+  });
+});
+
+test('fails passed validation for missing or mismatching validator digest', async () => {
+  const verify = await loadResultEvidenceVerifier();
+  const rawBytes = Buffer.from('{"status":"success"}\n');
+  for (const validatedResultSha256 of [null, 'not-a-digest', '0'.repeat(64)]) {
+    assert.deepEqual(verify({ rawBytes, validatedResultSha256, validationStatus: 'passed' }), {
+      reviewValidationStatus: 'failed', resultSha256: sha256(rawBytes),
+    });
+  }
+});
+
+test('does not promote non-passed validation', async () => {
+  const verify = await loadResultEvidenceVerifier();
+  const rawBytes = Buffer.from('{"status":"failed"}\n');
+  assert.deepEqual(verify({ rawBytes, validatedResultSha256: sha256(rawBytes), validationStatus: 'failed' }), {
+    reviewValidationStatus: 'failed', resultSha256: sha256(rawBytes),
+  });
+  assert.deepEqual(verify({ rawBytes, validatedResultSha256: sha256(rawBytes), validationStatus: 'not_run' }), {
+    reviewValidationStatus: 'not_run', resultSha256: sha256(rawBytes),
+  });
+});
+
+test('records null digest when result bytes are unavailable', async () => {
+  const verify = await loadResultEvidenceVerifier();
+  assert.deepEqual(verify({ rawBytes: null, validatedResultSha256: null, validationStatus: 'passed' }), {
+    reviewValidationStatus: 'failed', resultSha256: null,
+  });
+});
 
  test('decision record is strict, bound, and frozen', () => {
   const record = decision();
@@ -131,6 +177,11 @@ test('final audit only identifies a validated single host success', () => {
   const certifiedBundle = { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } };
   const finalize = options => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: null, proposedReviewModel: 'claude-opus-4-6-thinking', selectedReviewModel: 'claude-opus-4-6-thinking', review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ...options });
   const final = finalize({});
+  const auditV3 = { ...final, schema_version: '3', result_sha256: 'a'.repeat(64) };
+  assert.equal(validateRoutingAudit(auditV3), auditV3);
+  assert.throws(() => validateRoutingAudit({ ...auditV3, result_sha256: 'invalid' }), { message: 'AUDIT_SCHEMA_INVALID' });
+  assert.throws(() => validateRoutingAudit({ ...auditV3, result_sha256: null }), { message: 'AUDIT_SCHEMA_INVALID' });
+  assert.equal(validateRoutingAudit({ ...auditV3, result_sha256: null, review_validation_status: 'failed' }).result_sha256, null);
   assert.equal(Object.isFrozen(final), true);
   assert.equal(final.workflow_run_id, binding.workflowRunId);
   assert.equal(final.executed_review_model, 'claude-opus-4-6-thinking');
@@ -143,8 +194,8 @@ test('final audit only identifies a validated single host success', () => {
   assert.equal(failedValidation.host_success_model, 'claude-opus-4-6-thinking');
   assert.equal(failedValidation.executed_review_model, null);
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts: [attempts[0], attempts[2], attempts[1]], reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp }), { message: 'AUDIT_EVENT_INVALID' });
-  assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
-  assert.equal(Object.keys(final).length, 32);
+  assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
+  assert.equal(Object.keys(final).length, 33);
   assert.equal(Object.hasOwn(final, 'reviewable_file_count'), false);
   assert.throws(() => finalize({ runBinding: { ...binding, runAttempt: 999 } }), { message: 'RUN_BINDING_MISMATCH' });
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ignored: true }), { message: 'AUDIT_EVENT_INVALID' });

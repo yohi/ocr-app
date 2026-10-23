@@ -15,6 +15,7 @@ import { resolve, join, relative, isAbsolute } from 'node:path';
 import https from 'node:https';
 import { pathToFileURL } from 'node:url';
 import { runThreadHost } from './antigravity-host.mjs';
+import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs';
 
 export class CliError extends Error {}
 
@@ -273,7 +274,9 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
   return openThreads;
 }
 
-export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost } = {}) {
+export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost,
+  env = process.env, authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
+  fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery } = {}) {
   let config;
   try {
     config = createConfig(args, token);
@@ -286,7 +289,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
   }
 
   console.log(`Checking open review threads for PR #${config.prNumber} in ${config.repo}...`);
-  const openThreads = await fetchAllOpenThreads({
+  const openThreads = await fetchOpenThreads({
     owner: config.owner,
     name: config.name,
     prNumber: config.prNumber,
@@ -299,6 +302,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
   }
 
   let resolvedCount = 0;
+  let authorizationDenied = false;
   for (const thread of openThreads) {
     const codeSnippet = extractCodeContext(config.targetDir, thread.path);
     if (!codeSnippet) {
@@ -321,14 +325,22 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
         : `💡 HEADでの修正をLLMが確認しました。\n理由: ${evaluation.reason}\n\n※ スレッドの自動解決（resolveReviewThread）には明示的な --auto-resolve オプションまたはメンテナーの承認が必要です。\n\n---\n*Evaluated by OpenCodeReview*`;
 
       try {
-        const replyResult = await executeGraphQLQuery(config.token, buildReplyMutation(thread.id, replyBody));
+        if (await authorizeBeforeMutation() !== true) {
+          authorizationDenied = true;
+          break;
+        }
+        const replyResult = await graphql(config.token, buildReplyMutation(thread.id, replyBody));
         if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
           throw new Error(`Reply mutation failed: ${JSON.stringify(replyResult.errors || replyResult)}`);
         }
 
         // Only invoke resolveReviewThread mutation when explicit --auto-resolve option is enabled
         if (config.autoResolve) {
-          const resolveResult = await executeGraphQLQuery(config.token, buildResolveMutation(thread.id));
+          if (await authorizeBeforeMutation() !== true) {
+            authorizationDenied = true;
+            break;
+          }
+          const resolveResult = await graphql(config.token, buildResolveMutation(thread.id));
           if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
             throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
           }
@@ -341,7 +353,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
   }
 
   console.log(`Finished processing review threads. Auto-resolved ${resolvedCount} / ${openThreads.length} threads.`);
-  return 0;
+  return authorizationDenied ? 1 : 0;
 }
 
 const executedDirectly = process.argv[1] !== undefined &&

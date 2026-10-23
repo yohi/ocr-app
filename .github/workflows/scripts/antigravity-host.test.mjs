@@ -792,6 +792,28 @@ test('enforce rechecks the attested CLI digest before each fallback spawn', asyn
   }
 });
 
+test('routing stops before the next physical spawn when fresh authorization is revoked', async () => {
+  const authorizationChecks = [];
+  const spawnedModels = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'shadow',
+    model: 'primary', fallbackModel: 'fallback', maxRetries: 1, retryDelayMs: 0,
+    authorizeBeforeSpawn: async () => {
+      authorizationChecks.push(authorizationChecks.length + 1);
+      return authorizationChecks.length === 1;
+    },
+    spawn: (_command, args) => {
+      spawnedModels.push(args[args.indexOf('--model') + 1]);
+      return childFor(JSON.stringify({ error: 'No capacity available' }));
+    },
+  });
+
+  assert.deepEqual(authorizationChecks, [1, 2]);
+  assert.deepEqual(spawnedModels, ['primary']);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+});
+
 test('attempt observer emits sanitized ordered events with exact CLI model arguments', async () => {
   const events = [];
   const prompt = 'sensitive prompt';

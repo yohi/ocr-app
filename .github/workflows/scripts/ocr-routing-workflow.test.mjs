@@ -34,7 +34,7 @@ test('shadow fallback requires startup approval and handles absent prepared rout
   assert.doesNotMatch(host, /result\.message === 'NO_SELECTED_REVIEW_ROUTE'/);
   assert.match(routingReview, /if \(writeOutput\) await writeOutput\('ROUTE_GUARD_FAILED=true'\)/);
   assert.match(routingReview, /if \(mode !== 'shadow'\) denied\('NO_SELECTED_REVIEW_ROUTE'\)/);
-  assert.match(routingReview, /return host\(\{ \.\.\.legacy, routingMode: 'shadow' \}\)/);
+  assert.match(routingReview, /return runAuthorizedHost\(\{ \.\.\.legacy, routingMode: 'shadow' \}\)/);
   assert.match(step('Resolve fixed review threads'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /DECISION_ROUTING_MODE == 'off'.*DECISION_ROUTING_MODE == 'shadow'/);
@@ -47,6 +47,12 @@ test('non-off startup requires positive authorization and shadow does not ignore
   assert.match(step('Run Antigravity review host'), /ROUTING_START_AUTHORIZED == 'true'/);
   assert.doesNotMatch(step('Authorize routing start'), /continue-on-error/);
   assert.match(step('Prepare dynamic routing'), /continue-on-error: \$\{\{ env\.DECISION_ROUTING_MODE == 'shadow' \}\}/);
+});
+
+test('routing review startup hashes the decision egress policy for authorization', () => {
+  const host = step('Run Antigravity review host');
+  assert.match(host, /const policyPath = '\.\/self-repo\/\.github\/workflows\/config\/decision-egress-policy\.json'/);
+  assert.match(host, /policySha256: hashFile\(policyPath\)/);
 });
 
 test('routing evidence upload requires fresh upload authorization', () => {
@@ -70,6 +76,15 @@ test('enforce routing gate revalidates context and startup authorization before 
   assert.notEqual(eligibilityIndex, -1, 'publish eligibility must be evaluated');
   assert.ok(revalidateIndex < eligibilityIndex, 'context must be revalidated before eligibility');
   assert.match(gate, /startupAuthorization: revalidated\.startupAuthorization,[\s\S]*mode: 'enforce'/);
+});
+
+test('finalizer binds validated-result step output to current raw bytes', () => {
+  const finalizer = step('Finalize routing audit');
+  assert.match(finalizer, /VALIDATED_RESULT_SHA256:\s*\$\{\{\s*steps\.validate-review\.outputs\.RESULT_SHA256\s*\}\}/);
+  assert.match(finalizer, /verifyValidatedResultEvidence/);
+  assert.match(finalizer, /validatedResultSha256:\s*process\.env\.VALIDATED_RESULT_SHA256/);
+  assert.match(finalizer, /validation:\s*\{\s*status:\s*resultEvidence\.reviewValidationStatus\s*\}/);
+  assert.match(finalizer, /resultSha256:\s*resultEvidence\.resultSha256/);
 });
 
 test('enforce has one publish boundary and legacy posting is off or shadow only', () => {

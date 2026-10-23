@@ -73,7 +73,7 @@ export async function authorizeRoutingStart({
         encoding: 'utf8',
       }).split('\0').filter(Boolean),
     });
-    const policySha256 = sha256File(resolve(root, '.github/workflows/config/review-risk-policy.json'));
+    const policySha256 = sha256File(resolve(root, '.github/workflows/config/decision-egress-policy.json'));
     const catalogSha256 = sha256File(resolve(root, '.github/workflows/config/review-model-catalog.json'));
     const authority = await fetchCurrentAuthorization({
       centralRepoId: centralIdentity.id,

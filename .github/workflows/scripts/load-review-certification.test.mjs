@@ -16,17 +16,17 @@ function fixture() {
   mkdirSync(join(home, '.local/bin'), { recursive: true });
   const evidence = new Map();
   const binary = Buffer.from('binary');
-  const certification = {
-    schema_version: '1', model_id: 'model-a', capability_tier: 'fast', catalog_version: '2.0.0',
-    issued_at: NOW, expires_at: EXPIRY, capability_evidence_sha256: hash(Buffer.from('capability dossier')),
-    cli_evidence_sha256: hash(Buffer.from('cli evidence')),
-  };
-  const certBytes = Buffer.from(JSON.stringify(certification));
   const inventory = {
     schema_version: '1', cli_version: '9.0.0', cli_binary_sha256: hash(binary),
     models: ['model-a'], observed_at: NOW, expires_at: EXPIRY,
   };
   const inventoryBytes = Buffer.from(JSON.stringify(inventory));
+  const certification = {
+    schema_version: '1', model_id: 'model-a', capability_tier: 'fast', catalog_version: '2.0.0',
+    issued_at: NOW, expires_at: EXPIRY, capability_evidence_sha256: hash(Buffer.from('capability dossier')),
+    cli_evidence_sha256: hash(inventoryBytes),
+  };
+  const certBytes = Buffer.from(JSON.stringify(certification));
   evidence.set('cert.json', certBytes);
   evidence.set('inventory.json', inventoryBytes);
   evidence.set('capability.json', Buffer.from('capability dossier'));
@@ -101,6 +101,15 @@ test('returns exactly resolver evidence for valid certification, capability doss
       verifiedCertificationRefs: [{ certification_reference: f.catalog.models[0].certification_reference, model_id: 'model-a', capability_tier: 'fast', catalog_version: '2.0.0' }],
       cliAvailableModels: ['model-a'],
     });
+  } finally { cleanup(f); }
+});
+
+test('rejects a model certification whose CLI evidence digest is not the approved inventory digest', () => {
+  const f = fixture();
+  try {
+    f.certification.cli_evidence_sha256 = '0'.repeat(64);
+    refreshCertification(f);
+    assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
   } finally { cleanup(f); }
 });
 

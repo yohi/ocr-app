@@ -109,6 +109,7 @@ export function loadVerifiedCertification({ catalog, index, registry, repoIdenti
         || !['fast', 'deep'].includes(certification.capability_tier)
         || typeof certification.catalog_version !== 'string' || !certification.catalog_version
         || !HASH.test(certification.capability_evidence_sha256) || !HASH.test(certification.cli_evidence_sha256)
+        || certification.cli_evidence_sha256 !== sha256(inventoryBytes)
         || !active(certification.issued_at, certification.expires_at, now)
         || !inventory.models.includes(certification.model_id)) return certificationFailure();
       findApproval(registry, entry.approval_ref, 'model', sha256(bytes), repoIdentity, now);
