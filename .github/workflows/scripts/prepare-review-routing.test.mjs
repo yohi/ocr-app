@@ -83,11 +83,14 @@ function certificationFixture(digests) {
   ];
   const catalog = { schema_version: '1', catalog_version: '2.0.0', models,
     strategies: { fast: { preferred_model_id: 'certified-fallback' }, deep: { preferred_model_id: 'certified-primary' } }, unknown_risk_strategy: 'deep' };
+  const inventory = { schema_version: '1', cli_version: '1.0.0', cli_binary_sha256: hash(binary),
+    models: models.map(model => model.model_id), observed_at: now, expires_at: expires };
+  const inventoryBytes = Buffer.from(JSON.stringify(inventory));
   const certifications = models.map((model, index) => {
     const capabilityBytes = Buffer.from(`capability-${index}`);
     const certification = { schema_version: '1', model_id: model.model_id, capability_tier: model.capability_tier,
       catalog_version: catalog.catalog_version, issued_at: now, expires_at: expires,
-      capability_evidence_sha256: hash(capabilityBytes), cli_evidence_sha256: hash(Buffer.from(`cli-${index}`)) };
+      capability_evidence_sha256: hash(capabilityBytes), cli_evidence_sha256: hash(inventoryBytes) };
     const bytes = Buffer.from(JSON.stringify(certification));
     const ref = `OWNER-CERT-${index}`;
     const capabilityRef = `OWNER-CAP-${index}`;
@@ -99,9 +102,6 @@ function certificationFixture(digests) {
     model.certification_reference = `sha256:${hash(bytes)}`;
     return { path: `cert-${index}.json`, sha256: hash(bytes), approval_ref: ref };
   });
-  const inventory = { schema_version: '1', cli_version: '1.0.0', cli_binary_sha256: hash(binary),
-    models: models.map(model => model.model_id), observed_at: now, expires_at: expires };
-  const inventoryBytes = Buffer.from(JSON.stringify(inventory));
   evidence.set('inventory.json', inventoryBytes);
   trust.registry.approvals.push({ ref: 'OWNER-CLI', kind: 'cli_inventory', repo_id: 1, full_name: 'owner/repo',
     subject_sha256: `sha256:${hash(inventoryBytes)}`, issued_at: now, expires_at: expires });
@@ -391,7 +391,7 @@ test('default enforce preparation loads and verifies evidence from central confi
   createCentralCheckout(selfRepo, pinnedRegistry, { catalog: fixture.trust.catalog, index: fixture.trust.index,
     egressPolicy: allowedEgressPolicyFixture });
   const configRoot = join(selfRepo, '.github/workflows/config');
-  const policySha256 = `sha256:${hash(readFileSync(join(configRoot, 'review-risk-policy.json')))}`;
+  const policySha256 = `sha256:${hash(readFileSync(join(configRoot, 'decision-egress-policy.json')))}`;
   const catalogSha256 = `sha256:${hash(readFileSync(join(configRoot, 'review-model-catalog.json')))}`;
   const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot: selfRepo,
     readFile: (path, root) => readFileSync(join(root, path)), listTrackedPaths: () => CENTRAL_MANIFEST_PATHS });

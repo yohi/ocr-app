@@ -965,3 +965,17 @@ test('supports findings array from antigravity host format', async () => {
     side: 'RIGHT',
   });
 });
+
+test('shadow review posting stops before the GitHub mutation when fresh authorization is revoked', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([]);
+
+  await assert.rejects(run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'shadow' },
+    authorizeBeforeMutation: async () => false,
+  }), /ROUTING_ACTIVATION_DENIED/);
+
+  assert.deepEqual(requests, []);
+});

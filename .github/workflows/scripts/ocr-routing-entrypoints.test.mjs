@@ -59,6 +59,8 @@ function fixture(count = 1) {
     if (file.includes('review-model-catalog.json')) return JSON.stringify(catalog);
     if (file.includes('review-certification-index.json')) return '{}';
     if (file.includes('review-risk-policy.json')) return '{}';
+    if (file.includes('decision-egress-policy.json')) return JSON.stringify({ destination: 'openrouter-decisions', policy_version: '1',
+      approval_reference_format: 'OWNER-<approval-id>', allowed_repositories: [] });
     throw new Error(`unexpected read: ${file}`);
   }, existsSync: file => files.has(file), lstatSync: () => ({ isFile: () => true, isSymbolicLink: () => false }),
   appendFileSync: (_file, value) => outputs.push(value),

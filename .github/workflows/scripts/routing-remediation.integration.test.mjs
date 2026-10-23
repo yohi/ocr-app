@@ -75,7 +75,7 @@ function trustedCentralCheckout() {
   const digest = path => `sha256:${createHash('sha256').update(readFileSync(join(root, path))).digest('hex')}`;
   const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot: root, readFile: path => readFileSync(join(root, path)),
     listTrackedPaths: () => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
-  return { root, policySha256: digest('.github/workflows/config/review-risk-policy.json'),
+  return { root, policySha256: digest('.github/workflows/config/decision-egress-policy.json'),
     catalogSha256: digest('.github/workflows/config/review-model-catalog.json'), sourceManifestSha256 };
 }
 

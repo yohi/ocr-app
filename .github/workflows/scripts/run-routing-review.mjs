@@ -80,9 +80,34 @@ export async function runRoutingReview({
       now: now(),
     });
     if (!startupAuthorization.authorized) denied('ROUTING_ACTIVATION_DENIED');
+    const authorizeBeforeSpawn = async () => {
+      try {
+        const current = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
+        if (!current?.registry) return false;
+        return evaluateStartup({
+          mode,
+          repoIdentity,
+          registry: current.registry,
+          operationalDossiers: current.operationalDossiers,
+          policySha256: freshInputs.policySha256,
+          catalogSha256: freshInputs.catalogSha256,
+          sourceManifestSha256: freshInputs.sourceManifestSha256,
+          now: now(),
+        }).authorized === true;
+      } catch {
+        return false;
+      }
+    };
+    const runAuthorizedHost = async options => {
+      const result = await host({ ...options, authorizeBeforeSpawn });
+      if (result?.status === 'failed' && ['ROUTING_ACTIVATION_DENIED', 'ROUTING_AUTHORITY_UNAVAILABLE'].includes(result.message)) {
+        if (writeOutput) await writeOutput('ROUTE_GUARD_FAILED=true');
+      }
+      return result;
+    };
     if (!route) {
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
-      return host({ ...legacy, routingMode: 'shadow' });
+      return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
     }
     const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
@@ -132,7 +157,7 @@ export async function runRoutingReview({
       return result;
     }
     const isThread = hostOptions.mode === 'thread';
-    return host({ ...legacy,
+    return runAuthorizedHost({ ...legacy,
       routingMode: mode,
       ...(mode === 'enforce' && route.reviewable_file_count > 0 ? {
         model: route.selected_model_id,

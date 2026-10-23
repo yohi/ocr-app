@@ -147,18 +147,18 @@ test('returns the trusted catalog and verified model evidence as the certified b
   const modelId = 'model-a';
   const capabilityBytes = Buffer.from('approved capability evidence');
   const capabilityHash = createHash('sha256').update(capabilityBytes).digest('hex');
-  const certification = {
-    schema_version: '1', model_id: modelId, capability_tier: 'deep', catalog_version: '2.0.0',
-    issued_at: '2026-01-01T00:00:00.000Z', expires_at: '2027-01-01T00:00:00.000Z',
-    capability_evidence_sha256: capabilityHash, cli_evidence_sha256: 'c'.repeat(64),
-  };
-  const certificationBytes = Buffer.from(JSON.stringify(certification));
-  const certificationHash = createHash('sha256').update(certificationBytes).digest('hex');
   const inventoryBytes = Buffer.from(JSON.stringify({
     schema_version: '1', cli_version: '9.0.0', cli_binary_sha256: hash, models: [modelId],
     observed_at: '2026-01-01T00:00:00.000Z', expires_at: '2027-01-01T00:00:00.000Z',
   }));
   const inventoryHash = createHash('sha256').update(inventoryBytes).digest('hex');
+  const certification = {
+    schema_version: '1', model_id: modelId, capability_tier: 'deep', catalog_version: '2.0.0',
+    issued_at: '2026-01-01T00:00:00.000Z', expires_at: '2027-01-01T00:00:00.000Z',
+    capability_evidence_sha256: capabilityHash, cli_evidence_sha256: inventoryHash,
+  };
+  const certificationBytes = Buffer.from(JSON.stringify(certification));
+  const certificationHash = createHash('sha256').update(certificationBytes).digest('hex');
   const catalog = { catalog_version: '2.0.0', models: [{ model_id: modelId, capability_tier: 'deep', catalog_version: '2.0.0', certification_status: 'certified', certification_reference: `sha256:${certificationHash}` }] };
   trustedInputs.catalog = catalog;
   trustedInputs.index = { schema_version: '1', certifications: [{ path: 'certification.json', sha256: certificationHash, approval_ref: 'OWNER-CERT' }], cli_inventory: { path: 'inventory.json', sha256: inventoryHash, approval_ref: 'OWNER-CLI' } };

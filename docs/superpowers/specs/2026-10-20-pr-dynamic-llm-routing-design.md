@@ -829,9 +829,11 @@ authorization or activation of `shadow/enforce`.
 | G0-D06 | G2はrouting観測のみ、レビュー品質評価はG3 | `BASIC_POLICY_APPROVED`、具体的G2運用とG2実施は`NOT_STARTED` |
 | G0-D07 | 無料Decisionのみ・自動課金禁止、routing監査Artifact保持30日、中央repository read権限を閲覧境界とする | `BASIC_POLICY_APPROVED`、Secret配布/実費評価・ID取扱い詳細・削除/Incident・実アクセス棚卸・実装確認は`PENDING_OWNER/VALIDATION`。shadow/enforce起動禁止 |
 
-**現在の単一実効状態**：`G0_BASIC_POLICY=APPROVED`、`G0_FULL_OPERATIONAL_AUTHORIZATION=NOT_GRANTED`、`IMPLEMENTATION_PLAN=CREATED`、`DESIGN_PLAN_CONSISTENCY=REVISION_READY_FOR_INDEPENDENT_RECHECK`（独立再審査前）、`RG_R2_INPUT_REVIEW=REVISION_REQUIRED(RG-R1-002_MAJOR,RG-R1-001_RESIDUAL_MINOR)`、`RG_R2_CORRECTION=REVISION_READY_FOR_INDEPENDENT_RECHECK`、`G1/G2/G3/G4=NOT_STARTED`、`IMPLEMENTATION=NOT_STARTED`、`GITHUB_WRITES_BY_RG_R1_CORRECTION_AUTHORING=NONE`、`DECISION_API_CALLS=NONE`、`SHADOW_ENFORCE_ACTIVATION=NONE`。
+**2026-10-20時点の状態スナップショット（履歴。監査日現在の宣言ではない）**：`G0_BASIC_POLICY=APPROVED`、`G0_FULL_OPERATIONAL_AUTHORIZATION=NOT_GRANTED`、`IMPLEMENTATION_PLAN=CREATED`、`DESIGN_PLAN_CONSISTENCY=REVISION_READY_FOR_INDEPENDENT_RECHECK`（独立再審査前）、`RG_R2_INPUT_REVIEW=REVISION_REQUIRED(RG-R1-002_MAJOR,RG-R1-001_RESIDUAL_MINOR)`、`RG_R2_CORRECTION=REVISION_READY_FOR_INDEPENDENT_RECHECK`、`G1/G2/G3/G4=NOT_STARTED`、`IMPLEMENTATION=NOT_STARTED`、`GITHUB_WRITES_BY_RG_R1_CORRECTION_AUTHORING=NONE`、`DECISION_API_CALLS=NONE`、`SHADOW_ENFORCE_ACTIVATION=NONE`。
 
-状態の切替は新しいOwner証跡と独立再レビュー結果が得られた場合に限る。未決裁を`APPROVED`と書き換えてはならない。enforceゲートはD04で承認された**非対象高リスクのblocking**を適用する。§8.3の「将来のOwner決裁が必要」はR4初版時点の記述であり、この基本方針が承認された後の運用値の追加決裁・実装検証と区別する。
+**後続の証跡記録（2026-10-23）**：実装とオフラインテストの記録は[Routing Notification Follow-up](../evidence/2026-10-23-routing-notification-follow-up.md)および[Routing Notification Remediation](../evidence/2026-10-23-routing-notification-remediation.md)を参照。Full G1 acceptanceは`NOT_ESTABLISHED`、独立G1評価は`NOT_RUN`。G2/G3/G4の運用認可・実施は未成立であり、この履歴スナップショットの`IMPLEMENTATION=NOT_STARTED`を後続実装の状態と混同しないこと。
+
+この2026-10-20時点のスナップショットに記録された状態の切替は、新しいOwner証跡と独立再レビュー結果が得られた場合に限る。未決裁を`APPROVED`と書き換えてはならない。enforceゲートはD04で承認された**非対象高リスクのblocking**を適用する。§8.3の「将来のOwner決裁が必要」はR4初版時点の記述であり、この基本方針が承認された後の運用値の追加決裁・実装検証と区別する。
 
 
 **RG-R2現行のGitHub履歴と本改訂の境界**：RG-R1の修正文書は2026-10-20に`feature/pr-dynamic-llm-routing-docs`へコミットされ、**reviewed commit `4df169ffa5fa5da33bb4b0d21d2580afb1d1c8e7`は既にGitHubに存在する**。R4初版およびRG-R1**作成時**の`GITHUB_WRITES=NONE`は各作成セッションの過去の非実施記録であり、リポジトリに対して今まで一度も書込みがなかった意味ではない。本RG-R2限定是正は**ローカル文書生成のみ**で、`GITHUB_WRITES_BY_RG_R2=NONE`、`SOURCE_CODE_CHANGED_BY_RG_R2=NO`、`DECISION_API_CALLS_BY_RG_R2=NONE`、`SHADOW_ENFORCE_ACTIVATION_BY_RG_R2=NONE`とする。Owner基本方針は承認済みだが運用grant/モデル認定/Secret/削除・Incident手順/段階有効化は未承認。`G1/G2/G3/G4=NOT_STARTED`は継続。RG-R2修正文書への独立レビューPASSは未取得である。

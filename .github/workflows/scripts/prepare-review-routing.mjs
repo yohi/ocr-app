@@ -172,7 +172,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
         ? listTrackedPaths(root)
         : execGit('/usr/bin/git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
     const inputsFromDisk = {
-      policySha256: digestFile('.github/workflows/config/review-risk-policy.json'),
+      policySha256: digestFile('.github/workflows/config/decision-egress-policy.json'),
       catalogSha256: digestFile('.github/workflows/config/review-model-catalog.json'), sourceManifestSha256,
       registry: {}, operationalDossiers: {},
       index: JSON.parse(readTrusted('.github/workflows/config/review-certification-index.json')),

@@ -34,7 +34,7 @@ test('shadow fallback requires startup approval and handles absent prepared rout
   assert.doesNotMatch(host, /result\.message === 'NO_SELECTED_REVIEW_ROUTE'/);
   assert.match(routingReview, /if \(writeOutput\) await writeOutput\('ROUTE_GUARD_FAILED=true'\)/);
   assert.match(routingReview, /if \(mode !== 'shadow'\) denied\('NO_SELECTED_REVIEW_ROUTE'\)/);
-  assert.match(routingReview, /return host\(\{ \.\.\.legacy, routingMode: 'shadow' \}\)/);
+  assert.match(routingReview, /return runAuthorizedHost\(\{ \.\.\.legacy, routingMode: 'shadow' \}\)/);
   assert.match(step('Resolve fixed review threads'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /ROUTE_GUARD_FAILED/);
   assert.match(step('Post review comments'), /DECISION_ROUTING_MODE == 'off'.*DECISION_ROUTING_MODE == 'shadow'/);

@@ -358,6 +358,9 @@ jobs:
         if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && (env.DECISION_ROUTING_MODE == 'off' || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow'))
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
+          SELF_REPO_PATH: self-repo
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           RESOLVE_LLM_MODEL: ${{ vars.RESOLVE_LLM_MODEL || '' }}
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
@@ -436,7 +439,7 @@ jobs:
               return fs.readFileSync(file);
             };
             const trustedInputs = { ...current, catalog, readEvidence, needsModel: runBinding.mode === 'enforce' && decision.reviewable_file_count > 0,
-              policySha256: digest(resolve(trustedRoot, '.github/workflows/config/review-risk-policy.json')),
+              policySha256: digest(resolve(trustedRoot, '.github/workflows/config/decision-egress-policy.json')),
               catalogSha256: digest(resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json')),
               index: JSON.parse(fs.readFileSync(resolve(trustedRoot, '.github/workflows/config/review-certification-index.json'), 'utf8')),
               sourceManifestSha256: hashRoutingSourceManifest({ trustedRoot, readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
@@ -494,7 +497,7 @@ jobs:
             const centralRoot = resolve('self-repo');
             const repo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`], { encoding: 'utf8' }));
             const central = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], { encoding: 'utf8' }));
-            const policyPath = resolve(centralRoot, '.github/workflows/config/review-risk-policy.json');
+            const policyPath = resolve(centralRoot, '.github/workflows/config/decision-egress-policy.json');
             const catalogPath = resolve(centralRoot, '.github/workflows/config/review-model-catalog.json');
             const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
             const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot: centralRoot,
@@ -585,7 +588,7 @@ jobs:
             const targetRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`], { encoding: 'utf8' }));
             const centralRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], { encoding: 'utf8' }));
             const centralRoot = resolve('self-repo');
-            const policyPath = resolve(centralRoot, '.github/workflows/config/review-risk-policy.json');
+            const policyPath = resolve(centralRoot, '.github/workflows/config/decision-egress-policy.json');
             const catalogPath = resolve(centralRoot, '.github/workflows/config/review-model-catalog.json');
             const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
             const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot: centralRoot,
@@ -680,7 +683,7 @@ jobs:
             const targetRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`], { encoding: 'utf8' }));
             const centralRepo = JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], { encoding: 'utf8' }));
             const trustedRoot = resolve('self-repo');
-            const policyPath = resolve(trustedRoot, '.github/workflows/config/review-risk-policy.json');
+            const policyPath = resolve(trustedRoot, '.github/workflows/config/decision-egress-policy.json');
             const catalogPath = resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json');
             const indexPath = resolve(trustedRoot, '.github/workflows/config/review-certification-index.json');
             const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
@@ -731,6 +734,9 @@ jobs:
         if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && (env.DECISION_ROUTING_MODE == 'off' || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow'))
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          CENTRAL_GITHUB_TOKEN: ${{ github.token }}
+          SELF_REPO_PATH: self-repo
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
         run: |
