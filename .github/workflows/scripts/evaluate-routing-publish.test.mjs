@@ -25,11 +25,11 @@ const fastModel = catalog.models.find(model => model.capability_tier === 'fast')
 const deepFallbackModel = catalog.models.find(model => model.model_id === fastModel.allowed_fallbacks[0]);
 const fastDecisionRecord = { ...decisionRecord, risk_floor: 'fast', selected_strategy: 'fast', proposed_strategy: 'fast' };
 const finalAudit = {
-  schema_version: '2', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2, effective_mode: 'enforce',
+  schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2, effective_mode: 'enforce',
   decision_status: 'unavailable', egress_status: 'denied', classification_status: 'unclassified_code', risk_floor: 'deep', selected_strategy: 'deep', proposed_strategy: 'deep',
   policy_version: '1.0.0', feature_schema_version: '3', decision_state_version: '1', model_catalog_version: '1.0.0', owner_approval_ref: null,
   proposed_review_model: primaryModel, selected_review_model: primaryModel, host_success_model: primaryModel, executed_review_model: primaryModel,
-  attempted_review_models: [primaryModel], review_validation_status: 'passed', head_validation_status: 'passed', audit_status: 'sealed',
+  attempted_review_models: [primaryModel], result_sha256: 'c'.repeat(64), review_validation_status: 'passed', head_validation_status: 'passed', audit_status: 'sealed',
   review_scope_gap: false, features_incomplete: false, review_quality_measured: true, decision_api_cost: null, latency_ms: null,
 };
 const fastFinalAudit = {
@@ -96,6 +96,14 @@ test('publish gate rejects incomplete schemas and mismatched decision/audit fiel
   assert.equal(evaluatePublishEligibility(args({ finalAudit: { ...finalAudit, head_sha: 'b'.repeat(40) } })).reason, 'AUDIT_INCOMPLETE');
   assert.doesNotThrow(() => validateRoutingDecisionRecord(decisionRecord));
   assert.doesNotThrow(() => validateRoutingAudit(finalAudit));
+});
+
+test('enforce Gate rejects absent or malformed result digest', () => {
+  const withoutDigest = { ...finalAudit };
+  delete withoutDigest.result_sha256;
+  assert.equal(evaluatePublishEligibility(args({ finalAudit: withoutDigest })).reason, 'AUDIT_INCOMPLETE');
+  assert.equal(evaluatePublishEligibility(args({ finalAudit: { ...finalAudit, result_sha256: null } })).reason, 'AUDIT_INCOMPLETE');
+  assert.equal(evaluatePublishEligibility(args({ finalAudit: { ...finalAudit, result_sha256: 'invalid' } })).reason, 'AUDIT_INCOMPLETE');
 });
 
 test('publish gate requires a certified catalog model equal to the selected audit model', () => {

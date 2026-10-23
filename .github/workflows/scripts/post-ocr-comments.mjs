@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import https from 'node:https';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -19,6 +20,8 @@ import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs
 
 class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
+const SHA256 = /^[0-9a-f]{64}$/;
+const HEAD_MISMATCH = 'PR head changed while the review was running; refusing to publish stale results';
 
 function getArg(args, key) {
   const index = args.indexOf(`--${key}`);
@@ -48,14 +51,23 @@ function writeReviewUrl(outputPath, response) {
   }
 }
 
-function readResult(resultPath) {
+function readResult(resultPath, expectedResultSha256) {
   if (!fs.existsSync(resultPath)) {
     throw new CliError(`Result file not found: ${resultPath}`);
   }
 
+  const resultBytes = fs.readFileSync(resultPath);
+  if (expectedResultSha256 !== undefined) {
+    const actualSha256 = createHash('sha256').update(resultBytes).digest('hex');
+    if (typeof expectedResultSha256 !== 'string' || !SHA256.test(expectedResultSha256)
+      || actualSha256 !== expectedResultSha256) {
+      throw new CliError('PUBLISH_FAILED');
+    }
+  }
+
   let result;
   try {
-    result = JSON.parse(fs.readFileSync(resultPath, 'utf-8'));
+    result = JSON.parse(resultBytes.toString('utf8'));
   } catch (error) {
     throw new CliError(`Failed to parse result JSON file: ${error.message}`);
   }
@@ -221,17 +233,23 @@ async function assertExpectedHead({ expectedSha, githubApi, prNumber }) {
   const response = await githubApi('GET', `/pulls/${prNumber}`);
   const actualSha = response.status === 200 ? response.data?.head?.sha : null;
   if (actualSha !== expectedSha) {
-    throw new CliError('PR head changed while the review was running; refusing to publish stale results');
+    throw new CliError(HEAD_MISMATCH);
   }
 }
 
 async function assertMutationAuthorized(authorizeBeforeMutation) {
-  if (await authorizeBeforeMutation() !== true) throw new CliError('ROUTING_ACTIVATION_DENIED');
+  let authorized = false;
+  try {
+    authorized = await authorizeBeforeMutation() === true;
+  } catch {
+    authorized = false;
+  }
+  if (!authorized) throw new CliError('ROUTING_ACTIVATION_DENIED');
 }
 
 async function postSkipComment({ authorizeBeforeMutation, expectedSha, githubApi, outputPath, prNumber, message }) {
-  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   await assertMutationAuthorized(authorizeBeforeMutation);
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
   });
@@ -245,8 +263,8 @@ async function postSkipComment({ authorizeBeforeMutation, expectedSha, githubApi
 }
 
 async function postFailureComment({ authorizeBeforeMutation, expectedSha, githubApi, outputPath, prNumber, message }) {
-  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   await assertMutationAuthorized(authorizeBeforeMutation);
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = await githubApi('POST', `/issues/${prNumber}/comments`, {
     body: message,
   });
@@ -280,8 +298,8 @@ async function postSummaryComment({ authorizeBeforeMutation, botLogin, changedFi
       : '';
     return comment?.body?.includes(SUMMARY_MARKER) && login === normalizedBotLogin;
   });
-  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   await assertMutationAuthorized(authorizeBeforeMutation);
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const response = matchingComment
     ? await githubApi('PATCH', `/issues/comments/${matchingComment.id}`, { body })
     : await githubApi('POST', `/issues/${prNumber}/comments`, { body });
@@ -371,8 +389,8 @@ async function postReviewCommentsIndividually({ authorizeBeforeMutation, comment
   let failureCount = 0;
   for (const comment of comments) {
     try {
-      await assertExpectedHead({ expectedSha, githubApi, prNumber });
       await assertMutationAuthorized(authorizeBeforeMutation);
+      await assertExpectedHead({ expectedSha, githubApi, prNumber });
       const response = await githubApi('POST', `/pulls/${prNumber}/comments`, {
         commit_id: headSha,
         path: comment.path,
@@ -386,6 +404,14 @@ async function postReviewCommentsIndividually({ authorizeBeforeMutation, comment
       }
     } catch (error) {
       failureCount++;
+      if (error instanceof CliError && error.message === 'ROUTING_ACTIVATION_DENIED') {
+        console.error('Failed to post individual review comment (ROUTING_ACTIVATION_DENIED)');
+        break;
+      }
+      if (error instanceof CliError && error.message === HEAD_MISMATCH) {
+        console.error('Failed to post individual review comment (HEAD_VALIDATION_FAILED)');
+        break;
+      }
       console.error('Failed to post individual review comment:', error);
     }
   }
@@ -427,8 +453,8 @@ async function postReviewComments({ authorizeBeforeMutation, botLogin, comments,
     return { comments: uniqueComments, exitCode: 0, filesMap };
   }
 
-  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   await assertMutationAuthorized(authorizeBeforeMutation);
+  await assertExpectedHead({ expectedSha, githubApi, prNumber });
   const review = await githubApi('POST', `/pulls/${prNumber}/reviews`, {
     commit_id: headSha,
     event: 'COMMENT',
@@ -496,10 +522,11 @@ export async function run({
   outputPath = process.env.GITHUB_OUTPUT,
   env = process.env,
   authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
+  expectedResultSha256,
   githubApi: injectedGithubApi,
 } = {}) {
   const config = createConfig(args, token, outputPath);
-  const result = readResult(config.resultPath);
+  const result = readResult(config.resultPath, expectedResultSha256);
   const githubApi = injectedGithubApi ?? createGithubApi(config);
 
   if (result.status === 'skipped') {

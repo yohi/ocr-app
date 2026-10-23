@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +12,8 @@ const catalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.
 const fastEntry = catalog.models.find(model => model.capability_tier === 'fast');
 const selectedModel = fastEntry.model_id;
 const fallbackModel = fastEntry.allowed_fallbacks[0];
+const resultBytes = Buffer.from('{"status":"success","coverage":1,"findings":[]}\n');
+const resultSha256 = createHash('sha256').update(resultBytes).digest('hex');
 const certifiedCatalog = { ...catalog, models: catalog.models.map(model => ({ ...model,
   certification_status: 'certified', certification_reference: `sha256:${'b'.repeat(64)}` })) };
 const verifiedCertificationRefs = certifiedCatalog.models.map(model => ({
@@ -27,13 +30,13 @@ const selectedRoute = {
   policy_version: '1.0.0', model_catalog_version: catalog.catalog_version,
 };
 const finalAudit = {
-  schema_version: '2', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: runBinding.headSha,
+  schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: runBinding.headSha,
   workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt, effective_mode: 'enforce',
   decision_status: 'unavailable', egress_status: 'denied', classification_status: 'unclassified_code', risk_floor: 'fast',
   selected_strategy: 'fast', proposed_strategy: 'fast', policy_version: '1.0.0', feature_schema_version: '3',
   decision_state_version: '1', model_catalog_version: catalog.catalog_version, owner_approval_ref: null,
   proposed_review_model: selectedModel, selected_review_model: selectedModel, host_success_model: fallbackModel,
-  executed_review_model: fallbackModel, attempted_review_models: [selectedModel, fallbackModel],
+  executed_review_model: fallbackModel, attempted_review_models: [selectedModel, fallbackModel], result_sha256: resultSha256,
   review_validation_status: 'passed', head_validation_status: 'passed', audit_status: 'sealed', review_scope_gap: false,
   features_incomplete: false, review_quality_measured: true, decision_api_cost: null, latency_ms: null,
 };
@@ -72,6 +75,8 @@ function fixture({
   const runTemp = mkdtempSync(join(tmpdir(), 'publish-routing-review-'));
   mkdirSync(join(runTemp, 'ocr-routing'));
   writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), JSON.stringify(decisionRecord));
+  const resultPath = join(runTemp, 'ocr-result.json');
+  writeFileSync(resultPath, resultBytes);
   const calls = [];
   const outputs = [];
   const resultPaths = [];
@@ -80,12 +85,12 @@ function fixture({
   let revalidationCalls = 0;
   const args = {
     env: { GITHUB_TOKEN: 'token', TARGET_REPO: 'owner/repo', PR_NUMBER: '7', TARGET_REPO_PATH: 'target-repo',
-      CENTRAL_REPO_ID: '99', CENTRAL_REPO_FULL_NAME: 'central/workflows', OCR_RESULT_PATH: '/tmp/ocr-result.json' },
+      CENTRAL_REPO_ID: '99', CENTRAL_REPO_FULL_NAME: 'central/workflows', OCR_RESULT_PATH: resultPath },
     runBinding,
     runTemp,
     selectedRoute: route,
     attemptRecord: chain,
-    finalAudit,
+    finalAudit: { ...finalAudit },
     delivery: upload,
     checkRunId,
     trustedInputs: {
@@ -128,6 +133,7 @@ function fixture({
       postCalls += 1;
       resultPaths.push(input.args.at(-1));
       assert.equal(input.expectedSha, runBinding.headSha);
+      assert.equal(input.expectedResultSha256, finalAudit.result_sha256);
       assert.deepEqual(input.args.slice(0, 4), ['--repo', 'owner/repo', '--pr', '7']);
       if (postError) throw postError;
       return 0;
@@ -138,7 +144,7 @@ function fixture({
     },
     now: () => '2026-10-21T12:00:00.000Z',
   };
-  return { args, calls, outputs, resultPaths, get postCalls() { return postCalls; }, get fetchCalls() { return fetchCalls; },
+  return { args, calls, outputs, resultPaths, resultPath, get postCalls() { return postCalls; }, get fetchCalls() { return fetchCalls; },
     get revalidationCalls() { return revalidationCalls; }, cleanup: () => rmSync(runTemp, { recursive: true, force: true }) };
 }
 
@@ -154,7 +160,29 @@ test('valid fallback publishes in gate, head, post order', async () => {
   } finally { value.cleanup(); }
 });
 
-test('Given an authorized enforce publication, When the post adapter checks mutation authority, Then the publisher grants the checked mutation', async () => {
+test('does not call post adapter for missing result digest', async () => {
+  const value = fixture();
+  delete value.args.finalAudit.result_sha256;
+  try {
+    const result = await publishRoutingReview(value.args);
+    assert.equal(result.published, false);
+    assert.equal(result.reason, 'AUDIT_INCOMPLETE');
+    assert.equal(value.postCalls, 0);
+  } finally { value.cleanup(); }
+});
+
+test('does not call post adapter for changed result bytes', async () => {
+  const value = fixture();
+  writeFileSync(value.resultPath, '{"status":"success","coverage":0,"findings":[]}\n');
+  try {
+    const result = await publishRoutingReview(value.args);
+    assert.equal(result.published, false);
+    assert.equal(result.reason, 'PUBLISH_FAILED');
+    assert.equal(value.postCalls, 0);
+  } finally { value.cleanup(); }
+});
+
+test('re-fetches central authority for each mutation callback', async () => {
   const value = fixture();
   let authorizeBeforeMutation;
   value.args.postReview = async input => {
@@ -165,7 +193,68 @@ test('Given an authorized enforce publication, When the post adapter checks muta
     const result = await publishRoutingReview(value.args);
     assert.equal(result.published, true);
     assert.equal(await authorizeBeforeMutation(), true);
+    assert.equal(await authorizeBeforeMutation(), true);
+    assert.equal(value.fetchCalls, 3);
+    assert.equal(value.revalidationCalls, 3);
+    assert.equal(value.calls.filter(call => call === 'gate').length, 3);
   } finally { value.cleanup(); }
+});
+
+test('denies mutation when fresh authority, context, CLI identity, or Gate fails', async () => {
+  const failures = [
+    ['authority GET', value => {
+      let reads = 0;
+      const fetch = value.args.fetchAuthorization;
+      value.args.fetchAuthorization = async input => {
+        reads++;
+        if (reads === 2) throw new Error('revoked');
+        return fetch(input);
+      };
+    }],
+    ['context revalidation', value => {
+      let reads = 0;
+      const revalidate = value.args.revalidateExecutionContext;
+      value.args.revalidateExecutionContext = async input => {
+        reads++;
+        if (reads === 2) throw new Error('context changed');
+        return revalidate(input);
+      };
+    }],
+    ['CLI identity', value => {
+      let reads = 0;
+      const readIdentity = value.args.readCliIdentity;
+      value.args.readCliIdentity = async input => {
+        reads++;
+        if (reads === 2) return { binarySha256: 'd'.repeat(64) };
+        return readIdentity(input);
+      };
+    }],
+    ['fresh Gate', value => {
+      let evaluations = 0;
+      const evaluate = value.args.evaluateGate;
+      value.args.evaluateGate = async input => {
+        evaluations++;
+        if (evaluations === 2) return { authorized: false, reason: 'ROUTING_ACTIVATION_DENIED' };
+        return evaluate(input);
+      };
+    }],
+  ];
+
+  for (const [failureName, configure] of failures) {
+    const value = fixture();
+    configure(value);
+    let callbackAuthorized;
+    value.args.postReview = async input => {
+      callbackAuthorized = await input.authorizeBeforeMutation();
+      return 1;
+    };
+    try {
+      const result = await publishRoutingReview(value.args);
+      assert.equal(callbackAuthorized, false, failureName);
+      assert.equal(result.published, false, failureName);
+      assert.equal(result.reason, 'PUBLISH_FAILED', failureName);
+    } finally { value.cleanup(); }
+  }
 });
 
 test('publication uses the run-scoped result path when OCR_RESULT_PATH is unset', async () => {

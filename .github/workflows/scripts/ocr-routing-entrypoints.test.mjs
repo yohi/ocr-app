@@ -3,16 +3,23 @@ import fs from 'node:fs';
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
-import test from 'node:test';
-import { createRoutingDecisionRecord, finalizeRoutingAudit, validateRoutingAudit, validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
+import { afterEach, test } from 'node:test';
+import { createRoutingDecisionRecord, finalizeRoutingAudit as finalizeRoutingAuditCore, validateRoutingAudit, validateRoutingDecisionRecord, verifyValidatedResultEvidence } from './ocr-routing-audit.mjs';
 import { publishRoutingReview } from './publish-routing-review.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import * as checkRun from './update-check-run.mjs';
 import { authorizeRoutingStart } from './authorize-routing-start.mjs';
 
+const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
+
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
 const step = name => workflow.split(`- name: ${name}\n`)[1]?.split('\n      - name:')[0] ?? '';
+const temporaryDirectories = [];
+
+afterEach(() => {
+  for (const directory of temporaryDirectories.splice(0)) fs.rmSync(directory, { recursive: true, force: true });
+});
 const binding = { workflowRunId: '123', runAttempt: 1, headSha: 'a'.repeat(40), mode: 'enforce' };
 const route = { schema_version: '1', workflow_run_id: '123', run_attempt: 1, head_sha: binding.headSha,
   effective_mode: 'enforce', reviewable_file_count: 1, selected_model_id: 'primary', fallback_models: [], selected_strategy: 'deep' };
@@ -53,9 +60,14 @@ function fixture(count = 1) {
     ['/run/ocr-review-context.json', '{}'],
     ['/run/ocr-routing-execution-context.json', '{}'],
   ]);
+  const resultBytes = Buffer.from(files.get('/tmp/ocr-result.json'));
+  const resultDirectory = fs.mkdtempSync(path.join(tmpdir(), 'ocr-entrypoint-result-'));
+  temporaryDirectories.push(resultDirectory);
+  const resultPath = path.join(resultDirectory, 'ocr-result.json');
+  fs.writeFileSync(resultPath, resultBytes);
   const outputs = [];
   const fakeFs = { readFileSync: file => {
-    if (files.has(file)) return files.get(file);
+    if (files.has(file)) return file === '/tmp/ocr-result.json' ? Buffer.from(files.get(file)) : files.get(file);
     if (file.includes('review-model-catalog.json')) return JSON.stringify(catalog);
     if (file.includes('review-certification-index.json')) return '{}';
     if (file.includes('review-risk-policy.json')) return '{}';
@@ -72,12 +84,13 @@ function fixture(count = 1) {
     validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding,
     policy: { repoId: 7, repo: 'owner/repo', prNumber: 1, review_scope_gap: false, features_incomplete: false,
       selectedReviewModel: selected.selected_model_id }, catalog, selectedRoute: selected, certifiedBundle: bundle,
-    runTemp: '/run', fs: fakeFs })));
+    runTemp: '/run', resultSha256: crypto.createHash('sha256').update(resultBytes).digest('hex'), fs: fakeFs })));
   const env = { RUNNER_TEMP: '/run', GITHUB_OUTPUT: '/out', DECISION_ROUTING_MODE: 'enforce', COMMIT_SHA: binding.headSha,
     GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', GITHUB_REPOSITORY: 'central/repo',
     TARGET_REPO: 'owner/repo', PR_NUMBER: '1', GITHUB_TOKEN: 'target-test', CENTRAL_GITHUB_TOKEN: 'central-test',
     VALIDATION_STATUS: 'passed', HEAD_STATUS: 'passed', DELIVERY_OUTCOME: 'success', ARTIFACT_ID: 'artifact', CHECK_RUN_ID: '1',
-    OCR_RESULT_PATH: '/tmp/ocr-result.json' };
+    VALIDATED_RESULT_SHA256: crypto.createHash('sha256').update(resultBytes).digest('hex'),
+    OCR_RESULT_PATH: resultPath };
   const calls = [];
   const revalidate = () => ({ startupAuthorization: { authorized: true, approvalRefs: [] }, certifiedBundle: count ? bundle : null });
   const authority = async input => {
@@ -99,7 +112,7 @@ function fixture(count = 1) {
     'load-review-certification.mjs': { readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
     'update-check-run.mjs': checkRun,
-    'ocr-routing-audit.mjs': { finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }),
+    'ocr-routing-audit.mjs': { finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
       writeRoutingAudit: ({ record }) => files.set('/run/ocr-routing/final.json', JSON.stringify(record)),
       validateRoutingDecisionRecord, validateRoutingAudit },
     'publish-routing-review.mjs': { publishRoutingReview: async input => {
@@ -115,8 +128,9 @@ function fixture(count = 1) {
     } },
     'check-pr-head.mjs': { fetchCurrentHead: () => binding.headSha },
     'post-ocr-comments.mjs': { run: async input => {
-      assert.deepEqual(input.args, ['--repo', 'owner/repo', '--pr', '1', '--result', '/tmp/ocr-result.json']);
+      assert.deepEqual(input.args, ['--repo', 'owner/repo', '--pr', '1', '--result', resultPath]);
       assert.equal(input.expectedSha, binding.headSha);
+      assert.equal(input.expectedResultSha256, env.VALIDATED_RESULT_SHA256);
       assert.equal(input.token, 'target-test');
       calls.push('post');
       return 1;
@@ -157,7 +171,9 @@ test('production shadow Host entrypoint reauthorizes absent routes with complete
 test('production finalizer supplies the certified route and run path for a nonempty review', async () => {
   const value = fixture();
   await execute('Finalize routing audit', value.imports, value.env);
-  assert.equal(JSON.parse(value.files.get('/run/ocr-routing/final.json')).executed_review_model, 'primary');
+  const finalAudit = JSON.parse(value.files.get('/run/ocr-routing/final.json'));
+  assert.equal(finalAudit.executed_review_model, 'primary');
+  assert.equal(finalAudit.result_sha256, value.env.VALIDATED_RESULT_SHA256);
 });
 
 test('production upload reauthorization accepts a normal zero-byte skip stream', async () => {
@@ -178,9 +194,12 @@ test('production skip Gate uses fresh complete authority inputs and the real eli
 
 test('production publisher never reports published before a failed real post', async () => {
   const value = fixture(0);
+  const finalizedAudit = JSON.parse(value.files.get('/run/ocr-routing/final.json'));
+  assert.equal(finalizedAudit.result_sha256, value.env.VALIDATED_RESULT_SHA256);
+  assert.equal(crypto.createHash('sha256').update(fs.readFileSync(value.env.OCR_RESULT_PATH)).digest('hex'), finalizedAudit.result_sha256);
   const result = await execute('Publish enforce review', value.imports, value.env);
   assert.equal(result.exitCode, 1);
-  assert.deepEqual(value.calls, ['authority', 'post']);
+  assert.deepEqual(value.calls, ['authority', 'post'], JSON.stringify(value.outputs));
   assert.ok(!value.outputs.some(output => output.includes('PUBLISHED=true')));
 });
 

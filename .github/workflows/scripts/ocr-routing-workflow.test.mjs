@@ -72,6 +72,15 @@ test('enforce routing gate revalidates context and startup authorization before 
   assert.match(gate, /startupAuthorization: revalidated\.startupAuthorization,[\s\S]*mode: 'enforce'/);
 });
 
+test('finalizer binds validated-result step output to current raw bytes', () => {
+  const finalizer = step('Finalize routing audit');
+  assert.match(finalizer, /VALIDATED_RESULT_SHA256:\s*\$\{\{\s*steps\.validate-review\.outputs\.RESULT_SHA256\s*\}\}/);
+  assert.match(finalizer, /verifyValidatedResultEvidence/);
+  assert.match(finalizer, /validatedResultSha256:\s*process\.env\.VALIDATED_RESULT_SHA256/);
+  assert.match(finalizer, /validation:\s*\{\s*status:\s*resultEvidence\.reviewValidationStatus\s*\}/);
+  assert.match(finalizer, /resultSha256:\s*resultEvidence\.resultSha256/);
+});
+
 test('enforce has one publish boundary and legacy posting is off or shadow only', () => {
   const enforcePublishers = workflow.match(/publish-routing-review\.mjs/g) ?? [];
   assert.equal(enforcePublishers.length, 1);

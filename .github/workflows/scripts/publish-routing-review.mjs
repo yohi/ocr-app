@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
@@ -103,28 +104,93 @@ export async function publishRoutingReview({
         reason = 'HEAD_MISMATCH';
       } else {
         const resultPath = env.OCR_RESULT_PATH ?? join(runTemp, 'ocr-result.json');
-        let postResult;
+        let resultMatchesAudit = false;
         try {
-          postResult = await postReview({
-            env,
-            args: ['--repo', env.TARGET_REPO, '--pr', String(env.PR_NUMBER), '--result', resultPath],
-            token: env.GITHUB_TOKEN,
-            botLogin: env.GH_APP_SLUG,
-            expectedSha: runBinding.headSha,
-            outputPath: env.GITHUB_OUTPUT,
-            ...(runBinding.mode === 'enforce' ? {
-              authorizeBeforeMutation: async () => gateResult.authorized === true
-                && currentHead === runBinding.headSha,
-            } : {}),
-          });
+          const resultBytes = fs.readFileSync(resultPath);
+          const resultSha256 = createHash('sha256').update(resultBytes).digest('hex');
+          resultMatchesAudit = resultSha256 === finalAudit.result_sha256;
         } catch {
-          reason = 'PUBLISH_FAILED';
+          resultMatchesAudit = false;
         }
-        if (postResult === 0) {
-          published = true;
-          reason = 'PUBLISHED';
-        } else if (reason !== 'PUBLISH_FAILED') {
+
+        if (!resultMatchesAudit) {
           reason = 'PUBLISH_FAILED';
+        } else {
+          const authorizeBeforeMutation = async () => {
+            try {
+              const mutationTimestamp = now();
+              const mutationAuthorization = await fetchAuthorization({
+                centralRepoId: trustedInputs.centralRepoId ?? Number(env.CENTRAL_REPO_ID),
+                centralRepoFullName: trustedInputs.centralRepoFullName ?? env.CENTRAL_REPO_FULL_NAME,
+                protectedRef: trustedInputs.protectedRef ?? 'master',
+                token: env.CENTRAL_GITHUB_TOKEN || env.GITHUB_TOKEN,
+                fetchImpl: trustedInputs.fetchImpl ?? fetch,
+                now: mutationTimestamp,
+              });
+              if (!mutationAuthorization?.registry) return false;
+
+              const mutationTrustedInputs = {
+                ...trustedInputs,
+                registry: mutationAuthorization.registry,
+                operationalDossiers: mutationAuthorization.operationalDossiers,
+                needsModel,
+              };
+              let mutationCliBinarySha256 = null;
+              if (needsModel) {
+                const cliIdentity = await readCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
+                if (!cliIdentity?.binarySha256 || cliIdentity.binarySha256 !== sealed.cli_binary_sha256) return false;
+                mutationCliBinarySha256 = cliIdentity.binarySha256;
+              }
+
+              const mutationContext = await revalidateExecutionContext({
+                context: sealed,
+                expectedBinding: runBinding,
+                trustedInputs: mutationTrustedInputs,
+                repoIdentity: trustedInputs.repoIdentity ?? { repo_id: finalAudit.repo_id, full_name: finalAudit.repo },
+                now: mutationTimestamp,
+                cliBinarySha256: mutationCliBinarySha256,
+              });
+              const mutationGate = await evaluateGate({
+                mode: runBinding.mode,
+                expectedBinding: runBinding,
+                decisionRecord,
+                finalAudit,
+                delivery,
+                checkRunId,
+                startupAuthorization: mutationContext.startupAuthorization,
+                headSha: runBinding.headSha,
+                selectedRoute,
+                attempts: attemptRecord,
+                certifiedBundle: mutationContext.certifiedBundle,
+              });
+              return mutationGate?.authorized === true;
+            } catch {
+              return false;
+            }
+          };
+          let postResult;
+          try {
+            postResult = await postReview({
+              env,
+              args: ['--repo', env.TARGET_REPO, '--pr', String(env.PR_NUMBER), '--result', resultPath],
+              token: env.GITHUB_TOKEN,
+              botLogin: env.GH_APP_SLUG,
+              expectedSha: runBinding.headSha,
+              expectedResultSha256: finalAudit.result_sha256,
+              outputPath: env.GITHUB_OUTPUT,
+              ...(runBinding.mode === 'enforce' ? {
+                authorizeBeforeMutation,
+              } : {}),
+            });
+          } catch {
+            reason = 'PUBLISH_FAILED';
+          }
+          if (postResult === 0) {
+            published = true;
+            reason = 'PUBLISHED';
+          } else if (reason !== 'PUBLISH_FAILED') {
+            reason = 'PUBLISH_FAILED';
+          }
         }
       }
     }
