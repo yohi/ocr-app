@@ -49,6 +49,12 @@ test('non-off startup requires positive authorization and shadow does not ignore
   assert.match(step('Prepare dynamic routing'), /continue-on-error: \$\{\{ env\.DECISION_ROUTING_MODE == 'shadow' \}\}/);
 });
 
+test('routing review startup hashes the decision egress policy for authorization', () => {
+  const host = step('Run Antigravity review host');
+  assert.match(host, /const policyPath = '\.\/self-repo\/\.github\/workflows\/config\/decision-egress-policy\.json'/);
+  assert.match(host, /policySha256: hashFile\(policyPath\)/);
+});
+
 test('routing evidence upload requires fresh upload authorization', () => {
   assert.match(step('Reauthorize routing audit upload'), /AUTHORIZED=\$\{authorized\}/);
   assert.match(step('Reauthorize routing audit upload'), /output\(authorized \? 'true' : 'false'\)/);

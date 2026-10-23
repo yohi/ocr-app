@@ -278,7 +278,7 @@ jobs:
             const routePath = `${process.env.RUNNER_TEMP}/ocr-selected-route.json`;
             const decisionPath = `${process.env.RUNNER_TEMP}/ocr-routing/decision.json`;
             const catalogPath = './self-repo/.github/workflows/config/review-model-catalog.json';
-            const policyPath = './self-repo/.github/workflows/config/review-risk-policy.json';
+            const policyPath = './self-repo/.github/workflows/config/decision-egress-policy.json';
             const catalog = mode === 'off' ? null : JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
             const hashFile = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
             const trustedRoot = resolve('self-repo');
