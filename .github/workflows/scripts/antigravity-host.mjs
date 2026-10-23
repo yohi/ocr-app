@@ -190,8 +190,23 @@ export function extractPayload(raw) {
   throw new Error('Invalid payload format');
 }
 
-function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress,
+async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress,
   executablePath, executableIdentity, targetRoot, readCliIdentity, env, routingMode }) {
+  if (routingMode === 'enforce' && typeof executablePath !== 'string') {
+    return { error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' };
+  }
+  if (routingMode === 'enforce') {
+    let currentIdentity;
+    try {
+      currentIdentity = await readCliIdentity({ env, targetRoot });
+    } catch (error) {
+      return { error, failureKind: 'spawn_failed' };
+    }
+    if (currentIdentity?.resolvedPath !== executablePath
+      || currentIdentity?.binarySha256 !== executableIdentity?.binarySha256) {
+      return { error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' };
+    }
+  }
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -201,24 +216,8 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
     const effectiveModel = normalizeAntigravityModel(model);
     const workspace = resolvePath(cwd);
     let timer;
-    const earlyFinish = (result) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve(result);
-    };
     let child;
     try {
-      if (routingMode === 'enforce' && typeof executablePath !== 'string') {
-        return earlyFinish({ error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' });
-      }
-      if (routingMode === 'enforce') {
-        const currentIdentity = readCliIdentity({ env, targetRoot });
-        if (currentIdentity?.resolvedPath !== executablePath
-          || currentIdentity?.binarySha256 !== executableIdentity?.binarySha256) {
-          return earlyFinish({ error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' });
-        }
-      }
       const command = routingMode === 'enforce' ? executablePath : 'agy';
       child = spawn(command, [
         '--add-dir', workspace,
@@ -234,7 +233,7 @@ function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model,
         detached: true,
       });
     } catch (error) {
-      earlyFinish({ error, failureKind: 'spawn_failed' });
+      resolve({ error, failureKind: 'spawn_failed' });
       return;
     }
     const appendOutput = (current, chunk) => {

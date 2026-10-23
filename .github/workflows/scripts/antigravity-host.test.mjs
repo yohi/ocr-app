@@ -683,6 +683,20 @@ test('enforce spawns the attested absolute executable while off and shadow retai
   }
 });
 
+test('enforce awaits asynchronous CLI identity before spawning', async () => {
+  let spawnCount = 0;
+  const { executablePath, executableIdentity, targetRoot } = attestedExecutable();
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    executablePath, executableIdentity, targetRoot,
+    readCliIdentity: async () => executableIdentity,
+    modelCatalog: certifiedCatalog, fallbackModels: [], onAttemptEvent: () => {}, maxRetries: 0,
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(spawnCount, 1);
+  assert.equal(result.status, 'success');
+});
+
 test('enforce without an attested executable fails without spawning', async () => {
   let spawnCount = 0;
   const result = await runHost({
