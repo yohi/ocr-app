@@ -178,7 +178,7 @@ test('Given a fake PATH agy and distinct attested executable, When enforce runs,
       env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: root, PATH: fakePath },
       runHost,
       cwd: root,
-      readInstalledCliIdentity: async () => ({ binarySha256, resolvedPath: attestedAgy }),
+      readInstalledCliIdentity: () => ({ binarySha256, resolvedPath: attestedAgy }),
       revalidateExecutionContext: async ({ cliBinarySha256 }) => {
         if (cliBinarySha256 !== binarySha256) throw new Error('REVIEW_CERTIFICATION_INVALID');
         return { certifiedBundle: { catalog: {}, evidence: { certification_refs: [],

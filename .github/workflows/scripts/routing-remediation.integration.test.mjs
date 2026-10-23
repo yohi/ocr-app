@@ -702,10 +702,20 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
   const runBinding = { workflowRunId: '123', runAttempt: 1, headSha: head, mode: 'enforce' };
   const log = effects();
   const runAttemptId = 'a'.repeat(32);
-  const catalog = { catalog_version: '1', models: [
-    { model_id: 'certified-primary', certification_status: 'certified', capability_tier: 'deep' },
-    { model_id: 'certified-fallback', certification_status: 'certified', capability_tier: 'deep' },
-  ] };
+  const catalog = { schema_version: '1', catalog_version: '1.0.0', models: [
+    { model_id: 'certified-primary', certification_status: 'certified', capability_tier: 'deep',
+      certification_reference: `sha256:${'1'.repeat(64)}`, allowed_fallbacks: ['certified-fallback'], catalog_version: '1.0.0' },
+    { model_id: 'certified-fallback', certification_status: 'certified', capability_tier: 'deep',
+      certification_reference: `sha256:${'2'.repeat(64)}`, allowed_fallbacks: [], catalog_version: '1.0.0' },
+    { model_id: 'certified-fast', certification_status: 'certified', capability_tier: 'fast',
+      certification_reference: `sha256:${'3'.repeat(64)}`, allowed_fallbacks: [], catalog_version: '1.0.0' },
+  ], strategies: { fast: { preferred_model_id: 'certified-fast' },
+    deep: { preferred_model_id: 'certified-primary' } }, unknown_risk_strategy: 'deep' };
+  const verifiedCertificationRefs = catalog.models.map(model => ({ model_id: model.model_id,
+    certification_reference: model.certification_reference, capability_tier: model.capability_tier,
+    catalog_version: model.catalog_version }));
+  const certifiedEvidence = { certification_refs: verifiedCertificationRefs,
+    cli_available_models: catalog.models.map(model => model.model_id) };
   const trustedInputs = { policySha256: `sha256:${'b'.repeat(64)}`, catalogSha256: `sha256:${'c'.repeat(64)}`,
     sourceManifestSha256: `sha256:${'d'.repeat(64)}`, index: {}, catalog, readEvidence: () => Buffer.alloc(0),
     repoIdentity: { repo_id: 7, full_name: 'owner/repo' } };
@@ -721,7 +731,7 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
     readExecutionContext: async () => ({ cli_binary_sha256: 'e'.repeat(64) }), readRoute: async () => route, readDecision: async () => routingDecision(runBinding),
     fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }), evaluateStartup: () => ({ authorized: true }),
     trustedInputs, repoIdentity: trustedInputs.repoIdentity, readInstalledCliIdentity: async () => ({ resolvedPath: '/trusted/agy', binarySha256: 'e'.repeat(64) }),
-    revalidateExecutionContext: async () => ({ certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['certified-primary', 'certified-fallback'] } } }),
+    revalidateExecutionContext: async () => ({ certifiedBundle: { catalog, evidence: certifiedEvidence } }),
     resolveModels: () => ({ primaryModelId: 'certified-primary', allowedFallbackModels: ['certified-fallback'] }),
     createRecorder: async () => ({ runAttemptId, onAttemptEvent: value => attempts.push(value), seal() {} }),
     runHost: async input => {
@@ -742,7 +752,7 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
   const finalAudit = finalizeRoutingAudit({ decision: decisionRecord, attempts, reviewResult, validation: { status: 'passed' },
     headCheck: { status: 'passed' }, runBinding, policy: { repoId: 7, repo: 'owner/repo', prNumber: 4,
       review_scope_gap: false, features_incomplete: false, selectedReviewModel: 'certified-primary' }, catalog, selectedRoute: route,
-    certifiedBundle: { catalog, evidence: { cli_available_models: ['certified-primary', 'certified-fallback'] } }, runTemp });
+    certifiedBundle: { catalog, evidence: certifiedEvidence }, runTemp });
   writeRoutingAudit({ runTemp, record: finalAudit, expectedBinding: runBinding });
   writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), JSON.stringify(decisionRecord));
   const delivery = await uploadSealedFiles(runTemp, log.calls);
@@ -752,7 +762,7 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
     readExecutionContext: async () => ({ cli_binary_sha256: 'e'.repeat(64) }), fetchAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
     readCliIdentity: async () => ({ binarySha256: 'e'.repeat(64) }),
     revalidateExecutionContext: async () => ({ startupAuthorization: { authorized: true, approvalRefs: [] }, certifiedBundle: { catalog,
-      evidence: { cli_available_models: ['certified-primary', 'certified-fallback'] } } }),
+      evidence: certifiedEvidence } }),
     evaluateGate: input => {
       log.calls.push({ kind: 'gate' });
       return evaluateGateAndAssertSealed(runTemp, input);
