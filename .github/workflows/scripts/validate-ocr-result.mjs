@@ -88,7 +88,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       result: JSON.parse(resultBytes.toString('utf8')),
     });
   } catch (error) {
-    console.error(error.message);
+    console.error(process.env.DECISION_ROUTING_MODE === 'enforce'
+      ? 'REVIEW_VALIDATION_FAILED'
+      : error.message);
     process.exitCode = 1;
   }
 }
