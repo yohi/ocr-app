@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { runThreadHost } from './antigravity-host.mjs';
 import {
   createConfig,
   parseLlmResponse,
@@ -144,7 +146,7 @@ test('shadow thread processing stops before replying when fresh authorization is
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
       token: 'target-token',
-      env: { DECISION_ROUTING_MODE: 'shadow' },
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
       fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
       threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
       authorizeBeforeMutation: async () => false,
@@ -167,7 +169,7 @@ test('shadow thread processing passes fresh authorization to the host before spa
     await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
       token: 'target-token',
-      env: { DECISION_ROUTING_MODE: 'shadow' },
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
       fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
       authorizeBeforeHost: async () => false,
       threadHost: async ({ authorizeBeforeSpawn }) => {
@@ -181,4 +183,110 @@ test('shadow thread processing passes fresh authorization to the host before spa
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+for (const outcome of ['revoked', 'unavailable']) {
+  test(`real thread Host ${outcome} authorization stops all threads with failure`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ocr-thread-denied-'));
+    writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+    let spawns = 0;
+    let hostCalls = 0;
+    let mutations = 0;
+    try {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+        token: 'target-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+        fetchOpenThreads: async () => [1, 2].map(id => ({ id: `thread-${id}`, path: 'changed.js', comments: [] })),
+        authorizeBeforeHost: async () => {
+          if (outcome === 'unavailable') throw new Error('private authority detail');
+          return false;
+        },
+        threadHost: options => {
+          hostCalls++;
+          return runThreadHost({ ...options, spawn: () => { spawns++; throw new Error('unexpected spawn'); } });
+        },
+        graphql: async () => { mutations++; return {}; },
+      });
+      assert.equal(spawns, 0);
+      assert.equal(mutations, 0);
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('real thread Host reauthorizes a retry and propagates revocation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-retry-denied-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let checks = 0;
+  let spawns = 0;
+  let mutations = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', comments: [] }],
+      authorizeBeforeHost: async () => ++checks === 1,
+      threadHost: options => runThreadHost({ ...options, maxRetries: 1, retryDelayMs: 0, spawn: () => {
+        spawns++;
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.stdin = { write() {}, end() {}, once() {} };
+        queueMicrotask(() => {
+          child.stderr.emit('data', 'context canceled');
+          child.emit('close', 1, null);
+        });
+        return child;
+      } }),
+      graphql: async () => { mutations++; return {}; },
+    });
+    assert.equal(checks, 2);
+    assert.equal(spawns, 1);
+    assert.equal(mutations, 0);
+    assert.equal(exitCode, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const [repo, target] of [
+  ['other/repo', 'owner/repo'],
+  ['owner/repo', undefined],
+  ['owner/repo/extra', 'owner/repo/extra'],
+]) {
+  test(`shadow rejects CLI scope ${repo} against ${target} before fetching threads`, async () => {
+    let reads = 0;
+    let hosts = 0;
+    let authorizations = 0;
+    let mutations = 0;
+    const exitCode = await run({
+      args: ['--repo', repo, '--pr', '123'],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: target },
+      fetchOpenThreads: async () => { reads++; return []; },
+      threadHost: async () => { hosts++; return { status: 'success', decision: 'resolve' }; },
+      authorizeBeforeHost: async () => { authorizations++; return true; },
+      authorizeBeforeMutation: async () => { authorizations++; return true; },
+      graphql: async () => { mutations++; return {}; },
+    });
+    assert.equal(exitCode, 1);
+    assert.deepEqual({ reads, hosts, authorizations, mutations }, { reads: 0, hosts: 0, authorizations: 0, mutations: 0 });
+  });
+}
+
+test('direct enforce resolver invocation is blocked before fetching threads', async () => {
+  let reads = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'enforce', TARGET_REPO: 'owner/repo' },
+    fetchOpenThreads: async () => { reads++; return []; },
+  });
+  assert.equal(exitCode, 1);
+  assert.equal(reads, 0);
 });

@@ -289,6 +289,17 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     throw err;
   }
 
+  const routingMode = env.DECISION_ROUTING_MODE ?? 'off';
+  if (routingMode !== 'off') {
+    const repoPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+    if (routingMode !== 'shadow' || typeof env.TARGET_REPO !== 'string'
+      || !repoPattern.test(config.repo) || !repoPattern.test(env.TARGET_REPO)
+      || config.repo.toLowerCase() !== env.TARGET_REPO.toLowerCase()) {
+      console.error('ROUTING_ACTIVATION_DENIED');
+      return 1;
+    }
+  }
+
   console.log(`Checking open review threads for PR #${config.prNumber} in ${config.repo}...`);
   const openThreads = await fetchOpenThreads({
     owner: config.owner,
@@ -304,6 +315,15 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
 
   let resolvedCount = 0;
   let authorizationDenied = false;
+  const authorizeHost = async () => {
+    try {
+      if (await authorizeBeforeHost() === true) return true;
+    } catch {
+      // Authority failures must not become a successful CLI completion.
+    }
+    authorizationDenied = true;
+    return false;
+  };
   for (const thread of openThreads) {
     const codeSnippet = extractCodeContext(config.targetDir, thread.path);
     if (!codeSnippet) {
@@ -316,8 +336,12 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       prompt,
       cwd: config.targetDir,
       model: process.env.RESOLVE_LLM_MODEL || process.env.OCR_LLM_MODEL,
-      authorizeBeforeSpawn: authorizeBeforeHost,
+      authorizeBeforeSpawn: authorizeHost,
     });
+    if (authorizationDenied) {
+      console.error('ROUTING_ACTIVATION_DENIED');
+      break;
+    }
 
     if (evaluation.status === 'success' && evaluation.decision === 'resolve') {
       console.log(`Thread ${thread.id} (${thread.path}:${thread.line}) evaluated as RESOLVED: ${evaluation.reason}`);

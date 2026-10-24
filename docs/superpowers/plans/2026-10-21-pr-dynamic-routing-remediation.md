@@ -132,6 +132,41 @@ Do not modify Worker production code, review result schema, Markdown review rule
 Do not rewrite the large existing Host module; keep its `runHost` and `runThreadHost` contracts.
 Keep new modules focused; if a task needs more than 250 source lines, split validator from its step adapter.
 
+### 2026-10-24 drift follow-up: approved limited resolver exception
+
+**Status: explicitly accepted by the Owner on 2026-10-24.** After the audit follow-up identified this exception
+as awaiting Owner acceptance, the Owner explicitly replied "承認します" in the follow-up conversation.
+This acceptance applies to the limited resolver exception below. It does not establish retrospective acceptance
+of the earlier plan-level contracts or grant operational activation.
+
+FND-PLAN-001 is supported: commit `c899e51d939ec3f37aa0fb9408e902e98b10bc30` changes
+`.github/workflows/scripts/resolve-threads.mjs`, despite the prohibition above and in the original implementation
+plan's file map. Preserve both prohibitions as historical evidence; the existing change is not retroactively compliant.
+
+The approved exception is limited to `.github/workflows/scripts/resolve-threads.mjs` and its tests:
+
+- Wire fresh shadow authorization into the existing Host's pre-spawn callback for every attempt, including retries
+  and fallbacks; deny without starting the next process when authorization is refused or unavailable.
+- Propagate that denial to CLI exit code `1` and stop subsequent thread processing. This follows the existing
+  Global Constraints and contract A rule that denied paths must not report review success. The workflow already
+  derives Check Run conclusion from job status; a completed main review does not erase a later authorization denial.
+- Before fetching threads, require a well-formed CLI `--repo` matching `TARGET_REPO` (case-insensitive GitHub name
+  comparison). Reject non-off modes other than shadow, including direct enforce resolver invocation.
+- Preserve off behavior, authorized shadow model selection, and explicit `--auto-resolve` semantics. Thread reply
+  and resolve mutations retain independent fresh authorization. No result schema or model execution policy changes.
+
+Offline regression coverage lives in `resolve-threads.test.mjs` and `resolve-threads.integration.test.mjs` under
+`.github/workflows/scripts/`. It exercises the production Host with fake process I/O, and a separate production CLI
+process with offline GitHub I/O. Coverage includes refusal, authority exceptions, revocation before retry, scope
+mismatch/missing scope, enforce rejection, authorized off/shadow reply and resolve, and CLI failure propagation.
+This does not constitute an Actions execution or a full requirement-by-requirement G1 audit.
+
+The missing plan-exception approval in FND-PLAN-001 is resolved prospectively by this Owner acceptance;
+the historical deviation remains recorded above. Before any later shadow activation,
+regenerate fixed-source G1 evidence and review approvals/dossiers against the changed source manifest, including
+the test files. Existing evidence, traceability statuses, approval registries, and G2/G3/G4 grants are not upgraded
+by this follow-up. The per-effect freshness/TOCTOU and already-running Host limits in contract A still apply.
+
 ## Proposed contracts for the Task 1 specification
 
 These proposed implementation contracts are explicit so workers do not invent security policy. Task 1 freezes
@@ -506,7 +541,8 @@ Off branches before dynamic routing imports/reads and calls legacy Host with ide
 - [ ] **Step 1:** Add `Host revalidates authority before spawn`: after successful preparation, expire/revoke the
   activation or alter binding/context/evidence; assert runHost=0, result.status=`failed`, fixed reason only.
   Test authorized nonempty enforce receives exact selected model and own fallback array, observer and runAttemptId;
-  `onProgress` is absent. Pending/invalid evidence cannot reach the engine's catalog-flag-only check. Add a fake `PATH` executable:
+  `onProgress` is absent. Pending/invalid evidence cannot reach the engine's catalog-flag-only check.
+  Add a fake `PATH` executable:
   enforce must spawn the attested absolute realpath or spawn zero; off/shadow retain the legacy command.
 
   ```javascript
@@ -612,7 +648,8 @@ Re-evaluating the pure Gate does not modify final.json or the earlier GitHub ste
   ```
 
 - [ ] **Step 2:** Run `node --test .github/workflows/scripts/publish-routing-review.test.mjs`; expected FAIL.
-- [ ] **Step 3:** Implement the boundary, freshly fetching central registry/dossiers and rechecking expiry/approval immediately before the final HEAD
+- [ ] **Step 3:** Implement the boundary, freshly fetching central registry/dossiers and rechecking expiry/approval
+  immediately before the final HEAD
   check and post. Reuse trusted delivery data; no authority from a standalone `PUBLISH_AUTHORIZED=true` string.
   Preserve expected SHA in posting call. Keep the separate earlier Gate and HEAD steps for workflow diagnostics.
 - [ ] **Step 4:** Rerun the test and existing posting/dedup tests; expected PASS and no real GitHub request.
@@ -647,7 +684,8 @@ Export only fixed authorization booleans/enums and existing output IDs, never th
   it is not allowed to rewrite sealed files. Denial prohibits upload in both shadow and enforce.
   Missing/invalid shadow audit records emit `SHADOW_AUDIT_UNAVAILABLE` and do not upload partial files.
 - [ ] **Step 3:** Restrict the legacy posting step to off/shadow; enforce uses **only** Task 11 after
-  the existing independent Gate and final HEAD step, with zero alternate posting routes. Preserve enforce thread disablement, successful upload raw outcome, artifact ID, 30-day retention,
+  the existing independent Gate and final HEAD step, with zero alternate posting routes.
+  Preserve enforce thread disablement, successful upload raw outcome, artifact ID, 30-day retention,
   neutral skip, failure Check reporting, and fixed diagnostic-only denial messages.
 - [ ] **Step 4:** Run `node --test .github/workflows/scripts/ocr-routing-workflow.test.mjs
   .github/workflows/scripts/update-check-run.test.mjs .github/workflows/scripts/antigravity-policy.test.mjs`
@@ -675,8 +713,10 @@ Upload simulation consumes the actual sealed files and returns external Delivery
   selected primary differs from executed fallback and post count=1. Add normal skip without model proof:
   Decision POST=0, Host spawn=0, empty attempts, valid upload/Gate, neutral—not review-success—completion.
 - [ ] **Step 3:** Add upload failure/missing file, malformed review JSON, seal failure, changed final HEAD, scope
-  gap and check-ID absence; assert no review post or thread mutation. Revocation visible on the **fresh central GET** just before upload means upload=0;
-  revocation visible just before post means post=0; central API failure never authorizes posting. Snapshot sealed bytes before/after all Gate calls; they are identical.
+  gap and check-ID absence; assert no review post or thread mutation.
+  Revocation visible on the **fresh central GET** just before upload means upload=0;
+  revocation visible just before post means post=0; central API failure never authorizes posting.
+  Snapshot sealed bytes before/after all Gate calls; they are identical.
 
   ```javascript
   assert.deepEqual(startupDeniedEffects, { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });

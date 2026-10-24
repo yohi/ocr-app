@@ -54,13 +54,11 @@ test('traceability covers stable design IDs without claiming runtime proof', () 
       assert.ok(assertion.test_name.trim(), `${requirement.id} test name must not be empty`);
       assert.ok(assertion.assertion_summary.trim(), `${requirement.id} must describe the asserted behavior`);
 
-      const source = readFileSync(file, 'utf8');
-      const literalName = assertion.test_name.replace(/^enforce /u, '${mode} ');
-      assert.ok(source.includes(assertion.test_name) || source.includes(literalName), `${assertion.test_name} is not in ${assertion.file}`);
+      const exactNamePattern = `^${assertion.test_name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`;
       const childEnv = { ...process.env };
       delete childEnv.NODE_TEST_CONTEXT;
       const result = spawnSync(process.execPath, [
-        '--test', `--test-name-pattern=${assertion.test_name}`, assertion.file,
+        '--test', `--test-name-pattern=${exactNamePattern}`, assertion.file,
       ], { cwd: root, encoding: 'utf8', env: childEnv });
       assert.equal(result.status, 0, `${assertion.file} / ${assertion.test_name}\n${result.stdout}\n${result.stderr}`);
       const output = `${result.stdout}\n${result.stderr}`;
