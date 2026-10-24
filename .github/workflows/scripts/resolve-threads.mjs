@@ -275,7 +275,8 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
 }
 
 export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost,
-  env = process.env, authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
+  env = process.env, authorizeBeforeHost = () => reauthorizeRoutingMutation({ env }),
+  authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
   fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery } = {}) {
   let config;
   try {
@@ -315,6 +316,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       prompt,
       cwd: config.targetDir,
       model: process.env.RESOLVE_LLM_MODEL || process.env.OCR_LLM_MODEL,
+      authorizeBeforeSpawn: authorizeBeforeHost,
     });
 
     if (evaluation.status === 'success' && evaluation.decision === 'resolve') {

@@ -478,6 +478,28 @@ test('runThreadHost keeps malformed or ambiguous decisions unresolved', async ()
   }
 });
 
+test('runThreadHost does not spawn when authorization is denied before spawn', async () => {
+  let spawnCount = 0;
+  const result = await runThreadHost({
+    prompt: 'Evaluate this thread.',
+    cwd: '/tmp/trusted',
+    authorizeBeforeSpawn: async () => false,
+    spawn: () => {
+      spawnCount++;
+      return childFor(JSON.stringify({
+        schema_version: '1.0',
+        mode: 'thread',
+        decision: 'resolve',
+        reason: 'The issue is fixed at HEAD.',
+      }));
+    },
+  });
+
+  assert.equal(spawnCount, 0);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.decision, 'keep');
+});
+
 test('resolveBatchLimits clamps invalid and excessive values', () => {
   assert.deepEqual(resolveBatchLimits({
     ANTIGRAVITY_MAX_DIFF_CHARS: '0',

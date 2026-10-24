@@ -157,3 +157,28 @@ test('shadow thread processing stops before replying when fresh authorization is
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('shadow thread processing passes fresh authorization to the host before spawn', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-host-authorization-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostAuthorization;
+
+  try {
+    await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow' },
+      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
+      authorizeBeforeHost: async () => false,
+      threadHost: async ({ authorizeBeforeSpawn }) => {
+        hostAuthorization = authorizeBeforeSpawn;
+        return { status: 'failed', decision: 'keep', reason: '' };
+      },
+    });
+
+    assert.equal(typeof hostAuthorization, 'function');
+    assert.equal(await hostAuthorization(), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
