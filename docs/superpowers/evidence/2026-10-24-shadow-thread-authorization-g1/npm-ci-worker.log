@@ -1,0 +1,17 @@
+
+added 129 packages, and audited 130 packages in 4s
+
+28 packages are looking for funding
+  run `npm fund` for details
+
+13 vulnerabilities (3 moderate, 10 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm warn deprecated rollup-plugin-inject@3.0.2: This package has been deprecated and is no longer maintained. Please use @rollup/plugin-inject.
+npm warn deprecated sourcemap-codec@1.4.8: Please use @jridgewell/sourcemap-codec instead

@@ -1,0 +1,1128 @@
+{
+  "schema_version": "1",
+  "code_sha": "3ad8b4a6499315d439e844f7a60a30b15f1a2dd0",
+  "branch": "fix/shadow-thread-host-reauthorization",
+  "started_at": "2026-10-24T14:50:59.952Z",
+  "initial_tracked_worktree_clean": true,
+  "initial_untracked_paths": [],
+  "environment": {
+    "platform": "linux",
+    "node": "v26.10.0"
+  },
+  "source_manifest_before": "sha256:ca83d488596531500a675b69a6c50e66865ac01bc1ec4972f31f8399ecf25ce3",
+  "commands": [
+    {
+      "command": "npm",
+      "args": [
+        "--version"
+      ],
+      "started_at": "2026-10-24T14:50:59.981Z",
+      "ended_at": "2026-10-24T14:51:00.109Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/environment.log",
+      "counts": {}
+    },
+    {
+      "command": "actionlint",
+      "args": [
+        "--version"
+      ],
+      "started_at": "2026-10-24T14:51:00.111Z",
+      "ended_at": "2026-10-24T14:51:00.117Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/actionlint-version.log",
+      "counts": {}
+    },
+    {
+      "command": "npm",
+      "args": [
+        "ci",
+        "--prefix",
+        ".github/workflows",
+        "--ignore-scripts"
+      ],
+      "started_at": "2026-10-24T14:51:00.117Z",
+      "ended_at": "2026-10-24T14:51:00.923Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/npm-ci-workflow.log",
+      "counts": {}
+    },
+    {
+      "command": "node",
+      "args": [
+        "--test",
+        ".github/workflows/scripts/antigravity-host.test.mjs",
+        ".github/workflows/scripts/antigravity-policy.test.mjs",
+        ".github/workflows/scripts/authorize-decision-egress.test.mjs",
+        ".github/workflows/scripts/authorize-routing-start.test.mjs",
+        ".github/workflows/scripts/build-decision-state.test.mjs",
+        ".github/workflows/scripts/check-pr-head.test.mjs",
+        ".github/workflows/scripts/check-pr-target.test.mjs",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+        ".github/workflows/scripts/decision-provider.test.mjs",
+        ".github/workflows/scripts/deduplicate-review-comments.test.mjs",
+        ".github/workflows/scripts/evaluate-routing-publish.test.mjs",
+        ".github/workflows/scripts/extract-pr-review-features.test.mjs",
+        ".github/workflows/scripts/filter-ocr-findings.test.mjs",
+        ".github/workflows/scripts/llm-proxy.test.mjs",
+        ".github/workflows/scripts/load-review-certification.test.mjs",
+        ".github/workflows/scripts/ocr-routing-audit.test.mjs",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+        ".github/workflows/scripts/ocr-routing-workflow.test.mjs",
+        ".github/workflows/scripts/ocr-run-binding.test.mjs",
+        ".github/workflows/scripts/post-ocr-comment-dedup.test.mjs",
+        ".github/workflows/scripts/post-ocr-comments.test.mjs",
+        ".github/workflows/scripts/prepare-ocr-review-context.test.mjs",
+        ".github/workflows/scripts/prepare-review-routing.test.mjs",
+        ".github/workflows/scripts/publish-routing-review.test.mjs",
+        ".github/workflows/scripts/read-checkout-identity.test.mjs",
+        ".github/workflows/scripts/resolve-threads.integration.test.mjs",
+        ".github/workflows/scripts/resolve-threads.test.mjs",
+        ".github/workflows/scripts/routing-audit-contract.test.mjs",
+        ".github/workflows/scripts/routing-authorization.test.mjs",
+        ".github/workflows/scripts/routing-execution-context.test.mjs",
+        ".github/workflows/scripts/routing-mutation-authorization.test.mjs",
+        ".github/workflows/scripts/routing-remediation.integration.test.mjs",
+        ".github/workflows/scripts/routing-traceability.test.mjs",
+        ".github/workflows/scripts/run-routing-review.test.mjs",
+        ".github/workflows/scripts/select-review-model.test.mjs",
+        ".github/workflows/scripts/update-check-run-cli.test.mjs",
+        ".github/workflows/scripts/update-check-run.test.mjs",
+        ".github/workflows/scripts/validate-ocr-result.test.mjs",
+        ".github/workflows/scripts/validate-review-model-catalog.test.mjs"
+      ],
+      "started_at": "2026-10-24T14:51:00.924Z",
+      "ended_at": "2026-10-24T14:51:13.291Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/node-test-workflow.log",
+      "counts": {
+        "tests": 569,
+        "pass": 569,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "command": "npm",
+      "args": [
+        "ci",
+        "--prefix",
+        "cloudflare-worker",
+        "--ignore-scripts"
+      ],
+      "started_at": "2026-10-24T14:51:13.291Z",
+      "ended_at": "2026-10-24T14:51:17.812Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/npm-ci-worker.log",
+      "counts": {}
+    },
+    {
+      "command": "npm",
+      "args": [
+        "test",
+        "--prefix",
+        "cloudflare-worker"
+      ],
+      "started_at": "2026-10-24T14:51:17.812Z",
+      "ended_at": "2026-10-24T14:51:18.755Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/worker-test.log",
+      "counts": {
+        "tests": 31,
+        "pass": 31
+      }
+    },
+    {
+      "command": "actionlint",
+      "args": [
+        ".github/workflows/ocr-engine.yml"
+      ],
+      "started_at": "2026-10-24T14:51:18.756Z",
+      "ended_at": "2026-10-24T14:51:18.816Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/actionlint.log",
+      "counts": {}
+    },
+    {
+      "command": "git",
+      "args": [
+        "diff",
+        "--check"
+      ],
+      "started_at": "2026-10-24T14:51:18.816Z",
+      "ended_at": "2026-10-24T14:51:18.820Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/git-diff-check.log",
+      "counts": {}
+    },
+    {
+      "command": "gh",
+      "args": [
+        "api",
+        "--method",
+        "GET",
+        "repos/yohi/ocr-app/contents/.github/workflows/config/routing-authorization.json?ref=master"
+      ],
+      "started_at": "2026-10-24T14:51:18.821Z",
+      "ended_at": "2026-10-24T14:51:19.375Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/central-registry-read.log",
+      "counts": {}
+    },
+    {
+      "command": "npx",
+      "args": [
+        "--offline",
+        "markdownlint-cli2",
+        "docs/superpowers/plans/2026-10-21-pr-dynamic-routing-remediation.md",
+        "docs/superpowers/evidence/2026-10-21-pr-dynamic-routing-g1.md",
+        "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1.md"
+      ],
+      "started_at": "2026-10-24T14:54:35.781Z",
+      "ended_at": "2026-10-24T14:54:36.950Z",
+      "exit_code": 1,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/markdownlint-initial.log",
+      "counts": {}
+    },
+    {
+      "command": "git",
+      "args": [
+        "diff",
+        "--check"
+      ],
+      "started_at": "2026-10-24T14:54:36.951Z",
+      "ended_at": "2026-10-24T14:54:36.955Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/git-diff-check.log",
+      "counts": {}
+    },
+    {
+      "command": "npx",
+      "args": [
+        "--offline",
+        "markdownlint-cli2",
+        "docs/superpowers/plans/2026-10-21-pr-dynamic-routing-remediation.md",
+        "docs/superpowers/evidence/2026-10-21-pr-dynamic-routing-g1.md",
+        "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1.md"
+      ],
+      "started_at": "2026-10-24T14:55:36.924Z",
+      "ended_at": "2026-10-24T14:55:38.030Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/markdownlint.log",
+      "counts": {}
+    },
+    {
+      "command": "git",
+      "args": [
+        "diff",
+        "--check"
+      ],
+      "started_at": "2026-10-24T14:55:38.032Z",
+      "ended_at": "2026-10-24T14:55:38.037Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/git-diff-check.log",
+      "counts": {}
+    },
+    {
+      "command": "npx",
+      "args": [
+        "--offline",
+        "markdownlint-cli2",
+        "docs/superpowers/plans/2026-10-21-pr-dynamic-routing-remediation.md",
+        "docs/superpowers/evidence/2026-10-21-pr-dynamic-routing-g1.md",
+        "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1.md"
+      ],
+      "started_at": "2026-10-24T14:57:43.994Z",
+      "ended_at": "2026-10-24T14:57:44.890Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/markdownlint.log",
+      "counts": {}
+    },
+    {
+      "command": "git",
+      "args": [
+        "diff",
+        "--check"
+      ],
+      "started_at": "2026-10-24T14:57:44.892Z",
+      "ended_at": "2026-10-24T14:57:44.899Z",
+      "exit_code": 0,
+      "signal": null,
+      "log": "docs/superpowers/evidence/2026-10-24-shadow-thread-authorization-g1/git-diff-check.log",
+      "counts": {}
+    }
+  ],
+  "capture_method": "spawnSync without a shell; sanitized stdout followed by stderr; actual exit codes retained",
+  "input_sha256": {
+    "docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md": "sha256:e0e389e5908c9606a9e2de94e912fda0312ac7822c20fb617ffe3ec6c4687304",
+    "docs/superpowers/plans/2026-10-21-pr-dynamic-routing-remediation.md": "sha256:e04bd60602321f2ab6f67d8bdc3ea348dbd3943b592af89f7e421a674802c6f7",
+    ".github/workflows/config/routing-traceability.json": "sha256:747d73c289fa69d7272b02743c93a40503601a11b0c1f6b892964850a2c74ed2",
+    ".github/workflows/config/routing-authorization.json": "sha256:1aeed895c9283a489dede73b32bf5b718d7fcb6ecef65069bd992b4a7a17f71d",
+    ".github/workflows/config/decision-egress-policy.json": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
+    ".github/workflows/config/review-model-catalog.json": "sha256:f9b0082c801df6bcd37057e34af6aa743c897eeabdb762c69b212ab7e5f90b82",
+    ".github/workflows/config/review-certification-index.json": "sha256:4f764e7942ffa88c9c5f41f90ee7eefe06443e24e0a2996b0ec852b1207af9f1",
+    "cloudflare-worker/package.json": "sha256:4b9153da155cac392b2ef4079d3e99b2034bc8176d1804d0bd6eb7a399198a40",
+    "cloudflare-worker/package-lock.json": "sha256:262a1ab331bbfd0137f8728413076d6db1a0e1c32c014363ebb4a8145c495987"
+  },
+  "traceability": {
+    "ids": 39,
+    "statuses": {
+      "COVERED": 2,
+      "PARTIAL": 32,
+      "NOT_RUN": 5
+    },
+    "unmapped_ids": [
+      "T-007",
+      "T-009",
+      "T-013",
+      "T-014",
+      "T-017",
+      "T-018",
+      "T-019",
+      "T-022",
+      "T-025",
+      "T-026",
+      "T-030",
+      "T-034",
+      "REM-005"
+    ]
+  },
+  "authorization": {
+    "plan_exception": "OWNER_ACCEPTED_2026-10-24",
+    "local_approvals": 0,
+    "local_activations": 0,
+    "egress_allowlist_entries": 0,
+    "model_certifications": 0,
+    "cli_inventory_present": false,
+    "operational_activation": "NOT_GRANTED",
+    "central_master_observation": {
+      "path": ".github/workflows/config/routing-authorization.json",
+      "blob_sha": "7da342b849b561ff97f1f1298181de28e2060fee",
+      "sha256": "sha256:1aeed895c9283a489dede73b32bf5b718d7fcb6ecef65069bd992b4a7a17f71d",
+      "approvals": 0,
+      "activations": 0,
+      "matches_local_registry": true
+    }
+  },
+  "source_manifest_after": "sha256:ca83d488596531500a675b69a6c50e66865ac01bc1ec4972f31f8399ecf25ce3",
+  "source_manifest_unchanged": true,
+  "final_tracked_source_clean": true,
+  "ended_at": "2026-10-24T14:51:19.389Z",
+  "mapped_assertions": [
+    {
+      "file": ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+      "test_name": "incomplete features and unobserved security metadata never establish safe code",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^incomplete features and unobserved security metadata never establish safe code$",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+      "test_name": "allows only fully reviewable README markdown modifications as fast",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^allows only fully reviewable README markdown modifications as fast$",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+      "test_name": "allows an added allowlisted README markdown file as fast",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^allows an added allowlisted README markdown file as fast$",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+      "test_name": "deny paths override allow paths and code or mixed changes remain deep",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^deny paths override allow paths and code or mixed changes remain deep$",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/classify-pr-review-risk.test.mjs",
+      "test_name": "rename, binary, executable/mode changes and unknown metadata remain deep",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^rename, binary, executable/mode changes and unknown metadata remain deep$",
+        ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/prepare-review-routing.test.mjs",
+      "test_name": "enforce prepares a run-bound route and decision without a Decision API call when nothing is reviewable",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^enforce prepares a run-bound route and decision without a Decision API call when nothing is reviewable$",
+        ".github/workflows/scripts/prepare-review-routing.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "Given enforce route with no reviewable files, When invoked, Then it returns trusted skipped without Host or model proof",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^Given enforce route with no reviewable files, When invoked, Then it returns trusted skipped without Host or model proof$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/build-decision-state.test.mjs",
+      "test_name": "rejects invalid, incomplete, inherited, unknown, and oversized input rather than leaking it",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^rejects invalid, incomplete, inherited, unknown, and oversized input rather than leaking it$",
+        ".github/workflows/scripts/build-decision-state.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/build-decision-state.test.mjs",
+      "test_name": "projects exactly the R4 §4.3 and §6.2 example state",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^projects exactly the R4 §4\\.3 and §6\\.2 example state$",
+        ".github/workflows/scripts/build-decision-state.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/build-decision-state.test.mjs",
+      "test_name": "validator rejects inherited properties, unknown keys, and bogus outbound buckets",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^validator rejects inherited properties, unknown keys, and bogus outbound buckets$",
+        ".github/workflows/scripts/build-decision-state.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/authorize-decision-egress.test.mjs",
+      "test_name": "does not trust dispatch visibility and rejects checkout identity or head mismatch",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^does not trust dispatch visibility and rejects checkout identity or head mismatch$",
+        ".github/workflows/scripts/authorize-decision-egress.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/select-review-model.test.mjs",
+      "test_name": "HTTP 429 unavailable decision uses the local risk floor without raw error text",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^HTTP 429 unavailable decision uses the local risk floor without raw error text$",
+        ".github/workflows/scripts/select-review-model.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/antigravity-host.test.mjs",
+      "test_name": "enforce requires explicit valid fallbackModels before spawning",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^enforce requires explicit valid fallbackModels before spawning$",
+        ".github/workflows/scripts/antigravity-host.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/antigravity-host.test.mjs",
+      "test_name": "enforce fallbackModels array controls ordered fallback attempts and empty disables fallback",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^enforce fallbackModels array controls ordered fallback attempts and empty disables fallback$",
+        ".github/workflows/scripts/antigravity-host.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/antigravity-host.test.mjs",
+      "test_name": "enforce observer records ordered fallback attempt sequence",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^enforce observer records ordered fallback attempt sequence$",
+        ".github/workflows/scripts/antigravity-host.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-audit.test.mjs",
+      "test_name": "fallback success is sealed without impersonating the primary model",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^fallback success is sealed without impersonating the primary model$",
+        ".github/workflows/scripts/ocr-routing-audit.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/routing-remediation.integration.test.mjs",
+      "test_name": "primary failure falls back, seals audit, passes Gate, checks HEAD, uploads, and posts once",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^primary failure falls back, seals audit, passes Gate, checks HEAD, uploads, and posts once$",
+        ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+      "test_name": "production finalizer supplies the certified route and run path for a nonempty review",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^production finalizer supplies the certified route and run path for a nonempty review$",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+      "test_name": "routing artifact upload contains exactly the three public audit files",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^routing artifact upload contains exactly the three public audit files$",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/routing-remediation.integration.test.mjs",
+      "test_name": "upload, missing artifact, malformed result, scope, check-ID, and changed-HEAD failures do not post",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^upload, missing artifact, malformed result, scope, check-ID, and changed-HEAD failures do not post$",
+        ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/load-review-certification.test.mjs",
+      "test_name": "rejects catalog self-endorsement without approved index evidence",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^rejects catalog self-endorsement without approved index evidence$",
+        ".github/workflows/scripts/load-review-certification.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/evaluate-routing-publish.test.mjs",
+      "test_name": "publishing requires a fully matching sealed and delivered audit",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^publishing requires a fully matching sealed and delivered audit$",
+        ".github/workflows/scripts/evaluate-routing-publish.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+      "test_name": "production publisher never reports published before a failed real post",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^production publisher never reports published before a failed real post$",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/evaluate-routing-publish.test.mjs",
+      "test_name": "zero-review normal skip is eligible but scope-gap skip is not",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^zero-review normal skip is eligible but scope-gap skip is not$",
+        ".github/workflows/scripts/evaluate-routing-publish.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-workflow.test.mjs",
+      "test_name": "enforce has one publish boundary and legacy posting is off or shadow only",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^enforce has one publish boundary and legacy posting is off or shadow only$",
+        ".github/workflows/scripts/ocr-routing-workflow.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.integration.test.mjs",
+      "test_name": "off real thread Host preserves authorized reply and explicit auto-resolve",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^off real thread Host preserves authorized reply and explicit auto-resolve$",
+        ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.integration.test.mjs",
+      "test_name": "shadow real thread Host preserves authorized reply and explicit auto-resolve",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^shadow real thread Host preserves authorized reply and explicit auto-resolve$",
+        ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.test.mjs",
+      "test_name": "direct enforce resolver invocation is blocked before fetching threads",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^direct enforce resolver invocation is blocked before fetching threads$",
+        ".github/workflows/scripts/resolve-threads.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-audit.test.mjs",
+      "test_name": "final audit writer validates binding and seals final.json once with private modes",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^final audit writer validates binding and seals final\\.json once with private modes$",
+        ".github/workflows/scripts/ocr-routing-audit.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/post-ocr-comments.test.mjs",
+      "test_name": "rechecks the PR head before posting and refuses stale review results",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^rechecks the PR head before posting and refuses stale review results$",
+        ".github/workflows/scripts/post-ocr-comments.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+      "test_name": "production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs$",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/update-check-run.test.mjs",
+      "test_name": "never includes arbitrary review errors in enforce output",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^never includes arbitrary review errors in enforce output$",
+        ".github/workflows/scripts/update-check-run.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/prepare-review-routing.test.mjs",
+      "test_name": "run binding keeps canonical run ID and freezes runner identity",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^run binding keeps canonical run ID and freezes runner identity$",
+        ".github/workflows/scripts/prepare-review-routing.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/prepare-review-routing.test.mjs",
+      "test_name": "route serializer emits the exact 15-key contract and writer seals the standalone route privately",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^route serializer emits the exact 15-key contract and writer seals the standalone route privately$",
+        ".github/workflows/scripts/prepare-review-routing.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "Given revoked fresh authority, When invoked, Then Host is not called and denial is fixed",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^Given revoked fresh authority, When invoked, Then Host is not called and denial is fixed$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "Given a fake PATH agy and distinct attested executable, When enforce runs, Then only attested path is spawned",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^Given a fake PATH agy and distinct attested executable, When enforce runs, Then only attested path is spawned$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/routing-remediation.integration.test.mjs",
+      "test_name": "startup denial stops the complete offline pipeline before Host, upload, post, or thread effects",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^startup denial stops the complete offline pipeline before Host, upload, post, or thread effects$",
+        ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/run-routing-review.test.mjs",
+      "test_name": "shadow missing route cannot bypass freshly revoked activation",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^shadow missing route cannot bypass freshly revoked activation$",
+        ".github/workflows/scripts/run-routing-review.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs",
+      "test_name": "production upload reauthorization accepts a normal zero-byte skip stream",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^production upload reauthorization accepts a normal zero-byte skip stream$",
+        ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.test.mjs",
+      "test_name": "real thread Host revoked authorization stops all threads with failure",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^real thread Host revoked authorization stops all threads with failure$",
+        ".github/workflows/scripts/resolve-threads.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.test.mjs",
+      "test_name": "real thread Host unavailable authorization stops all threads with failure",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^real thread Host unavailable authorization stops all threads with failure$",
+        ".github/workflows/scripts/resolve-threads.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.test.mjs",
+      "test_name": "real thread Host reauthorizes a retry and propagates revocation",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^real thread Host reauthorizes a retry and propagates revocation$",
+        ".github/workflows/scripts/resolve-threads.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.integration.test.mjs",
+      "test_name": "actual resolver CLI denial fails the Check despite a successful main review offline",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^actual resolver CLI denial fails the Check despite a successful main review offline$",
+        ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/resolve-threads.test.mjs",
+      "test_name": "shadow rejects CLI scope other/repo against owner/repo before fetching threads",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^shadow rejects CLI scope other/repo against owner/repo before fetching threads$",
+        ".github/workflows/scripts/resolve-threads.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    {
+      "file": ".github/workflows/scripts/read-checkout-identity.test.mjs",
+      "test_name": "requests only origin and verified HEAD using argument arrays",
+      "command": "node",
+      "args": [
+        "--test",
+        "--test-name-pattern=^requests only origin and verified HEAD using argument arrays$",
+        ".github/workflows/scripts/read-checkout-identity.test.mjs"
+      ],
+      "exit_code": 0,
+      "counts": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "skipped": 0
+      }
+    }
+  ],
+  "mapped_assertions_executed_at": "2026-10-24T14:52:36.959Z",
+  "finalized_at": "2026-10-24T14:57:44.899Z"
+}
