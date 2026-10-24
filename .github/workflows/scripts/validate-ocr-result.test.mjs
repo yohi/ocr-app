@@ -134,3 +134,34 @@ test('emits the raw-byte digest before rejecting malformed JSON', () => {
     run.cleanup();
   }
 });
+for (const mode of ['enforce', 'off', 'shadow']) {
+  test(`${mode} validation diagnostics ${mode === 'enforce' ? 'hide' : 'retain'} untrusted finding paths`, () => {
+    const directory = mkdtempSync(join(tmpdir(), 'validate-ocr-result-'));
+    const resultPath = join(directory, 'result.json');
+    const contextPath = join(directory, 'context.json');
+    const sentinel = 'PR_BODY_SECRET_SENTINEL';
+    try {
+      writeFileSync(resultPath, JSON.stringify({
+        coverage: 1,
+        findings: [{ path: sentinel }],
+        status: 'success',
+      }));
+      writeFileSync(contextPath, JSON.stringify({ reviewable_files: [{ path: 'README.md' }] }));
+
+      const result = spawnSync(process.execPath, [validatorPath, resultPath, '1', contextPath], {
+        encoding: 'utf8',
+        env: { ...process.env, DECISION_ROUTING_MODE: mode },
+      });
+
+      assert.equal(result.status, 1);
+      if (mode === 'enforce') {
+        assert.equal(result.stderr.trim(), 'REVIEW_VALIDATION_FAILED');
+        assert.doesNotMatch(result.stdout + result.stderr, new RegExp(sentinel));
+      } else {
+        assert.match(result.stderr, new RegExp(sentinel));
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
