@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
 import https from 'node:https';
@@ -18,7 +19,7 @@ async function createResultFile(content) {
   return resultPath;
 }
 
-function installHttpsMock(outcomes, existingReviewComments = []) {
+function installHttpsMock(outcomes, existingReviewComments = [], onRequest) {
   const requests = [];
 
   mock.method(https, 'request', (options, callback) => {
@@ -63,6 +64,7 @@ function installHttpsMock(outcomes, existingReviewComments = []) {
           }
           : outcomes.shift();
       assert.ok(outcome, 'received an unexpected GitHub API request');
+      onRequest?.({ method: options.method, path: options.path });
       if (!options.path.includes('/comments?per_page=') && !isReviewThreadLookup) {
         requests.push({
           body: requestBody ? JSON.parse(requestBody) : undefined,
@@ -964,4 +966,151 @@ test('supports findings array from antigravity host format', async () => {
     path: 'src/example.js',
     side: 'RIGHT',
   });
+});
+
+test('shadow review posting stops before the GitHub mutation when fresh authorization is revoked', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([]);
+
+  await assert.rejects(run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'shadow' },
+    authorizeBeforeMutation: async () => false,
+  }), /ROUTING_ACTIVATION_DENIED/);
+
+  assert.deepEqual(requests, []);
+});
+
+test('direct enforce adapter invocation remains denied without publisher authorization', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([]);
+
+  await assert.rejects(run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+  }), /ROUTING_ACTIVATION_DENIED/);
+
+  assert.deepEqual(requests, []);
+});
+
+test('enforce adapter posts when the publisher supplies its post-Gate authorization', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([{ data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-1' }, status: 201 }]);
+
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+    authorizeBeforeMutation: async () => true,
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+});
+
+test('rejects mismatched expected result digest before any GitHub request', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = installHttpsMock([{ data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-1' }, status: 201 }]);
+
+  await assert.rejects(run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    expectedResultSha256: '0'.repeat(64),
+  }), /PUBLISH_FAILED/);
+
+  assert.deepEqual(requests, []);
+});
+
+test('posts parsed result bytes when expected digest matches', async () => {
+  const result = { status: 'failed', message: 'review failed' };
+  const resultPath = await createResultFile(result);
+  const resultSha256 = createHash('sha256').update(JSON.stringify(result)).digest('hex');
+  const requests = installHttpsMock([{ data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-1' }, status: 201 }]);
+
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    expectedResultSha256: resultSha256,
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].method, 'POST');
+  assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+});
+
+test('stops individual fallback and summary after fresh authorization denial', async () => {
+  const resultPath = await createResultFile({ status: 'success', coverage: 1, findings: [validComment('First'), validComment('Second'), validComment('Third')] });
+  const events = [];
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' }, node_id: 'PR_node_id' }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: { message: 'Validation Failed' }, status: 422 },
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: {}, status: 201 },
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+  ];
+  const requests = installHttpsMock(outcomes, [], request => events.push(request));
+  let authorizationCalls = 0;
+
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    expectedSha: 'head-sha',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+    authorizeBeforeMutation: async () => {
+      authorizationCalls++;
+      events.push({ authorization: authorizationCalls });
+      return authorizationCalls < 3;
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(authorizationCalls, 3);
+  assert.equal(requests.filter(request => request.method === 'POST').length, 2);
+  const batchAuthorization = events.findIndex(event => event.authorization === 1);
+  assert.deepEqual(events.slice(batchAuthorization, batchAuthorization + 3), [
+    { authorization: 1 },
+    { method: 'GET', path: '/repos/owner/repo/pulls/123' },
+    { method: 'POST', path: '/repos/owner/repo/pulls/123/reviews' },
+  ]);
+  const firstFallbackAuthorization = events.findIndex(event => event.authorization === 2);
+  assert.deepEqual(events.slice(firstFallbackAuthorization, firstFallbackAuthorization + 3), [
+    { authorization: 2 },
+    { method: 'GET', path: '/repos/owner/repo/pulls/123' },
+    { method: 'POST', path: '/repos/owner/repo/pulls/123/comments' },
+  ]);
+  assert.deepEqual(events.at(-1), { authorization: 3 });
+});
+
+test('stops individual fallback after a HEAD mismatch', async () => {
+  const resultPath = await createResultFile({ status: 'success', coverage: 1, findings: [validComment('First'), validComment('Second')] });
+  const outcomes = [
+    { data: { head: { sha: 'head-sha' }, node_id: 'PR_node_id' }, status: 200 },
+    { data: [{ filename: 'src/example.js', patch: '@@ -1 +1 @@\n+updated line' }], status: 200 },
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: { message: 'Validation Failed' }, status: 422 },
+    { data: { head: { sha: 'stale-head' } }, status: 200 },
+    { data: { head: { sha: 'head-sha' } }, status: 200 },
+    { data: {}, status: 201 },
+  ];
+  const requests = installHttpsMock(outcomes);
+  let authorizationCalls = 0;
+
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    expectedSha: 'head-sha',
+    env: { DECISION_ROUTING_MODE: 'enforce' },
+    authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(authorizationCalls, 2);
+  assert.equal(requests.filter(request => request.method === 'POST' && request.path.endsWith('/comments')).length, 0);
 });

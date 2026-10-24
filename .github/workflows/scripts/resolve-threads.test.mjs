@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   createConfig,
   parseLlmResponse,
@@ -8,8 +11,9 @@ import {
   buildReplyMutation,
   buildResolveMutation,
   extractCodeContext,
-  isOcrThread
-  ,parseThreadHostResponse
+  isOcrThread,
+  run,
+  parseThreadHostResponse,
 } from './resolve-threads.mjs';
 
 test('createConfig parses CLI args and token correctly', () => {
@@ -129,4 +133,27 @@ test('isOcrThread correctly identifies opencodereview-app and opencodereview-app
   assert.equal(isOcrThread({ comments: [] }), false);
   assert.equal(isOcrThread({ comments: [{ author: null }] }), false);
   assert.equal(isOcrThread(null), false);
+});
+
+test('shadow thread processing stops before replying when fresh authorization is revoked', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-authorization-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  const graphQlMutations = [];
+
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow' },
+      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
+      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
+      authorizeBeforeMutation: async () => false,
+      graphql: async (_token, query) => { graphQlMutations.push(query); return {}; },
+    });
+
+    assert.equal(exitCode, 1);
+    assert.deepEqual(graphQlMutations, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

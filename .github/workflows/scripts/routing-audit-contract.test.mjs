@@ -3,8 +3,10 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createAttemptRecorder, createRoutingDecisionRecord, finalizeRoutingAudit } from './ocr-routing-audit.mjs';
+import { createAttemptRecorder, createRoutingDecisionRecord, finalizeRoutingAudit as finalizeRoutingAuditCore } from './ocr-routing-audit.mjs';
 import { validateRoutingAttempts } from './routing-attempts.mjs';
+
+const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
 
 const binding = { workflowRunId: '123', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const catalog = { models: [{ model_id: 'primary', capability_tier: 'deep', certification_status: 'certified' }] };

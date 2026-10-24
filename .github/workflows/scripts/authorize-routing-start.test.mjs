@@ -21,7 +21,7 @@ function currentHashes() {
       readFile: path => readFileSync(resolve(root, path)),
       listTrackedPaths: () => tracked,
     }),
-    policySha256: digest(readFileSync(resolve(root, '.github/workflows/config/review-risk-policy.json'))),
+    policySha256: digest(readFileSync(resolve(root, '.github/workflows/config/decision-egress-policy.json'))),
     catalogSha256: digest(readFileSync(resolve(root, '.github/workflows/config/review-model-catalog.json'))),
   };
 }

@@ -191,7 +191,16 @@ export function extractPayload(raw) {
 }
 
 async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress,
-  executablePath, executableIdentity, targetRoot, readCliIdentity, env, routingMode }) {
+  executablePath, executableIdentity, targetRoot, readCliIdentity, env, routingMode, authorizeBeforeSpawn }) {
+  if (typeof authorizeBeforeSpawn === 'function') {
+    try {
+      if (await authorizeBeforeSpawn() !== true) {
+        return { error: new Error('ROUTING_ACTIVATION_DENIED'), failureKind: 'authorization_denied' };
+      }
+    } catch {
+      return { error: new Error('ROUTING_AUTHORITY_UNAVAILABLE'), failureKind: 'authorization_denied' };
+    }
+  }
   if (routingMode === 'enforce' && typeof executablePath !== 'string') {
     return { error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' };
   }
@@ -367,6 +376,7 @@ async function runMode({
   executableIdentity,
   targetRoot,
   readCliIdentity = readInstalledCliIdentity,
+  authorizeBeforeSpawn,
 }) {
   const enforce = routingMode === 'enforce';
   const auditId = typeof runAttemptId === 'string' && /^[a-f0-9]{32}$/i.test(runAttemptId)
@@ -474,6 +484,7 @@ async function runMode({
           readCliIdentity,
           env,
           routingMode,
+          authorizeBeforeSpawn,
         });
       } catch (error) {
         childResult = { error };
@@ -481,6 +492,9 @@ async function runMode({
       let attemptResult;
       let validatedResult;
       let validationMessage;
+      if (childResult.failureKind === 'authorization_denied') {
+        return complete(failure(mode, childResult.error.message));
+      }
       if (childResult.error) {
         if (childResult.failureKind === 'spawn_failed') attemptResult = 'spawn_failed';
         else if (childResult.failureKind === 'timeout') attemptResult = 'timeout';

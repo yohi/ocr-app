@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { countReviewableFiles, validateReviewResult } from './validate-ocr-result.mjs';
+
+const validatorPath = fileURLToPath(new URL('./validate-ocr-result.mjs', import.meta.url));
+
+function runValidatorOnBytes(resultBytes) {
+  const directory = mkdtempSync(join(tmpdir(), 'validate-ocr-result-'));
+  const resultPath = join(directory, 'result.json');
+  const contextPath = join(directory, 'context.json');
+  const outputPath = join(directory, 'github-output');
+  writeFileSync(resultPath, resultBytes);
+  writeFileSync(contextPath, JSON.stringify({ reviewable_files: [] }));
+  const child = spawnSync(process.execPath, [validatorPath, resultPath, '0', contextPath], {
+    encoding: 'utf8',
+    env: { ...process.env, GITHUB_OUTPUT: outputPath },
+  });
+  return { child, outputPath, resultBytes, cleanup: () => rmSync(directory, { recursive: true, force: true }) };
+}
+
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
+}
 
 test('counts reviewable files from the deterministic OCR preview', () => {
   assert.equal(countReviewableFiles({ reviewable_files: [{ path: 'a.js' }, { path: 'b.md' }] }), 2);
@@ -84,4 +110,27 @@ test('rejects a successful result without numeric complete coverage', () => {
     }),
     /coverage/i,
   );
+});
+
+test('emits the raw-byte digest for validated JSON', () => {
+  const resultBytes = Buffer.from('{\n  "status": "skipped"\n}\n');
+  const run = runValidatorOnBytes(resultBytes);
+  try {
+    assert.equal(run.child.status, 0, run.child.stderr);
+    assert.equal(readFileSync(run.outputPath, 'utf8'), `RESULT_SHA256=${sha256(resultBytes)}\n`);
+    assert.notEqual(sha256(resultBytes), sha256(Buffer.from(JSON.stringify(JSON.parse(resultBytes.toString('utf8'))))));
+  } finally {
+    run.cleanup();
+  }
+});
+
+test('emits the raw-byte digest before rejecting malformed JSON', () => {
+  const resultBytes = Buffer.from('{ "status": "skipped",\n');
+  const run = runValidatorOnBytes(resultBytes);
+  try {
+    assert.notEqual(run.child.status, 0);
+    assert.equal(readFileSync(run.outputPath, 'utf8'), `RESULT_SHA256=${sha256(resultBytes)}\n`);
+  } finally {
+    run.cleanup();
+  }
 });

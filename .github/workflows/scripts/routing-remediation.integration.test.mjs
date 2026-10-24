@@ -8,7 +8,7 @@ import test from 'node:test';
 import { authorizeRoutingStart } from './authorize-routing-start.mjs';
 import { prepareRoutingStep, createRunBindingFromEnv, readSelectedReviewRoute } from './prepare-review-routing.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
-import { createAttemptRecorder, createRoutingDecisionRecord, finalizeRoutingAudit, writeRoutingAudit } from './ocr-routing-audit.mjs';
+import { createAttemptRecorder, createRoutingDecisionRecord, finalizeRoutingAudit as finalizeRoutingAuditCore, writeRoutingAudit } from './ocr-routing-audit.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import { publishRoutingReview } from './publish-routing-review.mjs';
 import { revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
@@ -18,6 +18,8 @@ import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup, hashRoutingSourceManifest } from './routing-authorization.mjs';
 import { readRoutingExecutionContext, writeRoutingExecutionContext } from './routing-execution-context.mjs';
 import { run as postOcrComments } from './post-ocr-comments.mjs';
+
+const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
 
 const timestamp = '2026-10-21T12:00:00.000Z';
 const head = 'a'.repeat(40);
@@ -75,7 +77,7 @@ function trustedCentralCheckout() {
   const digest = path => `sha256:${createHash('sha256').update(readFileSync(join(root, path))).digest('hex')}`;
   const sourceManifestSha256 = hashRoutingSourceManifest({ trustedRoot: root, readFile: path => readFileSync(join(root, path)),
     listTrackedPaths: () => execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8' }).split('\0').filter(Boolean) });
-  return { root, policySha256: digest('.github/workflows/config/review-risk-policy.json'),
+  return { root, policySha256: digest('.github/workflows/config/decision-egress-policy.json'),
     catalogSha256: digest('.github/workflows/config/review-model-catalog.json'), sourceManifestSha256 };
 }
 
@@ -749,9 +751,12 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
     decision: {}, egressStatus: 'denied',
     route: { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable' },
     policyVersions: { policyVersion: '1', modelCatalogVersion: '1' } });
+  const resultBytes = Buffer.from(JSON.stringify(reviewResult));
+  writeFileSync(join(runTemp, 'ocr-result.json'), resultBytes);
   const finalAudit = finalizeRoutingAudit({ decision: decisionRecord, attempts, reviewResult, validation: { status: 'passed' },
     headCheck: { status: 'passed' }, runBinding, policy: { repoId: 7, repo: 'owner/repo', prNumber: 4,
       review_scope_gap: false, features_incomplete: false, selectedReviewModel: 'certified-primary' }, catalog, selectedRoute: route,
+    resultSha256: createHash('sha256').update(resultBytes).digest('hex'),
     certifiedBundle: { catalog, evidence: certifiedEvidence }, runTemp });
   writeRoutingAudit({ runTemp, record: finalAudit, expectedBinding: runBinding });
   writeFileSync(join(runTemp, 'ocr-routing', 'decision.json'), JSON.stringify(decisionRecord));
@@ -767,7 +772,11 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
       log.calls.push({ kind: 'gate' });
       return evaluateGateAndAssertSealed(runTemp, input);
     }, checkHead: async () => { log.calls.push({ kind: 'head' }); return head; },
-    postReview: async () => { log.calls.push({ kind: 'post' }); return 0; }, writeOutput: async () => {} });
+    postReview: async input => {
+      assert.equal(input.expectedResultSha256, finalAudit.result_sha256);
+      log.calls.push({ kind: 'post' });
+      return 0;
+    }, writeOutput: async () => {} });
   assert.equal(reviewResult.status, 'success');
   assert.equal(finalAudit.executed_review_model, 'certified-fallback');
   assert.notEqual(route.selected_model_id, finalAudit.executed_review_model);

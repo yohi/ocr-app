@@ -108,6 +108,49 @@ test('Given authorized enforce route, When invoked, Then exact certified model a
   assert.equal(fixture.calls[0].routingMode, 'enforce');
 });
 
+test('Given a routed Host attempt, When spawn authorization runs, Then central authority is fetched and evaluated again', async () => {
+  let authorizationFetches = 0;
+  let authorizationChecks = 0;
+  let spawnAuthorization;
+  const fixture = input({
+    fetchCurrentAuthorization: async () => {
+      authorizationFetches++;
+      return { registry: { fetch: authorizationFetches }, operationalDossiers: {} };
+    },
+    evaluateStartup: ({ registry }) => {
+      authorizationChecks++;
+      return { authorized: registry.fetch === authorizationFetches };
+    },
+    runHost: async options => {
+      spawnAuthorization = options.authorizeBeforeSpawn;
+      return { status: 'success' };
+    },
+  });
+
+  await runRoutingReview(fixture.args);
+  assert.equal(typeof spawnAuthorization, 'function');
+  assert.equal(await spawnAuthorization(), true);
+  assert.equal(authorizationFetches, 2);
+  assert.equal(authorizationChecks, 2);
+});
+
+test('Given authority is revoked at a retry boundary, When Host returns denial, Then routing guard suppresses later mutations', async () => {
+  const outputs = [];
+  const fixture = input({
+    writeOutput: async value => outputs.push(value),
+    runHost: async options => {
+      assert.equal(await options.authorizeBeforeSpawn(), false);
+      return { schema_version: '1.0', mode: 'review', status: 'failed', coverage: 0, findings: [], message: 'ROUTING_ACTIVATION_DENIED' };
+    },
+    fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
+    evaluateStartup: () => ({ authorized: false }),
+  });
+
+  const result = await runRoutingReview(fixture.args);
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+  assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
+});
+
 test('Given a missing, invalid, or differently bound decision, When routing runs, Then neither mode starts Host', async () => {
   for (const mode of ['shadow', 'enforce']) {
     for (const invalidDecision of [

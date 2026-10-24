@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 
 export function countReviewableFiles(preview) {
   if (!preview || !Array.isArray(preview.reviewable_files)) {
@@ -76,10 +77,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!Array.isArray(context?.reviewable_files)) {
       throw new Error('OCR review context has no reviewable file list');
     }
+    const resultBytes = fs.readFileSync(resultPath);
+    const resultSha256 = createHash('sha256').update(resultBytes).digest('hex');
+    if (process.env.GITHUB_OUTPUT) {
+      fs.appendFileSync(process.env.GITHUB_OUTPUT, `RESULT_SHA256=${resultSha256}\n`);
+    }
     validateReviewResult({
       expectedReviewableFiles: Number.parseInt(expectedFiles, 10),
       expectedReviewablePaths: context.reviewable_files.map(file => file.path),
-      result: readJson(resultPath),
+      result: JSON.parse(resultBytes.toString('utf8')),
     });
   } catch (error) {
     console.error(error.message);
