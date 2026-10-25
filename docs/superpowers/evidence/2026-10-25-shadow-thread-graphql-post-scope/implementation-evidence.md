@@ -13,8 +13,9 @@ This is an author implementation candidate only. No independent PASS, formal Gat
 - Starting branch: `fix/shadow-graphql-post-scope-guards`
 - Candidate branch was created from the required base; initial `git status --porcelain=v1` was empty.
 - Protected checkout remained on `master` at `ce477332aaef8068a94cfc8cc7343971ae045488`. Its user-provided handoff file was untracked at start and was left untouched.
-- Candidate HEAD remains the base SHA; no commit was created.
-- `git diff --stat cabf66411018c8a3ff1ff9b702a4df0781a0832c`: 9 tracked files changed, 444 insertions, 19 deletions (evidence artifacts are untracked and excluded from this stat).
+- At initial evidence capture, candidate HEAD was still the base SHA and the implementation had not yet been committed.
+- The implementation was subsequently committed as `79eb1c39e2400e43af3bd450afce0c77f1bfa111` and pushed to `origin/fix/shadow-graphql-post-scope-guards`.
+- Before adding the four evidence artifacts, `git diff --stat cabf66411018c8a3ff1ff9b702a4df0781a0832c` reported 9 tracked source/config/design files, 444 insertions, and 19 deletions.
 
 ## Implemented candidate scope
 
