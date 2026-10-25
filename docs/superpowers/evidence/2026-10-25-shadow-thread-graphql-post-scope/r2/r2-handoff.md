@@ -9,7 +9,8 @@ This is an author-side R2 candidate record. It is not an independent PASS, findi
 - Repository: `yohi/ocr-app`
 - R1 review base: `1c85d4979ae0153f3f5848e9dbf489dc124b98b1`
 - R2 branch: `fix/shadow-graphql-post-scope-guards`
-- R2 source commit and final pushed tip: to be recorded after the approved normal commit/push.
+- R2 fixed source checkpoint (code, tests, R1 evidence correction, and R2 artifacts): `6aceb8daf1a62d263f45febde9f4e19ecbd59870` (`PERFORMED` and pushed to the approved origin branch).
+- A subsequent documentation-only commit records this Handoff's source checkpoint. Its final branch-tip SHA is included in the author's final report; it does not alter the source manifest or test inputs.
 - R2 source changes are restricted to `resolve-threads.mjs`, its unit/integration tests, the EVD correction in the existing R1 evidence document, and this new R2 evidence directory.
 - R1 `node-tests.log` and `source-manifest.sha256` remain unchanged. B-R1 files, publisher, workflow, Host, Worker, routing authorization, policy, catalog, and schemas are not changed; see `r2-protected-files.md`.
 
