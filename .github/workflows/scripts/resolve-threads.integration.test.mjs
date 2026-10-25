@@ -142,3 +142,57 @@ test('actual resolver CLI denial fails the Check despite a successful main revie
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('shadow GraphQL mutation failure produces a failing Check conclusion offline', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-mutation-check-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  let checkWrites = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
+      threadHost: async () => {
+        hostCalls++;
+        return { status: 'success', decision: 'resolve', reason: 'fixed' };
+      },
+      authorizeBeforeMutation: async () => true,
+      graphql: async () => {
+        mutationCalls++;
+        return { errors: [{ message: 'private GraphQL response' }] };
+      },
+    });
+
+    assert.equal(exitCode, 1);
+    assert.equal(hostCalls, 1);
+    assert.equal(mutationCalls, 1);
+
+    const resultPath = join(root, 'ocr-result.json');
+    writeFileSync(resultPath, JSON.stringify({
+      schema_version: '1.0', mode: 'review', status: 'success', coverage: 1, findings: [], message: '',
+    }));
+    const check = await updateCheckRun({
+      env: {
+        CONCLUSION: exitCode === 0 ? 'success' : 'failure',
+        DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', PR_NUMBER: '123',
+        CHECK_RUN_ID: '456', GITHUB_TOKEN: 'offline-token', RESULT_PATH: resultPath,
+        DETAILS_URL: 'https://github.com/owner/central/actions/runs/789',
+      },
+      fetchImpl: async (url, options) => {
+        assert.equal(url, 'https://api.github.com/repos/owner/repo/check-runs/456');
+        assert.equal(options.method, 'PATCH');
+        assert.equal(JSON.parse(options.body).conclusion, 'failure');
+        checkWrites++;
+        return { ok: true };
+      },
+    });
+
+    assert.equal(check.conclusion, 'failure');
+    assert.equal(checkWrites, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

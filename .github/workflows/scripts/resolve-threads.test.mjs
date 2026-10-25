@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { runThreadHost } from './antigravity-host.mjs';
 import {
   createConfig,
+  fetchAllOpenThreads,
   parseLlmResponse,
   buildPrompt,
   buildFetchThreadsQuery,
@@ -290,3 +291,227 @@ test('direct enforce resolver invocation is blocked before fetching threads', as
   assert.equal(exitCode, 1);
   assert.equal(reads, 0);
 });
+
+test('shadow resolver treats a valid empty GraphQL result as success', async () => {
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => assert.fail('empty result must not start a Host'),
+    fetchOpenThreads: options => fetchAllOpenThreads({ ...options, strictFailure: true }),
+    graphql: async () => ({ data: { repository: { pullRequest: { reviewThreads: {
+      nodes: [], pageInfo: { hasNextPage: false, endCursor: null },
+    } } } } }),
+  });
+
+  assert.equal(exitCode, 0);
+});
+
+test('shadow resolver rejects GraphQL fetch errors before processing threads', async () => {
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    fetchOpenThreads: options => fetchAllOpenThreads({ ...options, strictFailure: true }),
+    graphql: async (_token, query) => {
+      if (query.trimStart().startsWith('mutation')) mutationCalls++;
+      return { errors: [{ message: 'private response detail' }] };
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(hostCalls, 0);
+  assert.equal(mutationCalls, 0);
+});
+
+test('shadow resolver discards first-page threads when a later page fails', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-page-failure-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let calls = 0;
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  try {
+    const responses = [
+      { data: { repository: { pullRequest: { reviewThreads: {
+        nodes: [{ id: 'thread-1', path: 'changed.js', line: 1, isResolved: false,
+          comments: { nodes: [{ author: { login: 'opencodereview-app' }, body: 'Fix' }] } }],
+        pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
+      } } } } },
+      { errors: [{ message: 'private response detail' }] },
+    ];
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+      fetchOpenThreads: options => fetchAllOpenThreads({ ...options, strictFailure: true }),
+      graphql: async (_token, query) => {
+        calls++;
+        if (query.trimStart().startsWith('mutation')) mutationCalls++;
+        return responses.shift();
+      },
+      authorizeBeforeMutation: async () => true,
+      // A second callback is intentionally unavailable: fetch and mutation use the same GraphQL seam.
+    });
+
+    assert.equal(exitCode, 1);
+    assert.equal(calls, 2);
+    assert.equal(hostCalls, 0);
+    assert.equal(mutationCalls, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('shadow resolver rejects a GraphQL response missing review thread nodes', async () => {
+  let hostCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    fetchOpenThreads: options => fetchAllOpenThreads({ ...options, strictFailure: true }),
+    graphql: async () => ({ data: { repository: { pullRequest: { reviewThreads: {
+      pageInfo: { hasNextPage: false, endCursor: null },
+    } } } } }),
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(hostCalls, 0);
+});
+
+test('off resolver preserves legacy GraphQL fetch and mutation failure behavior', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-off-legacy-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let fetchCalls = 0;
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'off' },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+      fetchOpenThreads: async () => { fetchCalls++; return [{
+        id: 'thread-1', path: 'changed.js', line: 1, comments: [],
+      }]; },
+      graphql: async () => { mutationCalls++; return { errors: [{ message: 'legacy mutation error' }] }; },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(fetchCalls, 1);
+    assert.equal(hostCalls, 1);
+    assert.equal(mutationCalls, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('off resolver preserves legacy GraphQL pagination error as an empty successful result', async () => {
+  let fetchCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'off' },
+    fetchOpenThreads: options => fetchAllOpenThreads({
+      ...options,
+      graphql: async () => { fetchCalls++; return { errors: [{ message: 'legacy page failure' }] }; },
+    }),
+    threadHost: async () => assert.fail('legacy partial result is empty'),
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(fetchCalls, 1);
+});
+
+test('shadow mutation authorization exception fails closed without a mutation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-mutation-auth-exception-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', comments: [] }],
+      threadHost: async () => {
+        hostCalls++;
+        return { status: 'success', decision: 'resolve', reason: 'fixed' };
+      },
+      authorizeBeforeMutation: async () => { throw new Error('authority unavailable'); },
+      graphql: async () => { mutationCalls++; return {}; },
+    });
+
+    assert.equal(exitCode, 1);
+    assert.equal(hostCalls, 1);
+    assert.equal(mutationCalls, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('shadow resolver rejects GraphQL transport failure before starting a Host', async () => {
+  let hostCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'target-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    fetchOpenThreads: options => fetchAllOpenThreads({ ...options, strictFailure: true }),
+    graphql: async () => { throw new Error('offline transport failure'); },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(hostCalls, 0);
+});
+
+for (const failure of ['reply-errors', 'reply-missing', 'reply-transport', 'resolve-errors', 'resolve-missing', 'resolve-transport']) {
+  test(`shadow stops after ${failure} and reports failure`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ocr-thread-mutation-failure-'));
+    writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+    let hostCalls = 0;
+    let mutationCalls = 0;
+    let authorizationCalls = 0;
+    try {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root,
+          ...(failure.startsWith('resolve-') ? ['--auto-resolve'] : [])],
+        token: 'target-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+        fetchOpenThreads: async () => [1, 2].map(id => ({
+          id: `thread-${id}`, path: 'changed.js', line: 1, comments: [],
+        })),
+        threadHost: async () => {
+          hostCalls++;
+          return { status: 'success', decision: 'resolve', reason: 'fixed' };
+        },
+        authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
+        graphql: async (_token, query) => {
+          mutationCalls++;
+          const isResolve = query.includes('resolveReviewThread');
+          const shouldFail = failure.startsWith('reply-') ? !isResolve : isResolve;
+          if (!shouldFail) {
+            return isResolve
+              ? { data: { resolveReviewThread: { thread: { isResolved: true } } } }
+              : { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
+          }
+          if (failure.endsWith('transport')) throw new Error('offline mutation transport');
+          if (failure.endsWith('errors')) return { errors: [{ message: 'private mutation detail' }] };
+          return isResolve ? { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: false } } } }
+            : { data: { addPullRequestReviewThreadReply: { comment: {} } } };
+        },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, 1);
+      assert.equal(mutationCalls, failure.startsWith('resolve-') ? 2 : 1);
+      assert.equal(authorizationCalls, failure.startsWith('resolve-') ? 2 : 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}

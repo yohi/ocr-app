@@ -235,22 +235,34 @@ export function isOcrThread(thread) {
   return /^opencodereview-app(\[bot\])?$/i.test(login.trim());
 }
 
-export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
+export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphql = executeGraphQLQuery, strictFailure = false }) {
   const openThreads = [];
   let cursor = null;
 
   while (true) {
     const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
-    const response = await executeGraphQLQuery(token, query);
+    const response = await graphql(token, query);
 
-    if (response.errors) {
+    const hasErrors = strictFailure
+      ? response?.errors !== undefined && response.errors !== null &&
+        (!Array.isArray(response.errors) || response.errors.length > 0)
+      : Boolean(response?.errors);
+    if (hasErrors) {
+      if (strictFailure) throw new Error('THREAD_FETCH_FAILED');
       console.error('GraphQL Query Errors:', JSON.stringify(response.errors));
       break;
     }
 
     const reviewThreads = response.data?.repository?.pullRequest?.reviewThreads;
     if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
+      if (strictFailure) throw new Error('THREAD_FETCH_FAILED');
       break;
+    }
+
+    if (strictFailure && (!reviewThreads.pageInfo || typeof reviewThreads.pageInfo.hasNextPage !== 'boolean'
+      || (reviewThreads.pageInfo.hasNextPage && (typeof reviewThreads.pageInfo.endCursor !== 'string'
+        || reviewThreads.pageInfo.endCursor.length === 0)))) {
+      throw new Error('THREAD_FETCH_FAILED');
     }
 
     for (const thread of reviewThreads.nodes) {
@@ -300,13 +312,23 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     }
   }
 
+  const strictGraphqlFailure = routingMode === 'shadow';
   console.log(`Checking open review threads for PR #${config.prNumber} in ${config.repo}...`);
-  const openThreads = await fetchOpenThreads({
-    owner: config.owner,
-    name: config.name,
-    prNumber: config.prNumber,
-    token: config.token,
-  });
+  let openThreads;
+  try {
+    openThreads = await fetchOpenThreads({
+      owner: config.owner,
+      name: config.name,
+      prNumber: config.prNumber,
+      token: config.token,
+      graphql,
+      strictFailure: strictGraphqlFailure,
+    });
+  } catch (error) {
+    if (!strictGraphqlFailure) throw error;
+    console.error('THREAD_FETCH_FAILED');
+    return 1;
+  }
 
   console.log(`Found ${openThreads.length} unresolved review threads.`);
   if (openThreads.length === 0) {
@@ -315,6 +337,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
 
   let resolvedCount = 0;
   let authorizationDenied = false;
+  let operationFailed = false;
   const authorizeHost = async () => {
     try {
       if (await authorizeBeforeHost() === true) return true;
@@ -322,6 +345,16 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       // Authority failures must not become a successful CLI completion.
     }
     authorizationDenied = true;
+    return false;
+  };
+  const authorizeMutation = async () => {
+    try {
+      if (await authorizeBeforeMutation() === true) return true;
+    } catch (error) {
+      if (!strictGraphqlFailure) throw error;
+      // An unavailable authority is a denial in shadow mode.
+    }
+    if (strictGraphqlFailure) authorizationDenied = true;
     return false;
   };
   for (const thread of openThreads) {
@@ -351,7 +384,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
         : `💡 HEADでの修正をLLMが確認しました。\n理由: ${evaluation.reason}\n\n※ スレッドの自動解決（resolveReviewThread）には明示的な --auto-resolve オプションまたはメンテナーの承認が必要です。\n\n---\n*Evaluated by OpenCodeReview*`;
 
       try {
-        if (await authorizeBeforeMutation() !== true) {
+        if (!await authorizeMutation()) {
           authorizationDenied = true;
           break;
         }
@@ -362,7 +395,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
 
         // Only invoke resolveReviewThread mutation when explicit --auto-resolve option is enabled
         if (config.autoResolve) {
-          if (await authorizeBeforeMutation() !== true) {
+          if (!await authorizeMutation()) {
             authorizationDenied = true;
             break;
           }
@@ -373,13 +406,22 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
           resolvedCount++;
         }
       } catch (err) {
+        if (strictGraphqlFailure && authorizationDenied) {
+          console.error('ROUTING_ACTIVATION_DENIED');
+          break;
+        }
+        if (strictGraphqlFailure) {
+          operationFailed = true;
+          console.error('THREAD_MUTATION_FAILED');
+          break;
+        }
         console.error(`Failed to process thread ${thread.id}: ${err.message}`);
       }
     }
   }
 
   console.log(`Finished processing review threads. Auto-resolved ${resolvedCount} / ${openThreads.length} threads.`);
-  return authorizationDenied ? 1 : 0;
+  return authorizationDenied || operationFailed ? 1 : 0;
 }
 
 const executedDirectly = process.argv[1] !== undefined &&

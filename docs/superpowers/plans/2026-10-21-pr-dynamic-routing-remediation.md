@@ -167,6 +167,16 @@ regenerate fixed-source G1 evidence and review approvals/dossiers against the ch
 the test files. Existing evidence, traceability statuses, approval registries, and G2/G3/G4 grants are not upgraded
 by this follow-up. The per-effect freshness/TOCTOU and already-running Host limits in contract A still apply.
 
+### 2026-10-25 Owner-limited A/B implementation exception
+
+**Status: implementation scope approved by the Owner for this candidate only; independent review and operational gates remain open.** The Owner handoff dated 2026-10-25 expressly adds two narrow exceptions to the file exclusions above. It does not retroactively make prior changes compliant, close any finding, or authorize activation, GitHub writes, pushes, pull requests, merges, or a gate release.
+
+**A — `TARGET-NEW-001`, limited `resolve-threads.mjs` exception:** in authorized `shadow` mode only, GraphQL thread fetch, pagination, reply, and resolve failures must end nonzero and stop further thread processing. An incomplete page sequence must not be treated as a complete thread list; a valid empty result remains successful. Existing reauthorization denial remains fail-closed. `off` must retain its legacy behavior, including existing fetch and mutation failure handling. No Host, OCR schema, workflow, Check Run, or activation policy change is authorized by this exception.
+
+**B — `UNV-NEW-002`, newly approved `post-ocr-comments.mjs` exception:** in `shadow` and `enforce`, validate before any GitHub API access that CLI `--repo` and `TARGET_REPO` are both well-formed ASCII `owner/repo` values and equal under ASCII case-insensitive comparison. Missing, malformed, unequal, or unknown-mode input fails closed even when a mutation authorization callback is injected. `off` behavior remains unchanged. The existing `publish-routing-review.mjs` publisher must continue passing `TARGET_REPO` as the CLI repository and retain its independent publication gate.
+
+These exceptions are limited to the two source files, their offline tests, and this documentation follow-up. The original exclusions remain effective for all other files and behavior. In particular, no Worker, workflow, result schema, authorization registry, runtime grant, Check Run API behavior, retry policy, or deployment behavior is authorized to change. Tests must use stubs/mocks; no real GitHub/API/Host operation is permitted. Candidate status is at most `CORRECTED_IN_CANDIDATE / INDEPENDENT_REVIEW_REQUIRED`; this amendment is not independent acceptance or G1/G2/G3/G4 approval.
+
 ## Proposed contracts for the Task 1 specification
 
 These proposed implementation contracts are explicit so workers do not invent security policy. Task 1 freezes

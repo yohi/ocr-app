@@ -132,6 +132,7 @@ function fixture({
       calls.push('post');
       postCalls += 1;
       resultPaths.push(input.args.at(-1));
+      assert.equal(input.env.TARGET_REPO, input.args[1]);
       assert.equal(input.expectedSha, runBinding.headSha);
       assert.equal(input.expectedResultSha256, finalAudit.result_sha256);
       assert.deepEqual(input.args.slice(0, 4), ['--repo', 'owner/repo', '--pr', '7']);

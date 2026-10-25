@@ -22,6 +22,8 @@ class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
 const SHA256 = /^[0-9a-f]{64}$/;
 const HEAD_MISMATCH = 'PR head changed while the review was running; refusing to publish stale results';
+const REPOSITORY_SCOPE_MISMATCH = 'REPOSITORY_SCOPE_MISMATCH';
+const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 function getArg(args, key) {
   const index = args.indexOf(`--${key}`);
@@ -42,6 +44,21 @@ function createConfig(args, token, outputPath) {
   }
 
   return { outputPath, prNumber, repo, resultPath, token };
+}
+
+function assertRepositoryScope(repo, env) {
+  const mode = env.DECISION_ROUTING_MODE ?? 'off';
+  if (mode === 'off') return;
+
+  const targetRepo = env.TARGET_REPO;
+  if (mode !== 'shadow' && mode !== 'enforce') {
+    throw new CliError(REPOSITORY_SCOPE_MISMATCH);
+  }
+  if (typeof repo !== 'string' || !REPOSITORY_PATTERN.test(repo)
+    || typeof targetRepo !== 'string' || !REPOSITORY_PATTERN.test(targetRepo)
+    || repo.toLowerCase() !== targetRepo.toLowerCase()) {
+    throw new CliError(REPOSITORY_SCOPE_MISMATCH);
+  }
 }
 
 function writeReviewUrl(outputPath, response) {
@@ -526,6 +543,7 @@ export async function run({
   githubApi: injectedGithubApi,
 } = {}) {
   const config = createConfig(args, token, outputPath);
+  assertRepositoryScope(config.repo, env);
   const result = readResult(config.resultPath, expectedResultSha256);
   const githubApi = injectedGithubApi ?? createGithubApi(config);
 
