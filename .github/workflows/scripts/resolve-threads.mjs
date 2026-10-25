@@ -191,7 +191,7 @@ export function extractCodeContext(targetDir, filePath) {
   }
 }
 
-export function executeGraphQLQuery(token, query) {
+export function executeGraphQLQuery(token, query, { strict = false } = {}) {
   return new Promise((resolveReq, rejectReq) => {
     const req = https.request({
       hostname: 'api.github.com',
@@ -208,10 +208,14 @@ export function executeGraphQLQuery(token, query) {
       res.on('data', chunk => data += chunk);
       res.on('error', rejectReq);
       res.on('end', () => {
+        if (strict && (!Number.isInteger(res.statusCode) || res.statusCode < 200 || res.statusCode >= 300)) {
+          rejectReq(new Error('GRAPHQL_HTTP_FAILED'));
+          return;
+        }
         try {
           resolveReq(JSON.parse(data));
         } catch (e) {
-          rejectReq(new Error(`Failed to parse GraphQL response: ${data}`));
+          rejectReq(strict ? new Error('GRAPHQL_RESPONSE_INVALID') : new Error(`Failed to parse GraphQL response: ${data}`));
         }
       });
     });
@@ -235,34 +239,97 @@ export function isOcrThread(thread) {
   return /^opencodereview-app(\[bot\])?$/i.test(login.trim());
 }
 
+function isPlainRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function hasGraphqlErrors(response, strict) {
+  const errors = response?.errors;
+  if (!strict) return Boolean(errors);
+  return errors !== undefined && errors !== null && (!Array.isArray(errors) || errors.length > 0);
+}
+
+function requireNonEmptyString(value) {
+  if (typeof value !== 'string' || value.length === 0) throw new Error('THREAD_FETCH_FAILED');
+}
+
+function requireNullablePositiveInteger(value) {
+  if (value !== null && (!Number.isSafeInteger(value) || value < 1)) throw new Error('THREAD_FETCH_FAILED');
+}
+
+function validateReviewComment(comment) {
+  if (!isPlainRecord(comment)) throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(comment.id);
+  if (typeof comment.body !== 'string') throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(comment.createdAt);
+  if (!Object.hasOwn(comment, 'author')) throw new Error('THREAD_FETCH_FAILED');
+  if (comment.author !== null) {
+    if (!isPlainRecord(comment.author)) throw new Error('THREAD_FETCH_FAILED');
+    requireNonEmptyString(comment.author.login);
+  }
+}
+
+function validateReviewThread(thread) {
+  if (!isPlainRecord(thread)) throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(thread.id);
+  if (typeof thread.isResolved !== 'boolean' || typeof thread.isOutdated !== 'boolean') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  requireNonEmptyString(thread.path);
+  if (!Object.hasOwn(thread, 'line') || !Object.hasOwn(thread, 'originalLine')) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  requireNullablePositiveInteger(thread.line);
+  requireNullablePositiveInteger(thread.originalLine);
+  if (!isPlainRecord(thread.comments) || !Array.isArray(thread.comments.nodes)) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  for (const comment of thread.comments.nodes) validateReviewComment(comment);
+}
+
+function validateReviewThreadPage(reviewThreads) {
+  if (!isPlainRecord(reviewThreads) || !Array.isArray(reviewThreads.nodes)
+    || !isPlainRecord(reviewThreads.pageInfo)
+    || typeof reviewThreads.pageInfo.hasNextPage !== 'boolean'
+    || !Object.hasOwn(reviewThreads.pageInfo, 'endCursor')) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  const { hasNextPage, endCursor } = reviewThreads.pageInfo;
+  if (hasNextPage) {
+    requireNonEmptyString(endCursor);
+  } else if (endCursor !== null && typeof endCursor !== 'string') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  for (const thread of reviewThreads.nodes) validateReviewThread(thread);
+}
+
 export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphql = executeGraphQLQuery, strictFailure = false }) {
   const openThreads = [];
   let cursor = null;
+  let pageCount = 0;
+  const seenCursors = new Set();
 
   while (true) {
+    if (strictFailure && pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
     const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
-    const response = await graphql(token, query);
+    const response = strictFailure
+      ? await graphql(token, query, { strict: true })
+      : await graphql(token, query);
+    pageCount++;
 
-    const hasErrors = strictFailure
-      ? response?.errors !== undefined && response.errors !== null &&
-        (!Array.isArray(response.errors) || response.errors.length > 0)
-      : Boolean(response?.errors);
-    if (hasErrors) {
+    if (strictFailure && !isPlainRecord(response)) throw new Error('THREAD_FETCH_FAILED');
+    if (hasGraphqlErrors(response, strictFailure)) {
       if (strictFailure) throw new Error('THREAD_FETCH_FAILED');
       console.error('GraphQL Query Errors:', JSON.stringify(response.errors));
       break;
     }
 
     const reviewThreads = response.data?.repository?.pullRequest?.reviewThreads;
-    if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
-      if (strictFailure) throw new Error('THREAD_FETCH_FAILED');
+    if (strictFailure) {
+      validateReviewThreadPage(reviewThreads);
+    } else if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
       break;
-    }
-
-    if (strictFailure && (!reviewThreads.pageInfo || typeof reviewThreads.pageInfo.hasNextPage !== 'boolean'
-      || (reviewThreads.pageInfo.hasNextPage && (typeof reviewThreads.pageInfo.endCursor !== 'string'
-        || reviewThreads.pageInfo.endCursor.length === 0)))) {
-      throw new Error('THREAD_FETCH_FAILED');
     }
 
     for (const thread of reviewThreads.nodes) {
@@ -276,11 +343,18 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphq
       }
     }
 
+    if (strictFailure) {
+      if (!reviewThreads.pageInfo.hasNextPage) break;
+      const nextCursor = reviewThreads.pageInfo.endCursor;
+      if (seenCursors.has(nextCursor) || pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+      continue;
+    }
+
     if (reviewThreads.pageInfo?.hasNextPage && reviewThreads.pageInfo?.endCursor) {
       cursor = reviewThreads.pageInfo.endCursor;
-    } else {
-      break;
-    }
+    } else break;
   }
 
   return openThreads;
@@ -388,8 +462,17 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
           authorizationDenied = true;
           break;
         }
-        const replyResult = await graphql(config.token, buildReplyMutation(thread.id, replyBody));
-        if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
+        const replyQuery = buildReplyMutation(thread.id, replyBody);
+        const replyResult = strictGraphqlFailure
+          ? await graphql(config.token, replyQuery, { strict: true })
+          : await graphql(config.token, replyQuery);
+        if (strictGraphqlFailure) {
+          const replyId = replyResult?.data?.addPullRequestReviewThreadReply?.comment?.id;
+          if (!isPlainRecord(replyResult) || hasGraphqlErrors(replyResult, true)
+            || typeof replyId !== 'string' || replyId.length === 0) {
+            throw new Error('THREAD_MUTATION_FAILED');
+          }
+        } else if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
           throw new Error(`Reply mutation failed: ${JSON.stringify(replyResult.errors || replyResult)}`);
         }
 
@@ -399,8 +482,17 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
             authorizationDenied = true;
             break;
           }
-          const resolveResult = await graphql(config.token, buildResolveMutation(thread.id));
-          if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
+          const resolveQuery = buildResolveMutation(thread.id);
+          const resolveResult = strictGraphqlFailure
+            ? await graphql(config.token, resolveQuery, { strict: true })
+            : await graphql(config.token, resolveQuery);
+          if (strictGraphqlFailure) {
+            const resultThread = resolveResult?.data?.resolveReviewThread?.thread;
+            if (!isPlainRecord(resolveResult) || hasGraphqlErrors(resolveResult, true)
+              || resultThread?.id !== thread.id || resultThread?.isResolved !== true) {
+              throw new Error('THREAD_MUTATION_FAILED');
+            }
+          } else if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
             throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
           }
           resolvedCount++;

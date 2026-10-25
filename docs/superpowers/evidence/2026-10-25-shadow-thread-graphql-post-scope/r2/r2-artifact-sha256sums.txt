@@ -1,0 +1,13 @@
+6a1be3b23566d0a20980ce30f3c682994dc356b09cc5105763f918a88a522a19  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/implementation-evidence.md
+14bbb7cc1115e968df20cd11c7e9b614ae270de7cffed114e2428b6ead33a4d4  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-start.md
+d5bcc4d8ddc80d2e58c57f9999cff630bd84c53e4aa7bdeac21a48e11a8ee4a8  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-protected-files.md
+9e5c4008b7e9d5bbc6f871f419745075f61c3c535a22f1a068884ad9a9a472d8  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-red.log
+e85788b9ee5480cc23b76230341eedfd12d84c3b00f5c8bbc7953c77f1a0b895  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-off-interface-red.log
+fd67208c50e2ef904244d88181afc2f7f8323e8c86e2a1a463e02968ee66e7dc  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-off-interface-green.log
+a3c29619d8e9c8db0992d2b774a6904940facae2d85e59d7f851864a806681f6  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-targeted-green.log
+767e07e18c25683a7a3420abcce18627a9e0c5cf303a33c50bbcf4346f73194b  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-b-regression.log
+b8485503d25a3c3902c76fd53a15f75020564c5d45e11043a155f0d247c3721b  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-full-script-tests.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-actionlint.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-diff-check.log
+fd97bc9a3392e9ad6afeeacc0043f569dacd89ed8f039e2f8be73a8160117468  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/r2-source-diff.patch
+ab70ee43934afeb29e497ca180dcab9ac0b57488b74fc055d851f20c52609b2c  docs/superpowers/evidence/2026-10-25-shadow-thread-graphql-post-scope/r2/source-manifest-r2.sha256

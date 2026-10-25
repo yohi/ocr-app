@@ -1,10 +1,10 @@
 # Shadow thread GraphQL and publisher scope candidate evidence (2026-10-25)
 
-## Status
+## Status — R1 historical record
 
-`AUTHOR_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`
+`AUTHOR_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW` applies to the R1 candidate captured by this document, not to the later R2 correction. R2 tests, changes, verification, commit/push details, and its current author-only status are recorded separately in [`r2/r2-handoff.md`](r2/r2-handoff.md).
 
-This is an author implementation candidate only. No independent PASS, formal Gate acceptance, or runtime activation is claimed.
+This R1 record is not an independent PASS, formal Gate acceptance, or runtime activation claim.
 
 ## Starting point
 
@@ -52,13 +52,17 @@ Captured artifact digests: `node-tests.log` = `a46674b2ace1f82627f4af9d97e88e5c0
 
 `node --test` and actionlint tests were offline; their external effects were stubbed or absent. The workflow-local Ajv dependency was installed from npm's local cache with `npm install --offline --no-save --package-lock=false`; no package manifest or lockfile was changed. A Cloudflare Worker `npm install --offline` was attempted but could not run because `@octokit/auth-app` was not cached (`ENOTCACHED`); Worker tests are `NOT_RUN`.
 
-## Not run / authority boundaries
+## R1 action and verification status
 
-- Node.js 20: `NOT_RUN`; no `node20`, `node20.19`, or `node20.18` executable is available. The active runtime is Node `v26.10.0`.
+- R1 implementation commit `79eb1c39e2400e43af3bd450afce0c77f1bfa111`: `PERFORMED`.
+- R1 evidence commit `1c85d4979ae0153f3f5848e9dbf489dc124b98b1` and push to `origin/fix/shadow-graphql-post-scope-guards`: `PERFORMED`.
+- Pull request creation: `NOT_RUN`.
+- Merge: `NOT_RUN`.
+- Node.js 20: `NOT_RUN`; no `node20`, `node20.19`, or `node20.18` executable was available at R1 verification. R1 active runtime was Node `v26.10.0`.
 - GitHub Actions / live Check Run: `NOT_RUN`.
+- Cloudflare Worker tests: `NOT_RUN` (R1 offline dependency installation was unavailable).
 - Real GitHub REST/GraphQL, PR/thread writes, resolve operations, and model Host: `NOT_RUN`.
 - Owner registry, runtime grants, shadow/enforce activation, G1/G2/G3/G4 gate operations: `NOT_RUN`.
-- Push, PR creation, and merge: `NOT_RUN`.
 - Markdown lint: `NOT_RUN`; no `markdownlint-cli2` or `markdownlint` executable was available.
 
 ## Fixed-source manifest

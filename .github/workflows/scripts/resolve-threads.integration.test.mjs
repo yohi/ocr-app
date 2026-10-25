@@ -49,7 +49,7 @@ for (const mode of ['off', 'shadow']) {
           mutations.push(query);
           return query.includes('addPullRequestReviewThreadReply')
             ? { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } }
-            : { data: { resolveReviewThread: { thread: { isResolved: true } } } };
+            : { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } };
         },
       });
       assert.equal(exitCode, 0);
@@ -90,10 +90,16 @@ test('actual resolver CLI denial fails the Check despite a successful main revie
         }
         effects.reads++;
         const res = new EventEmitter();
+        res.statusCode = 200;
         respond(res);
         res.emit('data', JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: {
-          nodes: [{ id: 'thread-1', path: 'changed.js', line: 1, isResolved: false,
-            comments: { nodes: [{ author: { login: 'opencodereview-app' }, body: 'Fix this' }] } }],
+          nodes: [{
+            id: 'thread-1', isResolved: false, isOutdated: false, path: 'changed.js', line: 1, originalLine: null,
+            comments: { nodes: [{
+              id: 'comment-1', body: 'Fix this', createdAt: '2026-10-25T00:00:00Z',
+              author: { login: 'opencodereview-app' },
+            }] },
+          }],
           pageInfo: { hasNextPage: false, endCursor: null }
         } } } } }));
         res.emit('end');
@@ -192,6 +198,61 @@ test('shadow GraphQL mutation failure produces a failing Check conclusion offlin
 
     assert.equal(check.conclusion, 'failure');
     assert.equal(checkWrites, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production CLI rejects HTTP 500 with success-shaped GraphQL JSON before Host or mutation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-http-500-cli-'));
+  const preloadPath = join(root, 'offline-http.mjs');
+  writeFileSync(preloadPath, `
+    import https from 'node:https';
+    import childProcess from 'node:child_process';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { EventEmitter } from 'node:events';
+    const effects = { fetches: 0, mutations: 0, spawns: 0 };
+    childProcess.spawn = () => { effects.spawns++; throw new Error('unexpected Host spawn'); };
+    syncBuiltinESMExports();
+    https.request = (_options, respond) => {
+      const request = new EventEmitter();
+      let body = '';
+      request.write = chunk => { body += chunk; };
+      request.end = () => {
+        const query = JSON.parse(body).query;
+        if (query.trimStart().startsWith('mutation')) effects.mutations++;
+        else effects.fetches++;
+        const response = new EventEmitter();
+        response.statusCode = 500;
+        respond(response);
+        response.emit('data', JSON.stringify({
+          data: { repository: { pullRequest: { reviewThreads: {
+            nodes: [], pageInfo: { hasNextPage: false, endCursor: null }
+          } } } },
+          extensions: { sentinel: 'private-response-sentinel' }
+        }));
+        response.emit('end');
+      };
+      request.destroy = error => request.emit('error', error);
+      return request;
+    };
+    process.on('exit', () => process.stdout.write(JSON.stringify(effects) + '\\n'));
+  `);
+  try {
+    const result = spawnSync(process.execPath, [
+      '--import', preloadPath,
+      fileURLToPath(new URL('./resolve-threads.mjs', import.meta.url)),
+      '--repo', 'owner/repo', '--pr', '123', '--target-dir', root,
+    ], {
+      encoding: 'utf8', timeout: 5000,
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', GITHUB_TOKEN: 'offline-token' },
+    });
+
+    assert.ifError(result.error);
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /THREAD_FETCH_FAILED/);
+    assert.doesNotMatch(result.stderr, /private-response-sentinel/);
+    assert.match(result.stdout, /\{"fetches":1,"mutations":0,"spawns":0\}/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

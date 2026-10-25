@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import https from 'node:https';
+import { mock } from 'node:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -18,6 +20,79 @@ import {
   run,
   parseThreadHostResponse,
 } from './resolve-threads.mjs';
+
+function completeThread(overrides = {}) {
+  return {
+    id: 'thread-1',
+    isResolved: false,
+    isOutdated: false,
+    path: 'changed.js',
+    line: 1,
+    originalLine: null,
+    comments: {
+      nodes: [{
+        id: 'comment-1',
+        body: 'Please fix this',
+        createdAt: '2026-10-25T00:00:00Z',
+        author: { login: 'opencodereview-app' },
+      }],
+    },
+    ...overrides,
+  };
+}
+
+function threadPage(nodes, pageInfo = { hasNextPage: false, endCursor: null }) {
+  return { data: { repository: { pullRequest: { reviewThreads: { nodes, pageInfo } } } } };
+}
+
+function mockGraphqlHttp(t, responses) {
+  const requests = [];
+  t.mock.method(https, 'request', (_options, onResponse) => {
+    const request = new EventEmitter();
+    let requestBody = '';
+    request.write = chunk => { requestBody += chunk; };
+    request.end = () => {
+      requests.push(JSON.parse(requestBody));
+      const nextResponse = responses.shift();
+      queueMicrotask(() => {
+        if (!nextResponse) {
+          request.emit('error', new Error('offline mock response missing'));
+          return;
+        }
+        if (nextResponse.transportError) {
+          request.emit('error', new Error('offline transport sentinel'));
+          return;
+        }
+        const response = new EventEmitter();
+        response.statusCode = nextResponse.statusCode;
+        onResponse(response);
+        response.emit('data', nextResponse.rawBody ?? JSON.stringify(nextResponse.body));
+        response.emit('end');
+      });
+    };
+    request.destroy = error => request.emit('error', error);
+    return request;
+  });
+  return requests;
+}
+
+async function runShadowFetchWithResponse(response, overrides = {}) {
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+    fetchOpenThreads: fetchAllOpenThreads,
+    graphql: async (_token, query) => {
+      if (query.trimStart().startsWith('mutation')) mutationCalls++;
+      return response;
+    },
+    ...overrides,
+  });
+  return { exitCode, hostCalls, mutationCalls };
+}
 
 test('createConfig parses CLI args and token correctly', () => {
   const args = ['--repo', 'owner/repo', '--pr', '123', '--target-dir', 'target-repo', '--auto-resolve'];
@@ -336,8 +411,13 @@ test('shadow resolver discards first-page threads when a later page fails', asyn
   try {
     const responses = [
       { data: { repository: { pullRequest: { reviewThreads: {
-        nodes: [{ id: 'thread-1', path: 'changed.js', line: 1, isResolved: false,
-          comments: { nodes: [{ author: { login: 'opencodereview-app' }, body: 'Fix' }] } }],
+        nodes: [{
+          id: 'thread-1', isResolved: false, isOutdated: false, path: 'changed.js', line: 1, originalLine: null,
+          comments: { nodes: [{
+            id: 'comment-1', body: 'Fix', createdAt: '2026-10-25T00:00:00Z',
+            author: { login: 'opencodereview-app' },
+          }] },
+        }],
         pageInfo: { hasNextPage: true, endCursor: 'cursor-1' },
       } } } } },
       { errors: [{ message: 'private response detail' }] },
@@ -389,6 +469,10 @@ test('off resolver preserves legacy GraphQL fetch and mutation failure behavior'
   let fetchCalls = 0;
   let hostCalls = 0;
   let mutationCalls = 0;
+  let mutationArgumentCount = 0;
+  const capturedErrors = [];
+  const previousConsoleError = console.error;
+  console.error = (...parts) => capturedErrors.push(parts.join(' '));
   try {
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
@@ -398,33 +482,50 @@ test('off resolver preserves legacy GraphQL fetch and mutation failure behavior'
       fetchOpenThreads: async () => { fetchCalls++; return [{
         id: 'thread-1', path: 'changed.js', line: 1, comments: [],
       }]; },
-      graphql: async () => { mutationCalls++; return { errors: [{ message: 'legacy mutation error' }] }; },
+      graphql: async (...args) => {
+        mutationCalls++;
+        mutationArgumentCount = args.length;
+        return { errors: [{ message: 'legacy mutation error' }] };
+      },
     });
 
     assert.equal(exitCode, 0);
     assert.equal(fetchCalls, 1);
     assert.equal(hostCalls, 1);
     assert.equal(mutationCalls, 1);
+    assert.equal(mutationArgumentCount, 2);
+    assert.equal(capturedErrors.length, 1);
+    assert.match(capturedErrors[0], /^Failed to process thread thread-1: Reply mutation failed:/);
   } finally {
+    console.error = previousConsoleError;
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 test('off resolver preserves legacy GraphQL pagination error as an empty successful result', async () => {
   let fetchCalls = 0;
-  const exitCode = await run({
-    args: ['--repo', 'owner/repo', '--pr', '123'],
-    token: 'target-token',
-    env: { DECISION_ROUTING_MODE: 'off' },
-    fetchOpenThreads: options => fetchAllOpenThreads({
-      ...options,
-      graphql: async () => { fetchCalls++; return { errors: [{ message: 'legacy page failure' }] }; },
-    }),
-    threadHost: async () => assert.fail('legacy partial result is empty'),
-  });
+  const capturedErrors = [];
+  const previousConsoleError = console.error;
+  console.error = (...parts) => capturedErrors.push(parts.join(' '));
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123'],
+      token: 'target-token',
+      env: { DECISION_ROUTING_MODE: 'off' },
+      fetchOpenThreads: options => fetchAllOpenThreads({
+        ...options,
+        graphql: async () => { fetchCalls++; return { errors: [{ message: 'legacy page failure' }] }; },
+      }),
+      threadHost: async () => assert.fail('legacy partial result is empty'),
+    });
 
-  assert.equal(exitCode, 0);
-  assert.equal(fetchCalls, 1);
+    assert.equal(exitCode, 0);
+    assert.equal(fetchCalls, 1);
+    assert.equal(capturedErrors.length, 1);
+    assert.match(capturedErrors[0], /^GraphQL Query Errors:/);
+  } finally {
+    console.error = previousConsoleError;
+  }
 });
 
 test('shadow mutation authorization exception fails closed without a mutation', async () => {
@@ -515,3 +616,511 @@ for (const failure of ['reply-errors', 'reply-missing', 'reply-transport', 'reso
     }
   });
 }
+
+const malformedThreadPages = [
+  ['empty thread object', [{}]],
+  ['array thread node', [[]]],
+  ['missing thread ID', [completeThread({ id: undefined })]],
+  ['empty thread ID', [completeThread({ id: '' })]],
+  ['non-boolean isResolved', [completeThread({ isResolved: 'false' })]],
+  ['string true isResolved', [completeThread({ isResolved: 'true' })]],
+  ['non-boolean isOutdated', [completeThread({ isOutdated: null })]],
+  ['empty thread path', [completeThread({ path: '' })]],
+  ['non-positive thread line', [completeThread({ line: 0 })]],
+  ['missing thread line', [completeThread({ line: undefined })]],
+  ['fractional originalLine', [completeThread({ originalLine: 1.5 })]],
+  ['missing originalLine', [completeThread({ originalLine: undefined })]],
+  ['missing comments connection', [completeThread({ comments: undefined })]],
+  ['non-array comment nodes', [completeThread({ comments: { nodes: null } })]],
+  ['null comment node', [completeThread({ comments: { nodes: [null] } })]],
+  ['array comment node', [completeThread({ comments: { nodes: [[]] } })]],
+  ['non-string comment ID', [completeThread({ comments: { nodes: [{
+    id: 7, body: 'text', createdAt: '2026-10-25T00:00:00Z', author: { login: 'opencodereview-app' },
+  }] } })]],
+  ['empty comment ID', [completeThread({ comments: { nodes: [{
+    id: '', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: { login: 'opencodereview-app' },
+  }] } })]],
+  ['non-string comment body', [completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: null, createdAt: '2026-10-25T00:00:00Z', author: { login: 'opencodereview-app' },
+  }] } })]],
+  ['missing comment timestamp', [completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: 'text', createdAt: undefined, author: { login: 'opencodereview-app' },
+  }] } })]],
+  ['non-object author', [completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: 'bot',
+  }] } })]],
+  ['missing author login', [completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: {},
+  }] } })]],
+  ['non-string author login', [completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: { login: 3 },
+  }] } })]],
+];
+
+for (const [description, nodes] of malformedThreadPages) {
+  test(`shadow rejects ${description} before Host or mutation`, async () => {
+    const result = await runShadowFetchWithResponse(threadPage(nodes));
+    assert.deepEqual(result, { exitCode: 1, hostCalls: 0, mutationCalls: 0 });
+  });
+}
+
+test('shadow rejects a null thread node even though the GraphQL connection can contain nullable items', async () => {
+  const result = await runShadowFetchWithResponse(threadPage([null]));
+  assert.deepEqual(result, { exitCode: 1, hostCalls: 0, mutationCalls: 0 });
+});
+
+test('shadow accepts author null and treats the comment as non-OCR', async () => {
+  const result = await runShadowFetchWithResponse(threadPage([completeThread({ comments: { nodes: [{
+    id: 'comment-1', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: null,
+  }] } })]));
+  assert.deepEqual(result, { exitCode: 0, hostCalls: 0, mutationCalls: 0 });
+});
+
+test('shadow validates resolved and non-OCR nodes before filtering them', async () => {
+  for (const invalid of [
+    completeThread({ id: undefined, isResolved: true }),
+    completeThread({ comments: { nodes: [{
+      id: 'comment-1', body: 'text', createdAt: '2026-10-25T00:00:00Z', author: null,
+    }] }, isOutdated: 'false' }),
+  ]) {
+    const result = await runShadowFetchWithResponse(threadPage([invalid]));
+    assert.deepEqual(result, { exitCode: 1, hostCalls: 0, mutationCalls: 0 });
+  }
+});
+
+test('shadow accepts an empty errors array with a valid empty thread page', async () => {
+  const result = await runShadowFetchWithResponse({
+    errors: [],
+    ...threadPage([]),
+  });
+  assert.deepEqual(result, { exitCode: 0, hostCalls: 0, mutationCalls: 0 });
+});
+
+test('shadow completes a production fetch, reply and auto-resolve with exact mutation results', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-shadow-success-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let mutationCalls = 0;
+  let authorizationCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: fetchAllOpenThreads,
+      authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
+      graphql: async (_token, query) => {
+        if (query.trimStart().startsWith('query')) return threadPage([completeThread()]);
+        mutationCalls++;
+        if (query.includes('addPullRequestReviewThreadReply')) {
+          return { errors: [], data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
+        }
+        return { errors: [], data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } };
+      },
+      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(mutationCalls, 2);
+    assert.equal(authorizationCalls, 2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('shadow accepts empty comment body and nullable line fields', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-nullable-fields-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: fetchAllOpenThreads,
+      graphql: async () => threadPage([completeThread({
+        line: null,
+        originalLine: null,
+        comments: { nodes: [{
+          id: 'comment-1', body: '', createdAt: '2026-10-25T00:00:00Z', author: { login: 'opencodereview-app' },
+        }] },
+      })]),
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(hostCalls, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('shadow rejects repeated pagination cursor and never passes partial threads to Host', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-repeat-cursor-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let fetchCalls = 0;
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  const responses = [
+    threadPage([completeThread()], { hasNextPage: true, endCursor: 'cursor-1' }),
+    threadPage([], { hasNextPage: true, endCursor: 'cursor-1' }),
+  ];
+  const expectedFetchResponses = responses.length;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: fetchAllOpenThreads,
+      graphql: async (_token, query) => {
+        if (query.trimStart().startsWith('mutation')) mutationCalls++;
+        else {
+          fetchCalls++;
+          if (fetchCalls > expectedFetchResponses) throw new Error('cursor repetition safety stop');
+        }
+        return responses.shift();
+      },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    });
+
+    assert.equal(exitCode, 1);
+    assert.equal(fetchCalls, 2);
+    assert.equal(hostCalls, 0);
+    assert.equal(mutationCalls, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('shadow rejects an invalid node on a later page before passing earlier page threads to Host', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-invalid-later-page-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let fetchCalls = 0;
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  const responses = [
+    threadPage([completeThread()], { hasNextPage: true, endCursor: 'cursor-1' }),
+    threadPage([completeThread({ id: undefined })]),
+  ];
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: fetchAllOpenThreads,
+      graphql: async (_token, query) => {
+        if (query.trimStart().startsWith('mutation')) mutationCalls++;
+        else fetchCalls++;
+        return responses.shift();
+      },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    });
+
+    assert.equal(exitCode, 1);
+    assert.equal(fetchCalls, 2);
+    assert.equal(hostCalls, 0);
+    assert.equal(mutationCalls, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const [label, pageInfo] of [
+  ['null cursor while another page is required', { hasNextPage: true, endCursor: null }],
+  ['numeric cursor while another page is required', { hasNextPage: true, endCursor: 1 }],
+  ['empty cursor while another page is required', { hasNextPage: true, endCursor: '' }],
+  ['non-boolean hasNextPage', { hasNextPage: 'false', endCursor: null }],
+  ['missing terminal cursor field', { hasNextPage: false }],
+  ['numeric terminal cursor', { hasNextPage: false, endCursor: 1 }],
+]) {
+  test(`shadow rejects ${label}`, async () => {
+    const result = await runShadowFetchWithResponse(threadPage([completeThread()], pageInfo));
+    assert.deepEqual(result, { exitCode: 1, hostCalls: 0, mutationCalls: 0 });
+  });
+}
+
+test('shadow accepts a valid end after exactly 200 pages', async () => {
+  let fetchCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    fetchOpenThreads: fetchAllOpenThreads,
+    graphql: async () => {
+      fetchCalls++;
+      return threadPage([], fetchCalls === 200
+        ? { hasNextPage: false, endCursor: null }
+        : { hasNextPage: true, endCursor: `cursor-${fetchCalls}` });
+    },
+    threadHost: async () => assert.fail('empty pages must not start Host'),
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(fetchCalls, 200);
+});
+
+test('shadow fails at page 200 when another page is requested without fetching page 201', async () => {
+  let fetchCalls = 0;
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    fetchOpenThreads: fetchAllOpenThreads,
+    graphql: async (_token, query) => {
+      if (query.trimStart().startsWith('mutation')) mutationCalls++;
+      else {
+        fetchCalls++;
+        if (fetchCalls > 200) throw new Error('test safety stop after page 200');
+      }
+      return threadPage([], { hasNextPage: true, endCursor: `cursor-${fetchCalls}` });
+    },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(fetchCalls, 200);
+  assert.equal(hostCalls, 0);
+  assert.equal(mutationCalls, 0);
+});
+
+test('production GraphQL fetch accepts HTTP 200 with a complete success-shaped JSON body', async t => {
+  const requests = mockGraphqlHttp(t, [{
+    statusCode: 200,
+    body: threadPage([]),
+  }]);
+  let hostCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(hostCalls, 0);
+});
+
+test('production GraphQL fetch rejects HTTP 500 even with a success-shaped JSON body', async t => {
+  const requests = mockGraphqlHttp(t, [{
+    statusCode: 500,
+    body: threadPage([]),
+  }]);
+  let hostCalls = 0;
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+    threadHost: async () => { hostCalls++; return { status: 'success', decision: 'keep' }; },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+  assert.equal(hostCalls, 0);
+});
+
+test('production GraphQL fetch rejects a non-integer 2xx status in shadow', async t => {
+  mockGraphqlHttp(t, [{ statusCode: '200', body: threadPage([]) }]);
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+  });
+
+  assert.equal(exitCode, 1);
+});
+
+for (const phase of ['reply', 'resolve']) {
+  test(`production GraphQL ${phase} rejects HTTP 500 success-shaped JSON and stops later threads`, async t => {
+    const root = mkdtempSync(join(tmpdir(), `ocr-thread-http-${phase}-`));
+    writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+    const responses = [{ statusCode: 200, body: threadPage([
+      completeThread({ id: 'thread-1' }), completeThread({ id: 'thread-2' }),
+    ]) }];
+    if (phase === 'resolve') {
+      responses.push(
+        { statusCode: 200, body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } } },
+        { statusCode: 500, body: { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } } },
+        { statusCode: 200, body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-2' } } } } },
+        { statusCode: 200, body: { data: { resolveReviewThread: { thread: { id: 'thread-2', isResolved: true } } } } },
+      );
+    } else {
+      responses.push(
+        { statusCode: 500, body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } } },
+        { statusCode: 200, body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-2' } } } } },
+      );
+    }
+    const requests = mockGraphqlHttp(t, responses);
+    let hostCalls = 0;
+    try {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root,
+          ...(phase === 'resolve' ? ['--auto-resolve'] : [])],
+        token: 'offline-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+        authorizeBeforeMutation: async () => true,
+        threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, 1);
+      assert.equal(requests.length, phase === 'resolve' ? 3 : 2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('off preserves legacy handling of HTTP 500 success-shaped fetch and reply responses', async t => {
+  const requests = mockGraphqlHttp(t, [
+    { statusCode: 500, body: threadPage([completeThread({ line: null, originalLine: null })]) },
+    { statusCode: 500, body: { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } } },
+  ]);
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-off-http-legacy-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'off' },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(requests.length, 2);
+    assert.equal(hostCalls, 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const [label, reply] of [
+  ['numeric reply ID', { id: 1 }],
+  ['object reply ID', { id: { value: 'reply-1' } }],
+  ['empty reply ID', { id: '' }],
+  ['missing reply ID', {}],
+]) {
+  test(`shadow rejects ${label} and stops before the next thread`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ocr-thread-reply-shape-'));
+    writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+    let hostCalls = 0;
+    let mutationCalls = 0;
+    try {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+        token: 'offline-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+        fetchOpenThreads: async () => [1, 2].map(id => ({
+          id: `thread-${id}`, path: 'changed.js', line: 1, comments: [],
+        })),
+        authorizeBeforeMutation: async () => true,
+        graphql: async () => {
+          mutationCalls++;
+          return { data: { addPullRequestReviewThreadReply: { comment: reply } } };
+        },
+        threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, 1);
+      assert.equal(mutationCalls, 1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('shadow accepts an empty GraphQL errors array when reply success data is valid', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-empty-errors-'));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  let hostCalls = 0;
+  let mutationCalls = 0;
+  try {
+    const exitCode = await run({
+      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+      token: 'offline-token',
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      fetchOpenThreads: async () => [1, 2].map(id => ({ id: `thread-${id}`, path: 'changed.js', comments: [] })),
+      authorizeBeforeMutation: async () => true,
+      graphql: async () => {
+        mutationCalls++;
+        return { errors: [], data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
+      },
+      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+    });
+
+    assert.equal(exitCode, 0);
+    assert.equal(hostCalls, 2);
+    assert.equal(mutationCalls, 2);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+for (const [label, resolveThread] of [
+  ['string isResolved', { id: 'thread-1', isResolved: 'true' }],
+  ['numeric isResolved', { id: 'thread-1', isResolved: 1 }],
+  ['wrong thread ID', { id: 'thread-other', isResolved: true }],
+  ['non-string thread ID', { id: 1, isResolved: true }],
+  ['missing thread ID', { isResolved: true }],
+]) {
+  test(`shadow rejects resolve response with ${label}`, async () => {
+    const root = mkdtempSync(join(tmpdir(), 'ocr-thread-resolve-shape-'));
+    writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+    let hostCalls = 0;
+    let authorizationCalls = 0;
+    let mutationCalls = 0;
+    try {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
+        token: 'offline-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+        fetchOpenThreads: async () => [
+          { id: 'thread-1', path: 'changed.js', line: 1, comments: [] },
+          { id: 'thread-2', path: 'changed.js', line: 1, comments: [] },
+        ],
+        authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
+        graphql: async (_token, query) => {
+          mutationCalls++;
+          return query.includes('resolveReviewThread')
+            ? { data: { resolveReviewThread: { thread: resolveThread } } }
+            : { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
+        },
+        threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve' }; },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, 1);
+      assert.equal(authorizationCalls, 2);
+      assert.equal(mutationCalls, 2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('shadow reports HTTP and JSON fetch failures safely', async t => {
+  const requests = mockGraphqlHttp(t, [
+    { statusCode: 200, rawBody: 'private-response-sentinel' },
+    { transportError: true },
+  ]);
+  const messages = [];
+  const previousError = console.error;
+  console.error = (...parts) => messages.push(parts.join(' '));
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123'],
+        token: 'offline-token',
+        env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      });
+      assert.equal(exitCode, 1);
+    }
+    assert.equal(requests.length, 2);
+    assert.equal(messages.join(' ').includes('private-response-sentinel'), false);
+  } finally {
+    console.error = previousError;
+  }
+});
