@@ -1,0 +1,460 @@
+--- g1_d1_owner_decision_package_r1_6/00_OWNER_EXECUTIVE_SUMMARY_R1_6.md	2026-10-26 10:52:23.932313927 +0900
++++ g1_d1_owner_decision_package_r1_7/00_OWNER_EXECUTIVE_SUMMARY_R1_7.md	2026-10-26 11:22:43.190282891 +0900
+@@ -1,9 +1,9 @@
+-# 00. Human Owner 向け全体概要（Executive Summary R1.6）
++# 00. Human Owner 向け全体概要（Executive Summary R1.7）
+ 
+ ## 1. 役割・権限境界と本書の目的
+ 
+-本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.6 限定是正版** です。
+-R1.5 独立限定再レビューで指摘された FND-ODP-007 の残存 3 点（**FND-ODP-007-R15-001**: FENCED_PROCESS_ADMISSIONと取消・STOPの競合順序契約、**FND-ODP-007-R15-002**: LP-S後・実起動前のExecution Attempt状態整合性、**FND-ODP-007-R15-003**: STOP中の新規Slot予約禁止と16条件論理積）に対して限定是正を実施し、Owner承認からスロット予約、開始権消費、保護されたプロセス入場調停（LP-A）までの全境界において、競合や状態不明時に未承認の実行開始を安全側に完全遮断する規範的文書契約を完成させました。
++本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.7 最小限是正版** です。
++R1.6 独立限定再レビューで `PARTIAL` と判定された **FND-ODP-007-R15-003**（Execution Slot または Execution Attempt で発生した STOP が、親の Owner Decision Record、関連 Stage・VM・実行環境の新規予約・実行開始資格へ及ぼす影響の完全規範化）に対して最小限是正を実施し、STOP の 6 階層識別、論理的親子結合、双方向波及規則、および `NO_ACTIVE_STOP` の完全な充足条件を確立しました。
+ 
+ ### 権限と職責の分離宣言
+ - **現在の実行権限**: `READ_ONLY_SOURCE / STATIC_ANALYSIS / DOCUMENT_CORRECTION_ONLY / NO_EXECUTION_GRANT / NO_OWNER_AUTHORITY / NO_GATE_AUTHORITY`
+@@ -16,13 +16,11 @@
+ 
+ ---
+ 
+-## 2. R1.6 限定是正概要（FND-ODP-007 残存3点是正完了）
++## 2. R1.7 最小限是正概要（FND-ODP-007-R15-003 是正完了）
+ 
+-| Finding サブID | 重要度 | 是正対象と内容 | R1.6 是正結果 |
++| Finding サブID | 重要度 | 是正対象と内容 | R1.7 是正結果 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-007-R15-001** | Major | `FENCED_PROCESS_ADMISSION` と取消・STOP の成立順序契約、未仲介実行可能区間の排除 | 保護されたプロセス入場境界（`PROTECTED_PROCESS_ADMISSION_BOUNDARY`）および第3線形化点 **`LP-A: PROTECTED_ADMISSION_LINEARIZATION_POINT`** を規範的に確立。状態確認と権限付与の間の未仲介区間を禁止し、順序不明時はフェイルクローズ（`UNKNOWN / BLOCKED`）となる契約を定義。プロセス起動と保護操作許可の区別、および `PROTECTED_ADMISSION_MEDIATION_NOT_ESTABLISHED => NO_EXECUTION_GRANT` を確立。 |
+-| **FND-ODP-007-R15-002** | Major | LP-S 成功後、実プロセス起動前における Execution Attempt の状態整合性 | 開始権消費（LP-S）と保護された実行開始（LP-A）を分離。LP-S 通過直後の Attempt 状態を **`START_AUTHORIZED_PENDING_ADMISSION`** と定義し、LP-A 確定合格時のみ **`STARTED`** へ遷移する契約を確立。LP-A 拒絶時は **`LAUNCH_ABORTED`**、結果不明時は **`UNKNOWN`** へ遷移し、消費済みスロットの自動返却および自動再試行を永久禁止。 |
+-| **FND-ODP-007-R15-003** | Major | STOP 中における新規スロット予約の禁止、および全境界での STOP 契約整合 | スロット予約適格性判定に独立条件 **`NO_ACTIVE_STOP`** を追加し、予約適格性を **全16条件論理積** へ更新。STOP 有効時または STOP 状態不明（`STOP_STATE_UNKNOWN`）時は即座に `RESERVATION_DENIED / NO_EXECUTION_GRANT` となる fail-closed を確立。LP-R（予約）、LP-S（開始権消費）、LP-A（入場調停）の全 3 境界で STOP 判定を整合。既存 DEC-07 の Phase A/B/C 非循環 Gate を維持。 |
++| **FND-ODP-007-R15-003** | Major | Execution Slot / Attempt で発生した STOP の親 Decision Record および Stage/VM/環境への波及・判定契約 | STOP の適用範囲を **6 階層（Attempt, Slot, Record, Stage, VM, Environment）** で識別するスキーマを定義。論理的親子結合モデルを明定し、**Attempt/Slot に有効な STOP が存在する場合、結合親 Decision Record による新規スロット予約（LP-R）を即座に遮断（残回数があっても予約拒絶）** する契約を確立。上位（Record/Stage/VM/Environment）の STOP は配下の Slot/Attempt の開始（LP-S）および保護入場（LP-A）を全面遮断。STOP 波及効果と Record Status（EFFECTIVE維持）の変質を厳格に分離し、狭い解除での広域解除を禁止。`NO_ACTIVE_STOP` を再定義し、**全 16 条件論理積** を維持。 |
+ 
+ ---
+ 
+@@ -31,11 +29,11 @@
+ - **対象リポジトリ**: `https://github.com/yohi/ocr-app`
+ - **ブランチ**: `fix/shadow-graphql-post-scope-guards`
+ - **Fixed HEAD**: `6b08251170265c444ce8957377e6bfca23b21fd7`（検証済み・クリーン）
+-- **直接の是正対象 R1.5 アーカイブ**:
+-  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_5_2026-10-26.tar.gz`
+-  - 期待/実測 SHA-256: `476d453ddc7d40b34bc7381b4a71e46ac9de5f4a51800ffa1af811d6ed370b55` (`MATCH`)
+-  - 期待/実測サイズ: `93,186 bytes` (`MATCH`)
+-  - 内部 `SHA256SUMS.txt` 23 項目全件一致確認 PASS。
++- **直接の是正対象 R1.6 アーカイブ**:
++  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_6_2026-10-26.tar.gz`
++  - 期待/実測 SHA-256: `f99e1a635a1498dcc2e25417b38a6ac7f8cca7fb96b5b54f00cb97286507ab3d` (`MATCH`)
++  - 期待/実測サイズ: `108,590 bytes` (`MATCH`)
++  - 内部 `SHA256SUMS.txt` 25 項目全件一致確認 PASS。
+ - **上位再試験計画 R1.3**:
+   - `OCR_APP_G1_D1_UNRESOLVED_19_RETEST_PLAN_R1_3_2026-10-26.tar.gz` (SHA-256: `e293...`, 33,389 bytes, PASS)
+ - **全体回帰テスト対象**: `.github/workflows/scripts/*.test.mjs` 配下の全 39 ファイルを固定HEADより照合済み。
+@@ -94,5 +92,5 @@
+ 
+ 1. **Gate状態の不変性**: 本パッケージの受領および検討中であっても、G1-D1 Formal Gate は **未承認（`BLOCKED`）** を維持します。
+ 2. **実行権限の非付与**: 本資料は Human Owner の判断材料であり、本資料の提示をもって AI エージェントに実行権限が付与されることは一切ありません。
+-3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_6.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
+-4. **Runtime 未実証の明記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY`）であり、Runtime での実証（`RUNTIME_RESERVATION_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_START_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_ADMISSION_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_PROCESS_ISOLATION_NOT_VERIFIED`）を主張するものではありません。
++3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_7.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
++4. **Runtime 未実証の明記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY`）であり、Runtime での実証（`RUNTIME_RESERVATION_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_START_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_ADMISSION_LINEARIZABILITY_NOT_VERIFIED`, `RUNTIME_PROCESS_ISOLATION_NOT_VERIFIED`, `RUNTIME_STOP_PROPAGATION_NOT_VERIFIED`）を主張するものではありません。
+--- g1_d1_owner_decision_package_r1_6/10_OWNER_DECISION_RECORD_TEMPLATE_R1_6.md	2026-10-26 10:51:59.449633351 +0900
++++ g1_d1_owner_decision_package_r1_7/10_OWNER_DECISION_RECORD_TEMPLATE_R1_7.md	2026-10-26 11:22:18.507369211 +0900
+@@ -1,4 +1,4 @@
+-# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.6）
++# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.7）
+ 
+ > **【重要・記入上の注意】**
+ > 本ドキュメントは、Human Owner ご自身が直接判断結果を記入・署名するための公式記録テンプレートです。
+@@ -12,7 +12,7 @@
+ 本判断記録テンプレートは、自己参照的なハッシュ循環を排除し、不変のパッケージ本体と独立した「外部判断記録（External Owner Decision Record）」として運用されます。
+ 
+ ```text
+-[Owner Decision Package R1.6 (不変資料)]
++[Owner Decision Package R1.7 (不変資料)]
+     │
+     │ 確定SHA-256 (独立算出)
+     ▼
+@@ -58,8 +58,8 @@
+ - `supersedes_record_id`: 改訂時に無効化・置換する過去の判断記録ID（初版時は `NONE`）。
+ 
+ ### B. Package Binding（パッケージ結合情報）
+-- `package_name`: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_6_2026-10-26.tar.gz`
+-- `package_revision`: `R1.6`
++- `package_name`: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_7_2026-10-26.tar.gz`
++- `package_revision`: `R1.7`
+ - `package_sha256`: 独立レビューにより確定された実測 SHA-256（自己参照埋め込みを禁止）。
+ - `package_byte_size`: パッケージの実測バイト数。
+ - `fixed_repository`: `https://github.com/yohi/ocr-app`
+@@ -118,9 +118,9 @@
+ ```text
+ ODR-G1-D1-<YYYYMMDD>-<PACKAGE_REV>-<DEC_ID>-<STAGE_OR_NA>-<SEQUENCE>
+ ```
+-- **例1**: `ODR-G1-D1-20261026-R1.6-DEC03-STAGE0-01`
+-- **例2**: `ODR-G1-D1-20261026-R1.6-DEC01A-NA-01`
+-- **例3**: `ODR-G1-D1-20261026-R1.6-DEC07-STAGE3-01`
++- **例1**: `ODR-G1-D1-20261026-R1.7-DEC03-STAGE0-01`
++- **例2**: `ODR-G1-D1-20261026-R1.7-DEC01A-NA-01`
++- **例3**: `ODR-G1-D1-20261026-R1.7-DEC07-STAGE3-01`
+ 
+ ### 3.2 ID 発行および重複防止の 7 原則
+ 1. **個別 ID の一意性**: 発行されるすべての判断記録は、システム全体で完全に一意な ID を持たなければならない。
+@@ -301,10 +301,10 @@
+ 
+ ---
+ 
+-## 5. 発効条件と実行資格判定契約（FND-ODP-007-R15-003是正: STOP禁止の独立条件化・16条件論理積）
++## 5. 発効条件と実行資格判定契約（FND-ODP-007-R15-003是正: 16条件論理積およびNO_ACTIVE_STOP規範的再定義）
+ 
+ ### 5.1 規範的適格性判定の2段階分離（Two-Stage Eligibility Predicates）
+-従来の単一判定式による「予約前と予約後での実行残数判定の矛盾」を排除し、かつSTOP発生中の新規予約・開始権消費を安全側に遮断するため、適格性判定を **スロット予約適格性（`RESERVATION_ELIGIBLE`）** と **実行開始適格性（`START_ELIGIBLE`）** の 2 つの独立した論理述語に厳密に分離し、独立条件 `NO_ACTIVE_STOP` を導入します。
++従来の単一判定式による「予約前と予約後での実行残数判定の矛盾」を排除し、かつSTOP発生中の新規予約・開始権消費・保護された入場を安全側に完全遮断するため、適格性判定を **スロット予約適格性（`RESERVATION_ELIGIBLE`）** と **実行開始適格性（`START_ELIGIBLE`）** の 2 つの独立した論理述語に厳密に分離し、独立条件 `NO_ACTIVE_STOP` を包含する全16条件の論理積を維持します。
+ 
+ ```text
+ 1. スロット予約適格性判定式 (Evaluated at LP-R: RESERVATION_LINEARIZATION_POINT)
+@@ -394,11 +394,23 @@
+ #### 15. `NOT_EXPIRED`
+ - 有効期限（`expires_at`）が切れていないこと。
+ 
+-#### 16. `NO_ACTIVE_STOP` (非STOP状態検証 / FND-ODP-007-R15-003新規独立条件)
+-- 対象の Owner Decision Record、対象 Stage、対象 VM、および実行環境全体に有効な STOP 状態が存在しないこと。
++#### 16. `NO_ACTIVE_STOP` (非STOP状態検証 / FND-ODP-007-R15-003限定是正: 6階層親子結合・波及規則の完全化)
++- 対象 Decision Record、関連する既存 Slot / Attempt、承認対象 Stage、対象 VM、および実行環境全体のいずれにも有効な STOP 禁止状態が存在しないこと。
++- **`NO_ACTIVE_STOP = TRUE` の完全充足条件**:
++  1. 対象 `decision_record_id` に直接適用される有効な STOP が存在しないこと。
++  2. 当該 Decision Record に結合する関連 `source_slot_id` に未解除 STOP が存在しないこと。
++  3. 当該 Slot / Decision Record に結合する関連 `source_attempt_id` に未解除 STOP が存在しないこと。
++  4. 承認対象 `stage_id` に適用される STOP が存在しないこと。
++  5. 実行対象 `vm_identifier` に適用される STOP が存在しないこと。
++  6. 実行環境全体 `environment_identifier` に適用される広域 STOP が存在しないこと。
++  7. STOP 記録の親子結合関係（Attempt -> Slot -> Decision Record -> Stage -> VM -> Environment）が検証可能であること。
++  8. STOP 記録の適用範囲識別子が客観的に検証可能であること。
++  9. 過去に有効な STOP が存在した場合は、対応する真正な解除証跡（ハッシュ突合確認済み）が存在すること。
++  10. STOP 再開に必要な Human Owner の個別判断（DEC-07 Phase B）および Phase A/B/C の全条件が充足済みであること。
+ - **Fail-closed 規則**:
+-  - `NO_ACTIVE_STOP = FALSE` の場合、または STOP の有無・適用範囲・解除状態が特定不能（`STOP_STATE_UNKNOWN`）な場合、**`RESERVATION_DENIED / NO_EXECUTION_GRANT`** として即座にスロット予約を遮断する。
+-  - 「STOP が観測されなかった」ことと「正規の STOP 状態確認が完了した」ことを同一視してはならない。
++  - `NO_ACTIVE_STOP = FALSE`（有効な STOP 存在確定）の場合: **`ACTIVE_STOP / RESERVATION_DENIED / NO_EXECUTION_GRANT`**。
++  - STOP の有無、適用範囲、親子結合、解除状態、判断記録、証跡整合性が特定不能または相互矛盾する場合: **`STOP_STATE_UNKNOWN / NO_EXECUTION_GRANT`**。
++  - 「STOP が観測されなかった」ことと「正規の STOP 状態確認が完了した」ことを絶対に同一視してはならない。
+ 
+ ---
+ 
+@@ -412,7 +424,7 @@
+        │
+        ▼ [LP-R: RESERVATION_LINEARIZATION_POINT] (第1線形化点: スロット確定境界)
+        │  - RESERVATION_ELIGIBLE (全16条件、NO_ACTIVE_STOP含む) のアトミック検証
+-       │  - 承認取消・失効・STOP・変更有無のアトミック再確認
++       │  - 関連 Attempt / Slot / Record / Stage / VM / 環境の STOP 有無アトミック確認
+        │  - 未消費スロット残量の確定減算 (remaining_slots -= 1)
+        │  - スロット状態遷移: NOT_ALLOCATED -> RESERVED
+        │
+@@ -420,8 +432,8 @@
+ [RESERVED_SLOT_CONFIRMED] (スロット予約確定状態)
+        │
+        ▼ [LP-S: EXECUTION_START_LINEARIZATION_POINT] (第2線形化点: 開始権消費確定境界)
+-       │  - START_ELIGIBLE(slot_id) のアトミック検証
+-       │  - 予約確定後から開始点までの取消・STOP・失効の有無を確定排除
++       │  - START_ELIGIBLE(slot_id) のアトミック検証 (NO_PRIOR_STOP含む)
++       │  - 当該 Slot・関連 Attempt・親 Record・Stage・VM・環境の STOP 有無を確定排除
+        │  - スロット状態遷移: RESERVED -> START_CONSUMED (開始権不可逆消費)
+        │  - 試行状態遷移: NOT_STARTED -> START_AUTHORIZED_PENDING_ADMISSION
+        │
+@@ -430,8 +442,8 @@
+        │
+        ▼ [LP-A: PROTECTED_ADMISSION_LINEARIZATION_POINT] (第3線形化点: 入場確定境界)
+        │  - 予約済みスロット（START_CONSUMED）の正当性確認
++       │  - 全 6 階層における STOP 不成立の確定
+        │  - Owner 承認の最新状態および取消（Revocation）不成立の確定
+-       │  - STOP 不成立の確定
+        │  - 対象 VM・Stage・Operation・Attempt の一意性検証
+        │  - 起動対象プロセスへの保護対象操作実行許可の不可逆適用
+        │  - 入場結果の確定（ADMISSION PASS）
+@@ -475,15 +487,15 @@
+ 
+ ---
+ 
+-## 7. 3層状態モデルの完全分離（FND-ODP-007-R15-002是正: Attempt状態整合性）
++## 7. 3層状態モデルとSTOP波及契約（FND-ODP-007-R15-003是正: 6階層識別・親子結合・波及規則）
+ 
+-「判断記録の有効性」「実行枠の予約消費」「実際のプロセス試行」を単一の `record_status` で混同せず、以下の独立した 3 つの状態機械として厳密に分離します。
++「判断記録の有効性」「実行枠の予約消費」「実際のプロセス試行」を単一の `record_status` で混同せず、かつ Attempt / Slot で発生した STOP が親の予約・開始資格を安全側に遮断する論理契約を確立します。
+ 
+ ### 7.1 3層状態機械の定義
+ 
+ | 状態領域 | 状態区分一覧 | 責務と意味 |
+ | :--- | :--- | :--- |
+-| **1. Decision Record Status** | `DRAFT`, `ISSUED`, `EFFECTIVE`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` | Human Owner による承認自体の規範的効力・時間的有効期間・明示的取消状態を保持。**実行回数の消費やスロット枯渇によって自動的に EXPIRED や REVOKED に変質しない。** |
++| **1. Decision Record Status** | `DRAFT`, `ISSUED`, `EFFECTIVE`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` | Human Owner による承認自体の規範的効力・時間的有効期間・明示的取消状態を保持。**実行回数の消費やスロット枯渇、下位の STOP 発生によって自動的に EXPIRED や REVOKED に変質しない。** |
+ | **2. Execution Slot Status** | `NOT_ALLOCATED`, `RESERVED`, `START_CONSUMED`, `CANCELLED`, `UNKNOWN` | 承認記録から引き当てられた個別の「実行開始枠」のライフサイクルを管理。1スロットは最大1回の開始権のみを持つ。LP-S 通過時に不可逆的に `START_CONSUMED` となる。 |
+ | **3. Execution Attempt Status**| `NOT_STARTED`, `START_AUTHORIZED_PENDING_ADMISSION`, `STARTED`, `COMPLETED`, `FAILED`, `STOPPED`, `LAUNCH_ABORTED`, `UNKNOWN` | 予約枠に基づいて実際に起動される保護対象プロセス／テスト実行の試行推移を管理。 |
+ 
+@@ -503,6 +515,91 @@
+ 5. **同一スロットの再利用禁止**:
+    - 一度消費されたスロット（`START_CONSUMED`）を別の Attempt や新規開始に再割当することは禁止される。
+ 
++### 7.3 STOP 適用範囲の 6 階層識別スキーマ
++STOP の発生箇所、適用範囲、波及境界を一意に特定するため、すべての STOP 記録は以下の 6 階層で識別され、必須フィールドを保持しなければなりません：
++1. `EXECUTION_ATTEMPT` (特定試行でのプロセス停止・異常検知)
++2. `EXECUTION_SLOT` (特定実行枠での異常・境界違反)
++3. `OWNER_DECISION_RECORD` (特定承認判断に対する執行停止)
++4. `STAGE` (特定 Stage 全体に対する進入・実行停止)
++5. `VM` (特定実行 VM 全体に対する安全停止)
++6. `EXECUTION_ENVIRONMENT` (実行環境全体に対する全面停止)
++
++#### STOP 記録の必須フィールド
++- `stop_id`: STOP 事象の一意識別子
++- `stop_scope_type`: 上記 6 階層のいずれか 1 つ
++- `stop_scope_identifier`: 適用対象の具体的識別子
++- `source_attempt_id`: 発生元 Attempt ID（非該当時は `NOT_APPLICABLE`）
++- `source_slot_id`: 発生元 Slot ID（非該当時は `NOT_APPLICABLE`）
++- `decision_record_id`: 結合親 Decision Record ID（非該当時は `NOT_APPLICABLE`）
++- `stage_id`: 結合親 Stage ID（非該当時は `NOT_APPLICABLE`）
++- `vm_identifier`: 結合親 VM 識別子（非該当時は `NOT_APPLICABLE`）
++- `environment_identifier`: 結合親環境識別子（非該当時は `NOT_APPLICABLE`）
++- `stop_reason`: 停止理由の客観的説明
++- `stop_effective_state`: `ACTIVE` または `CLEARED`
++- `stop_evidence_id`: 停止を記録した監査ログ証跡 ID
++- `stop_evidence_sha256`: 停止証跡の SHA-256 チェックサム
++- `stop_clearance_record_id`: 解除判断記録 ID（未解除時は `NOT_APPLICABLE`）
++- `stop_clearance_status`: `UNCLEARED`, `PARTIALLY_CLEARED`, `FULLY_CLEARED`
++
++### 7.4 論理的親子結合モデル
++各実行要素は以下の論理的結合関係を持ち、結合先が解決できない場合、または不一致が存在する場合は即座にフェイルクローズ（`STOP_STATE_UNKNOWN / NO_EXECUTION_GRANT`）とします：
++```text
++Execution Environment (environment_identifier)
++        │
++        ▼
++       VM (vm_identifier)
++        │
++        ▼
++      Stage (stage_id)
++        │
++        ▼
++Owner Decision Record (decision_record_id)
++        │
++        ▼
++Execution Slot (source_slot_id)
++        │
++        ▼
++Execution Attempt (source_attempt_id)
++```
++
++### 7.5 STOP 波及規則（Propagation Rules）
++
++#### 1. 子から親への波及（新規予約・開始の遮断）
++- **`ACTIVE_STOP_ON_ATTEMPT`**:
++  - 当該 Attempt の実行継続禁止。
++  - 当該 Slot の再利用禁止。
++  - **結合親 Decision Record による新規スロット予約（LP-R）を即座に禁止（残回数があっても新規予約拒絶: `RESERVATION_DENIED`）**。
++  - 同じ承認対象 Stage・VM における未解除 STOP が解消されるまで、関連する新規開始を安全側に遮断。
++  - ※**重要**: Attempt が `STOPPED` 状態になったことは単なる実行状態の停止であり、**安全上の STOP 禁止状態が解除されたことを意味しない**。
++- **`ACTIVE_STOP_ON_SLOT`**:
++  - 当該 Slot による LP-S（開始権消費）および LP-A（入場調停）を禁止。
++  - 当該 Slot の自動返却禁止。
++  - **結合親 Decision Record による新規スロット予約（LP-R）を即座に禁止**。
++  - STOP 解除前の新規 Attempt 作成を禁止。
++
++#### 2. 親から子への波及（執行禁止の全面伝播）
++- **`ACTIVE_STOP_ON_DECISION_RECORD`**:
++  - 当該 Decision Record を用いた新規スロット予約（LP-R）禁止。
++  - 配下の既存 Slot の LP-S 禁止。
++  - 配下の既存 Attempt の LP-A 禁止。
++  - 実行中 Attempt は停止契約へ移行。
++- **`ACTIVE_STOP_ON_STAGE`**:
++  - 当該 Stage に属する全関連 Decision Record の新規予約（LP-R）禁止。
++  - 配下の全 Slot の開始（LP-S）および保護入場（LP-A）禁止。
++- **`ACTIVE_STOP_ON_VM`**:
++  - 当該 VM を対象とする全関連予約・開始・保護入場を禁止。別 Decision Record の利用による回避を禁止。
++- **`ACTIVE_STOP_ON_ENVIRONMENT`**:
++  - 当該実行環境の全 VM・Stage・Decision Record・Slot・Attempt に適用。全面的な実行禁止。
++
++#### 3. STOP 波及と状態書換えの厳格な区別
++- **設計原則**: STOP の禁止効果を親子へ波及させることと、親子記録自体の状態（`record_status` や `slot_status`）を STOP へ書き換えることは厳格に区別される。
++- Attempt STOP が発生した場合、親 Decision Record の `record_status` は `EFFECTIVE` のまま維持され、自動的に `REVOKED` や `EXPIRED` に変質しない。
++- 親 Decision Record に対する禁止は、`NO_ACTIVE_STOP` 判定（全16条件の論理積）における評価結果として客観的にスロット予約（LP-R）を遮断する。
++
++#### 4. STOP 解除（DEC-07）との非循環結合
++- Attempt や Slot 単位の個別解除判断によって、Stage、VM、環境全体に適用される広域 STOP が自動解除されることはない（狭い解除で広域解除の禁止）。
++- STOP 解除には DEC-07 の Phase A（原因特定・修復証跡）、Phase B（Human Owner 個別解除判断）、Phase C（解除後適格性確認）の全充足が必須であり、解除判断のみで自動再実行や新規枠発行が行われることはない。
++
+ ---
+ 
+ ## 8. 静的反証ケース（Static Falsification Test Cases / T01〜T25）
+@@ -511,31 +608,31 @@
+ 
+ | ケースID | 反証シナリオ | 規範的期待判定 | 競合順序 / 必須要件 | 未実証のRuntime要件 |
+ | :--- | :--- | :--- | :--- | :--- |
+-| **T01** | STOP中に新規Slot予約要求 | `RESERVATION_DENIED` | STOP有効 -> LP-R 評価失敗 | Runtime STOP検知機構 |
+-| **T02** | STOP状態不明（未確認）で新規予約要求 | `NO_EXECUTION_GRANT` | `STOP_STATE_UNKNOWN` -> Fail-closed | 状態検証Broker |
+-| **T03** | STOP中にLP-S（開始権消費）要求 | `START_DENIED` | STOP有効 -> `NO_PRIOR_STOP` 偽 | 認可ゲートウェイ |
+-| **T04** | STOP中にLP-A（入場調停）要求 | `ADMISSION_DENIED` | STOP有効 -> LP-A 拒絶 | 入場調停 Authority |
+-| **T05** | LP-A検査後、保護起動前にSTOP確定 | 保護起動禁止 (`LAUNCH_ABORTED`) | STOP確定 -> 保護操作起動遮断 | プロセス隔離サンドボックス |
+-| **T06** | LP-AとSTOPが競合し順序特定不能 | `UNKNOWN / BLOCKED` | 順序不明 -> Fail-closed停止 | アトミック調停器 |
+-| **T07** | LP-A検査後、保護起動前に取消確定 | 保護起動禁止 (`LAUNCH_ABORTED`) | 取消確定 -> 保護操作起動遮断 | 認可取消即時伝播 |
+-| **T08** | LP-Aと取消が競合し順序特定不能 | `UNKNOWN / BLOCKED` | 順序不明 -> Fail-closed停止 | アトミック調停器 |
+-| **T09** | LP-S PASS後、LP-A未実施の試行状態 | Attemptは `STARTED` ではない | `START_AUTHORIZED_PENDING_ADMISSION` | 状態遷移監視機構 |
+-| **T10** | LP-S PASS後にLP-A拒絶 | `LAUNCH_ABORTED` | LP-A 拒絶 -> Attemptアボート | 安全遮断ハンドラ |
+-| **T11** | LP-S PASS後にLP-A結果UNKNOWN | Attempt `UNKNOWN` | LP-A 判定不能 -> 安全停止維持 | 監査ログ照合器 |
+-| **T12** | LP-A PASS（正常承認入場） | Attempt `STARTED` | LP-A 成功 -> 初めて実行開始 | 権限付与ランチャー |
+-| **T13** | LP-A拒否後に消費スロットの返却要求 | `DENY (NO_AUTOMATIC_REFUND)` | スロットは `START_CONSUMED` 維持 | 枠管理不変性保証 |
+-| **T14** | LP-A拒否後に同一Slotの再利用要求 | `DENY (SLOT_ALREADY_CONSUMED)` | 同一スロット再利用禁止 | 一意ID整合性検証 |
+-| **T15** | 同じSlotでLP-A二重実行要求 | 最大1回のみ成功（2件目DENIED） | LP-A アトミック排他 | 同時実行調停器 |
+-| **T16** | Record EFFECTIVE・残回数あり・STOP有効 | `RESERVATION_DENIED` | STOP有効 -> 新規予約遮断 | STOP全域伝播機構 |
+-| **T17** | Record EFFECTIVE・残回数0・STOPなし | `DENY (NO_REMAINING_SLOTS)` | 残量0 -> 新規予約のみ拒絶 | カウンタ線形化 |
+-| **T18** | Slot RESERVED・起動前STOP発生 | LP-S `START_DENIED` | STOP発生 -> 開始権消費拒絶 | 予約状態監視 |
+-| **T19** | Slot START_CONSUMED・起動前STOP発生 | LP-A `ADMISSION_DENIED` | STOP発生 -> 入場調停拒絶 | 入場前フェンス |
+-| **T20** | 実プロセス作成済み・Admission未確定 | 保護対象操作は禁止 | 隔離維持 (`PROCESS_CREATED_BLOCKED`) | OS cgroup/Namespace隔離 |
+-| **T21** | 未仲介OS起動経路の存在検出 | `RUNTIME_GATE_BLOCKED` | 未仲介経路検出 -> 即座に全停止 | 実行経路完全性検証 |
+-| **T22** | DEC-07条件未充足でSTOP解除要求 | `DENY (GATE_CONDITIONS_NOT_MET)` | Phase A/B/C 未充足 -> 解除不可 | DEC-07 Gate 監査器 |
+-| **T23** | Owner署名真正だが判断がHOLD | `DENY (NO_EXECUTION_GRANT)` | `owner_decision == HOLD` -> 遮断 | 署名・判断検証器 |
+-| **T24** | 判断区分不一致（disposition != decision） | `DENY (DECISION_INCONSISTENT)` | 値の矛盾 -> 即座に遮断 | スキーマ整合性検証 |
+-| **T25** | LP-A実装・調停機構が未実証 | `NO_EXECUTION_GRANT` | Runtime 未実証 -> 実行禁止維持 | 受入テスト検証環境 |
++| **T01** | Attemptに有効STOP存在、親Recordの残回数あり | `RESERVATION_DENIED` | Attempt STOP -> 親Record新規予約遮断 | STOP親子波及追跡機構 |
++| **T02** | Slotに有効STOP存在、親Recordの残回数あり | `RESERVATION_DENIED` | Slot STOP -> 親Record新規予約遮断 | スロット状態監視機構 |
++| **T03** | Attempt STOPが親Recordへ関連付け不能 | `UNKNOWN / BLOCKED` | 親子結合不明 -> Fail-closed停止 | 結合整合性検証器 |
++| **T04** | Slot STOPが親Stageへ関連付け不能 | `UNKNOWN / BLOCKED` | 親子結合不明 -> Fail-closed停止 | 結合整合性検証器 |
++| **T05** | Decision Record STOPが有効 | 子SlotのLP-S `START_DENIED` | 親Record STOP -> 配下開始権消費遮断 | 認可ゲートウェイ |
++| **T06** | Stage STOPが有効 | 関連RecordのLP-R `RESERVATION_DENIED` | Stage STOP -> Stage全域予約遮断 | Stage境界監視機構 |
++| **T07** | VM STOPが有効 | 同VMの全関連予約 `RESERVATION_DENIED` | VM STOP -> VM全域実行遮断 | VM隔離制御機構 |
++| **T08** | Environment STOPが有効 | 全関連実行 `DENIED` | 広域STOP -> 環境全面停止 | 環境安全停止機構 |
++| **T09** | Attempt STOP後、Attempt状態のみSTOPPED | STOP解除とはみなさない | 実行状態停止とSTOP禁止状態の区別 | 状態・禁止分離判定器 |
++| **T10** | Slot STOP後、SlotがSTART_CONSUMED | STOP禁止効果を維持 | 消費済み状態でもSTOP遮断維持 | 枠状態不変性保証 |
++| **T11** | Attempt STOP解除済み、Stage STOP継続 | 実行 `DENIED` | 広域STOP残存 -> 実行遮断 | 階層的STOP照合器 |
++| **T12** | Slot STOP解除済み、VM STOP継続 | 実行 `DENIED` | 広域STOP残存 -> 実行遮断 | 階層的STOP照合器 |
++| **T13** | 親RecordのSTOP解除済み、環境STOP継続 | 実行 `DENIED` | 環境STOP残存 -> 実行遮断 | 階層的STOP照合器 |
++| **T14** | STOP解除証跡のSHA-256が不一致 | `DENIED (EVIDENCE_INVALID)` | 証跡不一致 -> 解除無効化 | ハッシュ突合検証器 |
++| **T15** | STOPの適用範囲識別子が特定不能 | `DENIED / UNKNOWN` | 範囲不明 -> Fail-closed遮断 | スキーマ整合性検証 |
++| **T16** | 有効STOPなし・状態確認完全成功 | 他の15条件の評価へ進行 | `NO_ACTIVE_STOP = TRUE` | 16条件論理積評価器 |
++| **T17** | 有効STOPあり・Owner解除判断未取得 | `DENIED (ACTIVE_STOP)` | Owner判断不在 -> 解除不可 | DEC-07 Gate 監査器 |
++| **T18** | STOP解除が承認されたがDEC-03未承認 | 実行 `DENIED (DEC_03_NOT_APPROVED)` | 枠上限未承認 -> 実行不可 | 独立承認整合器 |
++| **T19** | LP-RとSTOP確定が競合（順序特定不能） | `UNKNOWN / BLOCKED` | 順序不明 -> Fail-closed停止 | アトミック調停器 |
++| **T20** | LP-SとSTOP確定が競合（順序特定不能） | `UNKNOWN / BLOCKED` | 順序不明 -> Fail-closed停止 | アトミック調停器 |
++| **T21** | LP-AとSTOP確定が競合（順序特定不能） | `UNKNOWN / BLOCKED` | 順序不明 -> Fail-closed停止 | アトミック調停器 |
++| **T22** | Attempt STOP発生後、別Slotで再試行要求 | `DENIED` | 親Recordの予約禁止有効 | 再試行迂回遮断機構 |
++| **T23** | 適用範囲が異なる無関係な別VMのSTOP | 対象識別子に基づき影響なしと評価 | 結合識別子の一致評価 | 識別子厳格マッチ機構 |
++| **T24** | 狭いAttempt解除で広域Stage STOPを解除要求 | `DENIED (CANNOT_CLEAR_BROAD_STOP)` | 狭い解除での広域解除禁止 | 権能・範囲照合器 |
++| **T25** | RuntimeのSTOP照合・波及機構が未実証 | `NO_EXECUTION_GRANT` | Runtime 未実証 -> 実行禁止維持 | 受入テスト検証環境 |
+ 
+ ---
+ 
+--- g1_d1_owner_decision_package_r1_6/11_INDEPENDENT_REVIEW_HANDOFF_R1_6.md	2026-10-26 10:52:39.601740221 +0900
++++ g1_d1_owner_decision_package_r1_7/11_INDEPENDENT_REVIEW_HANDOFF_R1_7.md	2026-10-26 11:23:00.077313819 +0900
+@@ -1,15 +1,13 @@
+-# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.6）
++# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.7）
+ 
+ ## 1. 独立再レビューの目的とスコープ
+ 
+-本ハンドオフ文書は、限定是正された「**G1-D1 Human Owner Decision Package (R1.6)**」について、独立した技術レビュアーが R1.5 再レビューで指摘された FND-ODP-007 の残存 3 点（**FND-ODP-007-R15-001**: FENCED_PROCESS_ADMISSIONと取消・STOPの競合順序契約、**FND-ODP-007-R15-002**: LP-S後・実起動前のAttempt状態整合性、**FND-ODP-007-R15-003**: STOP中の新規Slot予約禁止と16条件論理積）の解消状況、および既存 8 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
++本ハンドオフ文書は、最小限是正された「**G1-D1 Human Owner Decision Package (R1.7)**」について、独立した技術レビュアーが R1.6 再レビューで指摘された **FND-ODP-007-R15-003**（Execution Slot / Attempt STOP の親 Decision Record および Stage/VM/環境への影響の完全規範化）の解消状況、および既存 10 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
+ 
+ ### レビュアーの責務
+-- FND-ODP-007-R15-001（LP-A の規範的定義、取消・STOP との順序契約、未仲介区間の排除、実プロセス起動と保護操作許可の区別）の是正検証。
+-- FND-ODP-007-R15-002（LP-S 後の Admission 待機状態 `START_AUTHORIZED_PENDING_ADMISSION`、LP-A 成功時のみ `STARTED` への遷移、失敗時 `LAUNCH_ABORTED`、結果不明時 `UNKNOWN`、スロット自動返却禁止）の是正検証。
+-- FND-ODP-007-R15-003（STOP 中の新規スロット予約禁止、STOP 状態不明時のフェイルクローズ、予約適格性の全 16 条件論理積、LP-R/LP-S/LP-A 全 3 境界での STOP 契約整合）の是正検証。
+-- 解決済み Finding（FND-ODP-001〜006, FND-ODP-007-R13-A, FND-ODP-008）に対する非退行性の検証。
+-- 静的反証ケース（T01〜T25）の判定期待値・競合順序・Runtime要件の整合性検証。
++- FND-ODP-007-R15-003（STOP の 6 階層識別、論理的親子結合、Attempt/Slot STOP による親 Decision Record の新規予約遮断、上位 STOP の下位全面執行遮断、STOP 波及と Record Status 変質の分離、`NO_ACTIVE_STOP` の全 16 条件論理積維持）の是正検証。
++- 解決済み Finding（FND-ODP-001〜006, FND-ODP-007-R13-A, FND-ODP-007-R15-001, FND-ODP-007-R15-002, FND-ODP-008）に対する非退行性の検証。
++- 静的反証ケース（T01〜T25）の判定期待値・親子結合・Runtime要件の論理的整合性検証。
+ - アーカイブ構造および内部ハッシュの完全性検証。
+ 
+ ---
+@@ -18,15 +16,13 @@
+ 
+ 独立レビュアーは、以下の各 Finding について個別に判定を実施してください：
+ 
+-### 2.1 残存3点の是正判定（Mandatory Review）
++### 2.1 残存1点の是正判定（Mandatory Review）
+ 
+ | Finding サブID | 重要度 | 重点審査内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-007-R15-001** | Major | `10_OWNER_DECISION_RECORD_TEMPLATE_R1_6.md` において、`PROTECTED_PROCESS_ADMISSION_BOUNDARY` および `LP-A: PROTECTED_ADMISSION_LINEARIZATION_POINT` が規範的に確立され、状態確認と権限付与の間の未仲介実行可能区間が禁止され、順序不明時に fail-closed（`UNKNOWN / BLOCKED`）となり、プロセス作成と保護対象操作の許可が区別され、`PROTECTED_ADMISSION_MEDIATION_NOT_ESTABLISHED => NO_EXECUTION_GRANT` が定義されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-007-R15-002** | Major | LP-S 成功直後の Attempt 状態が `START_AUTHORIZED_PENDING_ADMISSION` となり、LP-A 確定合格時のみ `STARTED` へ遷移し、LP-A 拒絶時は `LAUNCH_ABORTED`、結果不明時は `UNKNOWN` となる状態遷移が厳密に規定され、消費済みスロットの自動返却および自動再試行が永久禁止されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-007-R15-003** | Major | スロット予約適格性判定に独立条件 `NO_ACTIVE_STOP` が追加され、全 16 条件の論理積として整合し、STOP 有効時および STOP 状態不明（`STOP_STATE_UNKNOWN`）時に即座に拒絶され、LP-R、LP-S、LP-A の全境界で STOP 判定が一貫して整合しているか。既存 DEC-07 の Phase A/B/C 非循環 Gate が維持されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
++| **FND-ODP-007-R15-003** | Major | `10_OWNER_DECISION_RECORD_TEMPLATE_R1_7.md` において、STOP の適用範囲が 6 階層（Attempt, Slot, Record, Stage, VM, Environment）で識別され、論理的親子結合が定義され、Attempt / Slot STOP が親 Decision Record による新規スロット予約（LP-R）を即座に遮断（残回数があっても予約拒絶）し、上位 STOP が下位の開始（LP-S）および保護入場（LP-A）を全面遮断する契約が確立されているか。また、STOP 波及と Record Status（EFFECTIVE維持）の変質が分離され、狭い解除での広域解除が禁止され、`NO_ACTIVE_STOP` が再定義されて**全 16 条件論理積**が維持されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+ 
+-### 2.2 既存解決済み8件の非退行性判定（Mandatory Non-regression）
++### 2.2 既存解決済み10件の非退行性判定（Mandatory Non-regression）
+ 
+ | Finding ID | 重要度 | 検証内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+@@ -37,25 +33,28 @@
+ | **FND-ODP-005** | Moderate | 診断実験（DEC-05/06）において、「無条件事前包括承認の禁止」と「実験開始前の Owner 明示承認必須」が矛盾なく定義されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-006** | Moderate | 過剰なゼロリスク断定がなく、DEC-01A 読取リスクが明記され、ホスト固有内部絶対パスが排除されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-007-R13-A** | Major | `owner_decision` が単一正本 Authority となり、`DECISION_DISPOSITION_CONSISTENT`（`decision_disposition == owner_decision`）の完全一致検証が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
++| **FND-ODP-007-R15-001** | Major | `LP-A: PROTECTED_ADMISSION_LINEARIZATION_POINT` および未仲介区間の排除、競合時の fail-closed（`UNKNOWN / BLOCKED`）が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
++| **FND-ODP-007-R15-002** | Major | LP-S 後の Admission 待機状態 `START_AUTHORIZED_PENDING_ADMISSION`、LP-A 確定合格時のみ `STARTED` への遷移、スロット自動返却禁止が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-008** | Moderate | STOP 再開 Gate において、Pre-approval（Phase A）、Owner Decision（Phase B）、Post-approval Eligibility（Phase C）の非循環 3 段階が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ 
+ ---
+ 
+ ## 3. 重点審査領域（Focus Areas）
+ 
+-### 3.1 Protected Admission & Mediation Ordering（保護された入場調停と成立順序）
+-- LP-A と STOP/取消の成立順序が明確に定義されていること。
+-- 取消・STOP の確認と保護操作許可の間に未仲介の実行可能区間が存在しないこと。
+-- 入場調停機構が未実証の場合は実行禁止（`PROTECTED_ADMISSION_MEDIATION_NOT_ESTABLISHED => NO_EXECUTION_GRANT`）が維持されていること。
+-
+-### 3.2 State Consistency Across LP-S and LP-A（LP-SとLP-A間の状態整合性）
+-- LP-S 成功時点では Attempt は `START_AUTHORIZED_PENDING_ADMISSION` であり、`STARTED` ではないこと。
+-- `STARTED` は LP-A 確定合格により保護対象操作の実行許可が適用された瞬間のみを意味すること。
+-- LP-A 拒絶時は `LAUNCH_ABORTED`、結果不明時は `UNKNOWN` となり、自動再試行・スロット自動返却が禁止されていること。
+-
+-### 3.3 Full-Boundary STOP Enforcement（全境界でのSTOP強制）
+-- LP-R（スロット予約）において `NO_ACTIVE_STOP` が全16条件の1つとして評価され、STOP中および状態不明時の新規予約が遮断されること。
+-- LP-S（開始権消費）および LP-A（入場調停）においても STOP が確実に遮断されること。
+-- 既存 DEC-07 の STOP 再開 Gate（Phase A/B/C）との循環が再導入されていないこと。
++### 3.1 STOP Scope Binding & Parent-Child Propagation（STOP範囲結合と親子波及）
++- Attempt STOP が親 Decision Record の新規スロット予約を確実に遮断するか（残回数があっても予約不可）。
++- Slot STOP が別スロットによる同一承認の迂回利用を防止するか。
++- Stage、VM、環境全体の広域 STOP が下位の実行を適切に全面遮断するか。
++- STOP の適用範囲識別子が客観的に検証可能であり、結合先不明時は fail-closed となるか。
++
++### 3.2 STOP State Separation & Clearance Scoping（STOP状態分離と解除範囲）
++- Attempt や Slot で STOP が発生しても、親 Decision Record の `record_status` が自動的に `REVOKED` や `EXPIRED` に変質せず、3層状態モデルが維持されているか。
++- 狭い Attempt / Slot の解除判断によって広域 STOP が自動解除されないよう、権能・範囲の整合が要求されているか。
++- `NO_ACTIVE_STOP` が全 16 条件の論理積として整合し、STOP 状態不明時に確実に実行資格を拒絶するか。
++
++### 3.3 Non-regression of Linearization Points & Fail-Closed Rules（線形化点とフェイルクローズの非退行性）
++- LP-R（予約）、LP-S（開始権消費）、LP-A（入場調停）の 3 境界における STOP 契約が一貫しているか。
++- 未仲介実行経路の禁止、およびスロット自動返却・自動再実行の永久禁止が維持されているか。
++- Runtime 未実証の免責事項が明記されているか。
+ 
+ ---
+--- g1_d1_owner_decision_package_r1_6/12_INPUT_PROVENANCE_R1_6.md	2026-10-26 10:52:48.872553348 +0900
++++ g1_d1_owner_decision_package_r1_7/12_INPUT_PROVENANCE_R1_7.md	2026-10-26 11:23:13.666710657 +0900
+@@ -1,22 +1,22 @@
+-# 12. 入力原本来歴と照合記録（Input Provenance R1.6）
++# 12. 入力原本来歴と照合記録（Input Provenance R1.7）
+ 
+ ## 1. 入力原本の完全性検証結果
+ 
+-本 R1.6 限定是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
++本 R1.7 最小限是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
+ 
+-### 1.1 R1.5 意思決定パッケージ（直接の是正対象）
+-- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_5_2026-10-26.tar.gz`
+-- **期待 SHA-256**: `476d453ddc7d40b34bc7381b4a71e46ac9de5f4a51800ffa1af811d6ed370b55`
+-- **実測 SHA-256**: `476d453ddc7d40b34bc7381b4a71e46ac9de5f4a51800ffa1af811d6ed370b55`
+-- **期待バイトサイズ**: `93,186 bytes`
+-- **実測バイトサイズ**: `93,186 bytes`
++### 1.1 R1.6 意思決定パッケージ（直接の是正対象）
++- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_6_2026-10-26.tar.gz`
++- **期待 SHA-256**: `f99e1a635a1498dcc2e25417b38a6ac7f8cca7fb96b5b54f00cb97286507ab3d`
++- **実測 SHA-256**: `f99e1a635a1498dcc2e25417b38a6ac7f8cca7fb96b5b54f00cb97286507ab3d`
++- **期待バイトサイズ**: `108,590 bytes`
++- **実測バイトサイズ**: `108,590 bytes`
+ - **検証ステータス**: **`MATCH (完全一致検証 PASS)`**
+-- **内部完全性**: 内部 `SHA256SUMS.txt` 23 項目全件一致検証 PASS
++- **内部完全性**: 内部 `SHA256SUMS.txt` 25 項目全件一致検証 PASS
+ 
+-### 1.2 R1.4 意思決定パッケージ（先行比較原本）
+-- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_4_2026-10-26.tar.gz`
+-- **期待/実測 SHA-256**: `e1120c0a2f769f9a7c4138c9cf8ce18ffa1b7315c925c6141388dd194065e57a`
+-- **期待/実測バイトサイズ**: `79,039 bytes`
++### 1.2 R1.5 意思決定パッケージ（先行比較原本）
++- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_5_2026-10-26.tar.gz`
++- **期待/実測 SHA-256**: `476d453ddc7d40b34bc7381b4a71e46ac9de5f4a51800ffa1af811d6ed370b55`
++- **期待/実測バイトサイズ**: `93,186 bytes`
+ - **検証ステータス**: 完全一致確認 PASS
+ 
+ ### 1.3 上位の再試験計画 R1.3

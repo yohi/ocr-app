@@ -1,0 +1,498 @@
+--- g1_d1_owner_decision_package_r1_4/00_OWNER_EXECUTIVE_SUMMARY_R1_4.md	2026-10-26 04:04:42.275589529 +0900
++++ g1_d1_owner_decision_package_r1_5/00_OWNER_EXECUTIVE_SUMMARY_R1_5.md	2026-10-26 10:33:06.601545480 +0900
+@@ -1,9 +1,9 @@
+-# 00. Human Owner 向け全体概要（Executive Summary R1.4）
++# 00. Human Owner 向け全体概要（Executive Summary R1.5）
+ 
+ ## 1. 役割・権限境界と本書の目的
+ 
+-本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.4 最小限是正版** です。
+-R1.3 独立限定再レビューで指摘された FND-ODP-007 の残存 3 点（FND-ODP-007-R13-A: 判断区分の単一Authority・整合性、FND-ODP-007-R13-B: Eligibility と Slot Reservation の競合線形化・開始フェンス、FND-ODP-007-R13-C: 3層状態モデル分離・消費と失効の区別）に対して最小限是正を実施し、反証可能な規範的意思決定契約を完成させました。
++本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.5 限定是正版** です。
++R1.4 独立限定再レビューで `PARTIAL` と判定された 2 件（**FND-ODP-007-R13-B**: Execution Start Fenceと実際のプロセス起動との競合、**FND-ODP-007-R13-C**: 予約前後の適格性判定、およびDecision Record / Slot / Attemptの状態整合性）に対して最小限是正を実施し、予約時と実行開始時の 2 つの線形化点を区別し、取消・失効・STOP・実行回数消費が競合しても未承認の実行開始が許可されない規範的文書契約を完成させました。
+ 
+ ### 権限と職責の分離宣言
+ - **現在の実行権限**: `READ_ONLY_SOURCE / STATIC_ANALYSIS / DOCUMENT_CORRECTION_ONLY / NO_EXECUTION_GRANT / NO_OWNER_AUTHORITY / NO_GATE_AUTHORITY`
+@@ -16,13 +16,12 @@
+ 
+ ---
+ 
+-## 2. R1.4 最小限是正概要（FND-ODP-007 残存3点是正完了）
++## 2. R1.5 限定是正概要（FND-ODP-007 残存2件是正完了）
+ 
+-| Finding サブID | 重要度 | 是正対象と内容 | R1.4 是正結果 |
++| Finding サブID | 重要度 | 是正対象と内容 | R1.5 是正結果 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-007-R13-A** | Major | `decision_disposition` と `owner_decision` の矛盾による実行権限発生リスクの排除 | `owner_decision` を単一正本 Authority とし、`DECISION_DISPOSITION_CONSISTENT`（両値の完全一致）を必須化。発効判定式を**全 15 条件論理積**として完成。不一致時は `DECISION_INCONSISTENT / NO_EXECUTION_GRANT`。 |
+-| **FND-ODP-007-R13-B** | Major | 承認取消・失効と実行資格確認・Slot Reservation の競合制御、および二重割当排除 | 線形化予約境界（`AUTHORIZATION_AND_RESERVATION_LINEARIZATION`）を導入。最新取消・失効の確認と枠引当のアトミック性を要求。さらに実行起動直前の防護柵（`EXECUTION_START_FENCE`）を定義し、予約後・起動前の取消や STOP を安全側に遮断。 |
+-| **FND-ODP-007-R13-C** | Major | 承認記録の有効性、実行枠の予約消費、プロセス試行の混同解消 | 「Decision Record Status（承認の有効性）」「Execution Slot Status（予約消費枠）」「Execution Attempt Status（実行試行）」の 3 層状態機械へ完全分離。回数消費による EXPIRED 誤変質を解消し、自動返却禁止・二重開始禁止を確立。 |
++| **FND-ODP-007-R13-B** | Major | Execution Start Fence と実際のプロセス起動との競合、および多層線形化境界の確立 | **2つの線形化点（LP-R: スロット予約線形化点、LP-S: 実行開始線形化点）** を明確に区別して確立。さらに LP-S 通過後の OS プロセス起動直前における防護柵（`FENCED_PROCESS_ADMISSION`）を定義し、LP-S 後・起動前の取消や STOP による不正起動を確実に阻止する多層防護契約を完成。 |
++| **FND-ODP-007-R13-C** | Major | 予約前後の適格性判定の矛盾解消、および 3 層状態モデルにおける消費と失効の厳格分離 | 適格性判定を **スロット予約適格性（`RESERVATION_ELIGIBLE`: 全15条件）** と **実行開始適格性（`START_ELIGIBLE`: スロット単位の正当性・未消費性判定）** に 2 段階分離。スロット予約確定時に残数が 0 になっても予約済みスロットの開始適格性が損なわれないよう論理矛盾を解消。また、第 9 節の失効条件から「実行回数消費」を完全に除外し、`EXPIRED` は時間的失効のみを表す契約を徹底。 |
+ 
+ ---
+ 
+@@ -31,11 +30,11 @@
+ - **対象リポジトリ**: `https://github.com/yohi/ocr-app`
+ - **ブランチ**: `fix/shadow-graphql-post-scope-guards`
+ - **Fixed HEAD**: `6b08251170265c444ce8957377e6bfca23b21fd7`（検証済み・変更なし）
+-- **直接の是正対象 R1.3 アーカイブ**:
+-  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_3_2026-10-26.tar.gz`
+-  - 期待/実測 SHA-256: `44edae4084bde625bc7c94e55930b3d0235c0134e0725e5bb8f68bc2477c4b8c` (`MATCH`)
+-  - 期待/実測サイズ: `62,633 bytes` (`MATCH`)
+-  - 内部 `SHA256SUMS.txt` 19 項目全件一致確認 PASS。
++- **直接の是正対象 R1.4 アーカイブ**:
++  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_4_2026-10-26.tar.gz`
++  - 期待/実測 SHA-256: `e1120c0a2f769f9a7c4138c9cf8ce18ffa1b7315c925c6141388dd194065e57a` (`MATCH`)
++  - 期待/実測サイズ: `79,039 bytes` (`MATCH`)
++  - 内部 `SHA256SUMS.txt` 21 項目全件一致確認 PASS。
+ - **上位再試験計画 R1.3**:
+   - `OCR_APP_G1_D1_UNRESOLVED_19_RETEST_PLAN_R1_3_2026-10-26.tar.gz` (SHA-256: `e293...`, 33,389 bytes, PASS)
+ - **全体回帰テスト対象**: `.github/workflows/scripts/*.test.mjs` 配下の全 39 ファイルを固定HEADより照合済み。
+@@ -94,5 +93,5 @@
+ 
+ 1. **Gate状態の不変性**: 本パッケージの受領および検討中であっても、G1-D1 Formal Gate は **未承認（`BLOCKED`）** を維持します。
+ 2. **実行権限の非付与**: 本資料は Human Owner の判断材料であり、本資料の提示をもって AI エージェントに実行権限が付与されることは一切ありません。
+-3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_4.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
+-4. **Runtime 未実証の明記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_NOT_VERIFIED`）であり、Runtime での実証を主張するものではありません。
++3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_5.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
++4. **Runtime 未実証の明記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_START_FENCING_NOT_VERIFIED`）であり、Runtime での実証を主張するものではありません。
+--- g1_d1_owner_decision_package_r1_4/10_OWNER_DECISION_RECORD_TEMPLATE_R1_4.md	2026-10-26 04:04:22.315630953 +0900
++++ g1_d1_owner_decision_package_r1_5/10_OWNER_DECISION_RECORD_TEMPLATE_R1_5.md	2026-10-26 10:32:25.714075106 +0900
+@@ -1,4 +1,4 @@
+-# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.4）
++# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.5）
+ 
+ > **【重要・記入上の注意】**
+ > 本ドキュメントは、Human Owner ご自身が直接判断結果を記入・署名するための公式記録テンプレートです。
+@@ -12,7 +12,7 @@
+ 本判断記録テンプレートは、自己参照的なハッシュ循環を排除し、不変のパッケージ本体と独立した「外部判断記録（External Owner Decision Record）」として運用されます。
+ 
+ ```text
+-[Owner Decision Package R1.4 (不変資料)]
++[Owner Decision Package R1.5 (不変資料)]
+     │
+     │ 確定SHA-256 (独立算出)
+     ▼
+@@ -58,8 +58,8 @@
+ - `supersedes_record_id`: 改訂時に無効化・置換する過去の判断記録ID（初版時は `NONE`）。
+ 
+ ### B. Package Binding（パッケージ結合情報）
+-- `package_name`: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_4_2026-10-26.tar.gz`
+-- `package_revision`: `R1.4`
++- `package_name`: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_5_2026-10-26.tar.gz`
++- `package_revision`: `R1.5`
+ - `package_sha256`: 独立レビューにより確定された実測 SHA-256（自己参照埋め込みを禁止）。
+ - `package_byte_size`: パッケージの実測バイト数。
+ - `fixed_repository`: `https://github.com/yohi/ocr-app`
+@@ -118,9 +118,9 @@
+ ```text
+ ODR-G1-D1-<YYYYMMDD>-<PACKAGE_REV>-<DEC_ID>-<STAGE_OR_NA>-<SEQUENCE>
+ ```
+-- **例1**: `ODR-G1-D1-20261026-R1.4-DEC03-STAGE0-01`
+-- **例2**: `ODR-G1-D1-20261026-R1.4-DEC01A-NA-01`
+-- **例3**: `ODR-G1-D1-20261026-R1.4-DEC07-STAGE3-01`
++- **例1**: `ODR-G1-D1-20261026-R1.5-DEC03-STAGE0-01`
++- **例2**: `ODR-G1-D1-20261026-R1.5-DEC01A-NA-01`
++- **例3**: `ODR-G1-D1-20261026-R1.5-DEC07-STAGE3-01`
+ 
+ ### 3.2 ID 発行および重複防止の 7 原則
+ 1. **個別 ID の一意性**: 発行されるすべての判断記録は、システム全体で完全に一意な ID を持たなければならない。
+@@ -301,44 +301,60 @@
+ 
+ ---
+ 
+-## 5. 発効条件と実行資格判定契約（FND-ODP-007-R13-A是正: 15条件論理積）
++## 5. 発効条件と実行資格判定契約（FND-ODP-007-R13-A/C是正: 予約適格性と開始適格性の分離）
+ 
+-### 5.1 規範的実行資格判定式（Normative Execution Eligibility Formula）
+-承認記録が実行資格として発効するためには、実行プロセスの開始直前に以下の**15条件の論理積（AND）**がすべて**真（TRUE）**であることを静的に検証しなければなりません。
++### 5.1 規範的適格性判定の2段階分離（Two-Stage Eligibility Predicates）
++従来の単一判定式による「予約前と予約後での実行残数判定の矛盾（残スロット0で予約済み実行開始が自己否定される問題）」を排除するため、適格性判定を **スロット予約適格性（RESERVATION_ELIGIBLE）** と **実行開始適格性（START_ELIGIBLE）** の 2 つの独立した論理述語に厳密に分離します。
+ 
+ ```text
+-EXECUTION_ELIGIBLE
+-  = OWNER_DECISION_IS_APPROVAL
+-    AND DECISION_DISPOSITION_CONSISTENT
+-    AND RECORD_STATUS_EFFECTIVE
+-    AND CONDITIONAL_APPROVAL_CONDITIONS_SATISFIED
+-    AND PACKAGE_IDENTITY_MATCH
+-    AND FIXED_HEAD_MATCH
+-    AND INDEPENDENT_REVIEW_BINDING_VALID
+-    AND OWNER_RECORD_AUTHENTIC
+-    AND DECISION_SCOPE_MATCH
+-    AND ENVIRONMENT_MATCH
+-    AND EVIDENCE_BINDING_VALID
+-    AND PRECONDITIONS_SATISFIED
+-    AND EXECUTION_LIMIT_NOT_EXCEEDED
+-    AND NOT_REVOKED
+-    AND NOT_EXPIRED
++1. スロット予約適格性判定式 (Evaluated at LP-R: RESERVATION_LINEARIZATION_POINT)
++   RESERVATION_ELIGIBLE
++     = OWNER_DECISION_IS_APPROVAL
++       AND DECISION_DISPOSITION_CONSISTENT
++       AND RECORD_STATUS_EFFECTIVE
++       AND CONDITIONAL_APPROVAL_CONDITIONS_SATISFIED
++       AND PACKAGE_IDENTITY_MATCH
++       AND FIXED_HEAD_MATCH
++       AND INDEPENDENT_REVIEW_BINDING_VALID
++       AND OWNER_RECORD_AUTHENTIC
++       AND DECISION_SCOPE_MATCH
++       AND ENVIRONMENT_MATCH
++       AND EVIDENCE_BINDING_VALID
++       AND PRECONDITIONS_SATISFIED
++       AND EXECUTION_LIMIT_NOT_EXCEEDED
++       AND NOT_REVOKED
++       AND NOT_EXPIRED
++
++2. 実行開始適格性判定式 (Evaluated at LP-S: EXECUTION_START_LINEARIZATION_POINT)
++   START_ELIGIBLE(slot_id)
++     = SLOT_STATUS_IS_RESERVED(slot_id)
++       AND SLOT_NOT_PREVIOUSLY_CONSUMED(slot_id)
++       AND BOUND_DECISION_RECORD_STILL_EFFECTIVE(slot_id)
++       AND CONDITIONAL_APPROVAL_STILL_SATISFIED(slot_id)
++       AND NO_PRIOR_REVOCATION(slot_id)
++       AND NO_PRIOR_STOP(slot_id)
++       AND ENVIRONMENT_STILL_MATCH(slot_id)
++       AND EXECUTION_SCOPE_STILL_MATCH(slot_id)
+ ```
+ 
++> [!IMPORTANT]
++> **予約後における実行残数判定の非依存性**:
++> `START_ELIGIBLE` の評価においては、`EXECUTION_LIMIT_NOT_EXCEEDED`（未割当スロット残数 > 0）を再評価してはなりません。スロット予約確定時に残数が 0 に到達していたとしても、正当に予約された当該 `slot_id` 自体が `RESERVED` であり未消費であれば、開始適格性は損なわれません。
++
+ ### 5.2 必須判定条件の個別定義
+ 
+ #### 1. `OWNER_DECISION_IS_APPROVAL` (肯定的承認判定)
+ - `owner_decision` が明示的に **`APPROVE`** または **`CONDITIONAL_APPROVE`** であること。
+ - `HOLD` または `REJECT` の場合、署名が真正であっても **`DECISION_NOT_APPROVING / NO_EXECUTION_GRANT`** となり実行資格を生成しない。
+ 
+-#### 2. `DECISION_DISPOSITION_CONSISTENT` (判断区分整合性 / FND-ODP-007-R13-A新規追加)
++#### 2. `DECISION_DISPOSITION_CONSISTENT` (判断区分整合性 / FND-ODP-007-R13-A)
+ - `decision_disposition` と `owner_decision` の値が厳格に完全一致していること（`decision_disposition == owner_decision`）。
+ - **Fail-closed 規則**:
+-  - たとえば `decision_disposition = HOLD` かつ `owner_decision = APPROVE` のような値の不一致や矛盾が存在する場合、**`DECISION_INCONSISTENT / NO_EXECUTION_GRANT`** として即座に実行資格を拒絶する。
++  - `decision_disposition = HOLD` かつ `owner_decision = APPROVE` のような値の不一致や矛盾が存在する場合、**`DECISION_INCONSISTENT / NO_EXECUTION_GRANT`** として即座に実行資格を拒絶する。
+ 
+ #### 3. `RECORD_STATUS_EFFECTIVE` (記録状態有効性)
+ - `record_status` が厳密に **`EFFECTIVE`** であること。
+-- `DRAFT`, `ISSUED`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` 等は実行不可。
++- `DRAFT`, `ISSUED`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` 等は予約不可。
+ 
+ #### 4. `CONDITIONAL_APPROVAL_CONDITIONS_SATISFIED` (条件充足判定)
+ - `owner_decision == CONDITIONAL_APPROVE` の場合、付帯条件が具体的に記録され、対応する証跡ハッシュ突合により全条件が充足されていること。未充足時は `CONDITION_PENDING / NO_EXECUTION_GRANT`。
+@@ -369,7 +385,7 @@
+ - 各 Stage の必須進入前提条件（Stage 0 PASS 等）がすべて客観的証跡により充足されていること。
+ 
+ #### 13. `EXECUTION_LIMIT_NOT_EXCEEDED`
+-- 許容実行回数の残量が存在すること（未消費スロット残存）。
++- 許容実行回数の未割当残量が存在すること（未消費スロット残存: `remaining_slots > 0`）。※スロット予約時のみ評価。
+ 
+ #### 14. `NOT_REVOKED`
+ - 承認の取消・無効化が存在しないこと。
+@@ -379,46 +395,53 @@
+ 
+ ---
+ 
+-## 6. 線形化予約境界と実行開始フェンス契約（FND-ODP-007-R13-B是正）
++## 6. 線形化境界と多層フェンス契約（FND-ODP-007-R13-B是正: LP-R / LP-S / 起動防御）
+ 
+-適格性確認直後の取消・失効の割り込みを防止し、同一承認記録に対する二重予約・二重実行を排除するため、**線形化予約境界（Linearization Boundary）**および**実行開始フェンス（Execution Start Fence）**を規範的契約として確立します。
++適格性確認直後の取消・失効・STOPの割り込みを防止し、同一承認記録に対する二重予約・二重実行・プロセス起動前後の競合を排除するため、**2つの線形化点（LP-R, LP-S）** および **プロセス起動防御柵（Fenced Process Admission）** を規範的契約として確立します。
+ 
+-### 6.1 規範的状態遷移と整合性境界
++### 6.1 規範的状態遷移と線形化点
+ ```text
+-[ELIGIBILITY_CHECK] (最新の承認状態・全15条件の検証 PASS)
++[ELIGIBILITY_EVALUATION] (最新の承認状態・全15条件の検証)
+        │
+-       ▼ (AUTHORIZATION_AND_RESERVATION_LINEARIZATION: アトミック確定境界)
+-[SLOT_RESERVATION]
+-  - 最新の取消・失効・変更有無を再確認
+-  - 未消費スロット残量の確認
+-  - 実行スロットの確定的割当（回数即時消費）
+-  - 同一承認に対する新規予約の即時遮断
++       ▼ [LP-R: RESERVATION_LINEARIZATION_POINT] (第1線形化点: スロット確定境界)
++       │  - RESERVATION_ELIGIBLE (全15条件) のアトミック検証
++       │  - 承認取消・失効・変更有無のアトミック再確認
++       │  - 未消費スロット残量の確定減算 (remaining_slots -= 1)
++       │  - スロット状態遷移: NOT_ALLOCATED -> RESERVED
+        │
+        ▼
+-[RESERVED_SLOT_CONFIRMED]
++[RESERVED_SLOT_CONFIRMED] (スロット予約確定状態)
++       │
++       ▼ [LP-S: EXECUTION_START_LINEARIZATION_POINT] (第2線形化点: 実行権確定境界)
++       │  - START_ELIGIBLE(slot_id) のアトミック検証
++       │  - 予約確定後から開始点までの取消・STOP・失効の有無を確定排除
++       │  - スロット状態遷移: RESERVED -> START_CONSUMED (実行開始権の不可逆消費)
++       │  - 試行状態遷移: NOT_STARTED -> STARTED
+        │
+-       ▼ (EXECUTION_START_FENCE: 実行起動直前の防御柵)
+-  - 予約スロットが有効（RESERVED）であることの確認
+-  - 予約確定後から起動直前までの間に「承認取消」が成立していないことの検証
+-  - 予約確定後から起動直前までの間に「STOP」が発生していないことの検証
+-  - 実行担当者および対象 VM の一致検証
++       ▼ (LP-S 合格)
++[FENCED_PROCESS_ADMISSION] (第3境界: OSプロセス起動・防御機構)
++       │  - LP-S を通過した確定的トークン/資格情報の一致検証
++       │  - 起動直前の環境・境界防御（ネットワーク隔離、コンテナ保護）の物理的確認
++       │  - OSプロセスの実際の exec / 起動
+        │
+-       ▼ (全フェンス検証 PASS)
+-[EXECUTION_START_AUTHORIZED] (実際のプロセス起動・試行)
++       ▼
++[PROCESS_EXECUTION] (テスト実行試行中)
+        │
+        ▼
+-[RESULT_RECORDED / STOPPED / UNKNOWN] (自動返却永久禁止)
++[RESULT_RECORDED / STOPPED / UNKNOWN] (試行終了: スロット自動返却永久禁止)
+ ```
+ 
+ ### 6.2 必須競合ケースの規範的判定契約
+-1. **取消先行競合**: 予約確定処理が成立する前に取消要求が確定した場合、スロット予約は即座に拒否（`DENY`）される。
+-2. **失効先行競合**: 予約確定処理が成立する前に有効期限到達または失効条件が成立した場合、スロット予約は即座に拒否（`DENY`）される。
+-3. **回数上限先行競合**: 残回数が0に達した後に予約要求が到着した場合、新規予約は即座に拒否（`DENY NEW RESERVATION`）される。
+-4. **同時予約競合**: 同一の承認記録に対して複数の予約要求が同時に競合した場合、最大1件のみが予約成功となり、他方は拒絶される（`FAIL_CLOSED_ON_ALLOCATION_CONFLICT`）。
+-5. **競合順序不明**: 予約と取消・失効のどちらが先に成立したか順序を決定できない場合、フェイルクローズ（`UNKNOWN / BLOCKED`）とし予約を成立させない。
+-6. **予約後・開始前取消**: スロット予約が確定した後であっても、実行プロセスが実際に起動する前に承認取消が成立した場合、`EXECUTION_START_FENCE` により起動は即座に阻止される（`START_DENIED`）。消費されたスロットの自動返却は禁止される。
+-7. **予約後・開始前STOP**: スロット予約確定後、実行開始前にシステム STOP が発生した場合、フェンスにより起動は阻止され（`START_DENIED`）、スロット自動返却は禁止される。
+-8. **Runtime 実証に関する範囲注記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_LINEARIZABILITY_NOT_VERIFIED`）であり、将来の実行基盤において排他制御の実証を要する。
++1. **取消先行予約競合**: LP-R 確定前に取消要求が確定した場合、スロット予約は即座に拒絶（`DENY (RESERVATION_REJECTED)`）される。
++2. **失効先行予約競合**: LP-R 確定前に有効期限到達または失効条件が成立した場合、スロット予約は即座に拒絶（`DENY (RECORD_EXPIRED)`）される。
++3. **回数上限先行予約競合**: 残回数が0（`remaining_slots == 0`）に達した後に予約要求が到着した場合、新規予約は即座に拒絶（`DENY (NO_REMAINING_SLOTS)`）される。
++4. **同時予約競合**: 同一の承認記録に対して複数の予約要求が同時に競合した場合、LP-R により最大1件のみが予約成功となり、他方は拒絶される（`FAIL_CLOSED_ON_ALLOCATION_CONFLICT`）。
++5. **LP-R 競合順序不明**: 予約と取消・失効のどちらが先に成立したか順序を決定できない場合、フェイルクローズ（`DENY / UNKNOWN (FAIL_CLOSED)`）とし予約を成立させない。
++6. **予約確定後・LP-S 前取消競合**: スロット予約確定後（LP-R 完了後）、LP-S 到達前に承認取消が成立した場合、LP-S において `NO_PRIOR_REVOCATION` が偽となり開始は即座に拒絶される（`START_DENIED (REVOKED_BEFORE_LP_S)`）。スロットは `CANCELLED` へ遷移し、自動返却は禁止される。
++7. **予約確定後・LP-S 前 STOP 競合**: スロット予約確定後、LP-S 到達前に STOP が発生した場合、LP-S において `NO_PRIOR_STOP` が偽となり開始は拒絶される（`START_DENIED (STOPPED_BEFORE_LP_S)`）。
++8. **LP-S 確定後・プロセス起動前取消/STOP競合**: LP-S を通過してスロットが `START_CONSUMED` に遷移した後、実際の OS プロセス起動前に取消や STOP が発生した場合、Fenced Process Admission 防御柵によりプロセス起動は阻止される（`PROTECTED_OPERATION_BLOCKED / PROCESS_LAUNCH_ABORTED`）。すでに消費されたスロットは `START_CONSUMED` のままであり、自動返却・再利用は永久に禁止される。
++9. **二重開始要求**: 同一の `slot_id` に対して二重に開始要求が行われた場合、すでにスロットが `START_CONSUMED` であるため即座に拒絶される（`DENY (SLOT_ALREADY_CONSUMED)`）。
++10. **Runtime 実証に関する範囲注記**: 本契約は文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_START_FENCING_NOT_VERIFIED`）であり、将来の実行基盤において排他制御・多層フェンス機構の実装と実証を要する。
+ 
+ ---
+ 
+@@ -430,18 +453,18 @@
+ 
+ | 状態領域 | 状態区分一覧 | 責務と意味 |
+ | :--- | :--- | :--- |
+-| **1. Decision Record Status** | `DRAFT`, `ISSUED`, `EFFECTIVE`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` | Human Owner による承認自体の法性・有効期間・取消状態を保持。**実行回数の消費によって自動的に EXPIRED や REVOKED に変質しない。** |
+-| **2. Execution Slot Status** | `NOT_ALLOCATED`, `RESERVED`, `START_CONSUMED`, `CANCELLED`, `UNKNOWN` | 承認記録から引き当てられた個別の「実行開始枠」のライフサイクルを管理。1スロットは最大1回の開始権のみを持つ。 |
+-| **3. Execution Attempt Status**| `NOT_STARTED`, `STARTED`, `COMPLETED`, `FAILED`, `STOPPED`, `UNKNOWN` | 予約枠に基づいて実際に起動された OS プロセス／テスト実行の推移を管理。 |
++| **1. Decision Record Status** | `DRAFT`, `ISSUED`, `EFFECTIVE`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID` | Human Owner による承認自体の規範的効力・時間的有効期間・明示的取消状態を保持。**実行回数の消費やスロット枯渇によって自動的に EXPIRED や REVOKED に変質しない。** |
++| **2. Execution Slot Status** | `NOT_ALLOCATED`, `RESERVED`, `START_CONSUMED`, `CANCELLED`, `UNKNOWN` | 承認記録から引き当てられた個別の「実行開始枠」のライフサイクルを管理。1スロットは最大1回の開始権のみを持つ。LP-S 通過時に不可逆的に `START_CONSUMED` となる。 |
++| **3. Execution Attempt Status**| `NOT_STARTED`, `STARTED`, `COMPLETED`, `FAILED`, `STOPPED`, `UNKNOWN` | 予約枠に基づいて実際に起動された OS プロセス／テスト実行の試行推移を管理。 |
+ 
+ ### 7.2 状態分離に伴う安全契約
+-1. **消費と失効の明確な区別**:
+-   - `Decision Record Status` の `EXPIRED` は「承認の時間的有効期限切れ」のみを表し、実行回数の消費を表さない。
+-   - 実行回数の残量が0になったことは、`Execution Slot` の割当可能残数（`remaining_slots == 0`）によって管理され、新規スロット予約が遮断される。
+-2. **予約済みスロットの有効性**:
+-   - スロットが `RESERVED` 状態にある間、同一承認記録からの新規予約は禁止されるが、当該予約スロット自体は `EXECUTION_START_FENCE` を通過できる限り実行開始可能である。
++1. **消費と失効の厳格な区別**:
++   - `Decision Record Status` の `EXPIRED` は「承認の時間的有効期限切れ（`current_time > expires_at`）」のみを表し、実行回数の消費を表さない。
++   - 実行回数の残量が 0 になったことは、`Execution Slot` の割当可能残数（`remaining_slots == 0`）によって管理され、新規スロット予約（LP-R）のみが遮断される。
++2. **予約済みスロットの正当性保持**:
++   - スロットが `RESERVED` 状態にある間、同一承認記録からの新規予約は禁止されるが、当該予約スロット自体は `START_ELIGIBLE` を充足する限り LP-S を通過して実行開始可能である。
+ 3. **二重開始の排除**:
+-   - スロットが `START_CONSUMED` に遷移した時点で開始権は完全に消費され、同一スロットを再度起動することは厳格に禁止される。
++   - スロットが `START_CONSUMED` に遷移した時点で開始権は不可逆的に消費され、同一スロットを再度起動することは厳格に禁止される。
+ 4. **自動返却の永久禁止**:
+    - `Execution Attempt` が `FAILED`, `STOPPED`, `UNKNOWN` のいずれで終了した場合であっても、`Execution Slot` を `NOT_ALLOCATED` へ戻すこと（自動返却）は禁止する。
+ 5. **結果不明時のフェイルクローズ**:
+@@ -449,7 +472,7 @@
+ 
+ ---
+ 
+-## 8. 静的反証ケース（Static Falsification Test Cases）
++## 8. 静的反証ケース（Static Falsification Test Cases / T01〜T20）
+ 
+ 本契約が論理的に完全であり、いかなる曖昧さや不正実行も排除することを証明するため、以下の 20 ケースに対する静的判定期待値を規定します。
+ 
+@@ -458,34 +481,42 @@
+ | **T01** | `owner_decision == HOLD`、真正な署名が存在 | `DENY (NO_EXECUTION_GRANT)` |
+ | **T02** | `owner_decision == REJECT`、真正な署名が存在 | `DENY (NO_EXECUTION_GRANT)` |
+ | **T03** | `decision_disposition == HOLD` かつ `owner_decision == APPROVE` | `DENY (DECISION_INCONSISTENT)` |
+-| **T04** | `decision_disposition == APPROVE` かつ `owner_decision == APPROVE` | 他の13条件評価へ進行 |
++| **T04** | `decision_disposition == APPROVE` かつ `owner_decision == APPROVE` | LP-R 評価へ進行（他13条件評価） |
+ | **T05** | `record_status == ISSUED`（未だ EFFECTIVE に遷移していない） | `DENY (RECORD_STATUS_NOT_EFFECTIVE)` |
+ | **T06** | `record_status == REVOKED`（取消済み） | `DENY (RECORD_STATUS_REVOKED)` |
+ | **T07** | `CONDITIONAL_APPROVE` であるが付帯条件の充足証跡が未提出 | `DENY (CONDITION_PENDING)` |
+-| **T08** | スロット予約確定直前に承認取消が成立 | `DENY (RESERVATION_REJECTED)` |
+-| **T09** | スロット予約と承認取消が競合し、成立順序が特定不能 | `DENY / UNKNOWN (FAIL_CLOSED)` |
++| **T08** | スロット予約確定（LP-R）直前に承認取消が成立 | `DENY (RESERVATION_REJECTED)` |
++| **T09** | スロット予約と承認取消が競合し、LP-R での成立順序が特定不能 | `DENY / UNKNOWN (FAIL_CLOSED)` |
+ | **T10** | 同一の未消費承認記録に対して2つの実行主体が同時に予約要求 | 最大1件のみ予約成功、他方は拒絶 |
+-| **T11** | スロット予約成功後、実行開始前に承認取消が成立 | `START_DENIED (FENCE_TRIGGERED)` |
+-| **T12** | スロット予約成功後、実行開始前に STOP が発生 | `START_DENIED (FENCE_TRIGGERED)` |
++| **T11** | スロット予約成功後、LP-S 到達前に承認取消が成立 | `START_DENIED (REVOKED_BEFORE_LP_S)` |
++| **T12** | スロット予約成功後、LP-S 到達前に STOP が発生 | `START_DENIED (STOPPED_BEFORE_LP_S)` |
+ | **T13** | スロット予約確定後、同一承認記録を用いて別の新規予約を要求 | `DENY (NO_REMAINING_SLOTS)` |
+ | **T14** | 一度 `START_CONSUMED` となったスロットを再利用して起動要求 | `DENY (SLOT_ALREADY_CONSUMED)` |
+ | **T15** | プロセス試行結果が `UNKNOWN` で終了 | `NO_AUTOMATIC_RETRY (STOP)` |
+ | **T16** | 実行が FAIL 終了した後、消費されたスロットの返却を要求 | `DENY (NO_AUTOMATIC_REFUND)` |
+ | **T17** | `expires_at` の日時を超過した後にスロット予約を要求 | `DENY (RECORD_EXPIRED)` |
+-| **T18** | `record_status == EFFECTIVE` だが実行回数残量が0 | `DENY NEW RESERVATION` |
+-| **T19** | スロット予約済みだが、実行開始フェンスで対象 VM 識別子が不一致 | `START_DENIED (VM_MISMATCH)` |
+-| **T20** | 予約および開始状態の監査ログ整合性が検証不能 | `DENY / STOP (FAIL_CLOSED)` |
++| **T18** | `record_status == EFFECTIVE` だが実行回数残量が0（新規予約要求時） | `DENY (NO_REMAINING_SLOTS)` |
++| **T19** | スロット予約済みだが、LP-S または起動フェンスで対象 VM 識別子が不一致 | `START_DENIED (VM_MISMATCH)` |
++| **T20** | LP-S 通過後、プロセス起動前に取消/STOPが発生 | `PROCESS_LAUNCH_ABORTED (FAIL_CLOSED)` |
+ 
+ ---
+ 
+-## 9. 失効条件（Revocation Conditions）
+-
+-以下のいずれかの事象が発生した場合、当該判断記録は直ちに効力を失い（`EXPIRED` または `REVOKED`）、自動的に無効化されます：
+-1. 固定HEAD（`6b08251170265c444ce8957377e6bfca23b21fd7`）からのソースツリーの逸脱。
+-2. 対象パッケージの確定 SHA-256 不一致。
+-3. 実行範囲、テスト対象ファイル（39ファイル）、セキュリティ境界（ネットワーク・Socket隔離）の変更。
+-4. 対象 VM 環境の変更。
+-5. 承認された許容実行回数のスロット割当完了（新規予約不可）。
+-6. STOP 条件への抵触（STOP 発生時点で既存の承認はすべて執行停止）。
+-7. 有効期限（`expires_at`）の到来。
+-8. Human Owner による明示的な取消（Revocation）。
++## 9. 失効条件および終了規則（Revocation Conditions & Termination Rules）
++
++承認記録の失効・無効化、および実行可能スロットの終了は以下の規則に従って明確に区別して取り扱われます：
++
++### 9.1 判断記録の失効・無効化事由（Record Status -> REVOKED / EXPIRED / INVALID）
++以下のいずれかの事象が発生した場合、当該判断記録は直ちに効力を失い、自動的に無効化されます：
++1. 固定HEAD（`6b08251170265c444ce8957377e6bfca23b21fd7`）からのソースツリーの逸脱（`INVALID`）。
++2. 対象パッケージの確定 SHA-256 不一致（`INVALID`）。
++3. 実行範囲、テスト対象ファイル（39ファイル）、セキュリティ境界（ネットワーク・Socket隔離）の変更（`INVALID`）。
++4. 対象 VM 環境の変更（`INVALID`）。
++5. 有効期限（`expires_at`）の到来（`EXPIRED`: 時間的失効のみ）。
++6. STOP 条件への抵触（STOP 発生時点で既存の承認は執行停止）。
++7. Human Owner による明示的な取消（`REVOKED`）。
++
++### 9.2 スロット枯渇時の取扱（Record Status は不変、新規スロット予約のみ禁止）
++- 承認された許容実行回数のスロット割当が完了（`remaining_slots == 0`）した場合：
++  - **`record_status` は `EFFECTIVE` のまま維持され、`EXPIRED` や `REVOKED` に変質してはならない。**
++  - 単に新規スロット予約（LP-R）が `EXECUTION_LIMIT_NOT_EXCEEDED` 違反により拒絶（`DENY (NO_REMAINING_SLOTS)`）される。
++  - すでに予約済みの有効スロットが存在する場合、当該スロットは `START_ELIGIBLE` を評価して正常に実行開始できる。
+--- g1_d1_owner_decision_package_r1_4/11_INDEPENDENT_REVIEW_HANDOFF_R1_4.md	2026-10-26 04:04:58.198556482 +0900
++++ g1_d1_owner_decision_package_r1_5/11_INDEPENDENT_REVIEW_HANDOFF_R1_5.md	2026-10-26 10:33:24.026203496 +0900
+@@ -1,15 +1,14 @@
+-# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.4）
++# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.5）
+ 
+ ## 1. 独立再レビューの目的とスコープ
+ 
+-本ハンドオフ文書は、最小限是正された「**G1-D1 Human Owner Decision Package (R1.4)**」について、独立した技術レビュアーが R1.3 再レビューで検出された FND-ODP-007 の残存 3 点（FND-ODP-007-R13-A/B/C）の解消状況、および既存 7 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
++本ハンドオフ文書は、限定是正された「**G1-D1 Human Owner Decision Package (R1.5)**」について、独立した技術レビュアーが R1.4 再レビューで `PARTIAL` と判定された FND-ODP-007 の残存 2 点（**FND-ODP-007-R13-B**: 線形化開始点とプロセス起動の競合、**FND-ODP-007-R13-C**: 予約前後の適格性判定分離と状態整合性）の解消状況、および既存 7 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
+ 
+ ### レビュアーの責務
+-- FND-ODP-007-R13-A（判断区分の単一 Authority・整合性・15条件論理積）の是正検証。
+-- FND-ODP-007-R13-B（線形化予約境界・Execution Start Fence・競合フェイルクローズ）の是正検証。
+-- FND-ODP-007-R13-C（3層状態モデル分離・消費と失効の区別・自動返却禁止）の是正検証。
+-- 解決済み Finding（FND-ODP-001〜006, FND-ODP-008）に対する非退行性の検証。
+-- 静的反証ケース（T01〜T20）の判定期待値の整合性検証。
++- FND-ODP-007-R13-B（LP-R / LP-S の 2 つの線形化点分離、および Fenced Process Admission プロセス起動防御）の是正検証。
++- FND-ODP-007-R13-C（予約適格性 `RESERVATION_ELIGIBLE` と開始適格性 `START_ELIGIBLE` の分離、消費と失効の厳格分離、第9節の誤変質解消）の是正検証。
++- 解決済み Finding（FND-ODP-001〜006, FND-ODP-007-R13-A, FND-ODP-008）に対する非退行性の検証。
++- 静的反証ケース（T01〜T20）の判定期待値の論理的整合性検証。
+ - アーカイブ構造および内部ハッシュの完全性検証。
+ 
+ ---
+@@ -18,15 +17,14 @@
+ 
+ 独立レビュアーは、以下の各 Finding について個別に判定を実施してください：
+ 
+-### 2.1 残存3点の是正判定（Mandatory Review）
++### 2.1 残存2点の是正判定（Mandatory Review）
+ 
+ | Finding サブID | 重要度 | 重点審査内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-007-R13-A** | Major | `10_OWNER_DECISION_RECORD_TEMPLATE_R1_4.md` において、`owner_decision` が単一正本 Authority となり、`DECISION_DISPOSITION_CONSISTENT`（`decision_disposition == owner_decision`）が必須化され、発効判定式が**全 15 条件論理積**として正確に記述され、不一致時に即座に拒絶されるか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-007-R13-B** | Major | 適格性確認直後の取消・失効の割り込みを防ぐ線形化予約境界（`AUTHORIZATION_AND_RESERVATION_LINEARIZATION`）、および予約後・起動前の取消や STOP を防ぐ起動直前フェンス（`EXECUTION_START_FENCE`）が定義され、二重予約や競合順序不明がフェイルクローズとなっているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-007-R13-C** | Major | 「Decision Record Status（承認の有効性）」「Execution Slot Status（予約消費枠）」「Execution Attempt Status（実行試行）」の 3 層状態機械が分離され、回数消費が EXPIRED への誤変質を起こさず、自動返却禁止および二重開始禁止が確立されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
++| **FND-ODP-007-R13-B** | Major | `10_OWNER_DECISION_RECORD_TEMPLATE_R1_5.md` において、スロット予約線形化点（LP-R）と実行開始線形化点（LP-S）が明確に区別され、LP-S 後・OS プロセス起動直前における防護柵（`FENCED_PROCESS_ADMISSION`）が定義され、取消や STOP による不正なプロセス起動が多層で確実に阻止される規範的契約となっているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
++| **FND-ODP-007-R13-C** | Major | 適格性判定がスロット予約適格性（`RESERVATION_ELIGIBLE`: 全15条件）と実行開始適格性（`START_ELIGIBLE`: スロット単位の正当性・未消費性判定）に 2 段階分離され、スロット残数 0 到達時にも予約済みスロットの開始適格性が損なわれないよう論理矛盾が解消されているか。また、第 9 節の失効条件から「実行回数消費」が完全に除外され、`EXPIRED` が時間的失効のみを表すことが徹底されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+ 
+-### 2.2 既存解決済み7件の非退行性判定（Mandatory Non-regression）
++### 2.2 既存解決済み8件の非退行性判定（Mandatory Non-regression）
+ 
+ | Finding ID | 重要度 | 検証内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+@@ -36,34 +34,25 @@
+ | **FND-ODP-004** | Moderate | `--test-concurrency=1` が「同時実行テストファイル数上限」として正確に定義され、cgroup PID や非同期処理と分離されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-005** | Moderate | 診断実験（DEC-05/06）において、「無条件事前包括承認の禁止」と「実験開始前の Owner 明示承認必須」が矛盾なく定義されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-006** | Moderate | 過剰なゼロリスク断定がなく、DEC-01A 読取リスクが明記され、ホスト固有内部絶対パスが排除されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
++| **FND-ODP-007-R13-A** | Major | `owner_decision` が単一正本 Authority となり、`DECISION_DISPOSITION_CONSISTENT`（`decision_disposition == owner_decision`）の完全一致検証が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-008** | Moderate | STOP 再開 Gate において、Pre-approval（Phase A）、Owner Decision（Phase B）、Post-approval Eligibility（Phase C）の非循環 3 段階が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ 
+ ---
+ 
+ ## 3. 重点審査領域（Focus Areas）
+ 
+-### 3.1 Decision Authority & Consistency（判断権威と整合性）
+-- Owner 判断の Authority が `owner_decision` に一意化されていること。
+-- `decision_disposition` との値の不一致が `DECISION_INCONSISTENT / NO_EXECUTION_GRANT` として確実に拒絶されること。
+-- 真正な署名が存在していても `HOLD` や `REJECT` の場合は実行不可であること。
+-
+-### 3.2 Reservation Linearization & Fence Safety（予約線形化とフェンスの安全性）
+-- 最新の承認状態確認と実行スロット予約が単一のアトミックな線形化境界として扱われていること。
+-- 予約成功後であっても、実行開始直前のフェンス（`EXECUTION_START_FENCE`）で取消・STOP が検知された場合は起動が阻止されること。
++### 3.1 Two Linearization Points & Fenced Admission（2つの線形化点と起動防護）
++- スロット予約（LP-R）と実行開始（LP-S）が別個の線形化点として明確に定義されていること。
++- LP-S 通過後であっても、OS プロセス起動直前の防護柵（`FENCED_PROCESS_ADMISSION`）によって、取消・STOP が発生した場合の物理的プロセス起動が阻止されること。
+ - 予約済みスロットの二重割当・二重開始が禁止されていること。
+ 
++### 3.2 Two-Stage Eligibility Predicates & Slot Logic（2段階適格性判定とスロット論理）
++- スロット予約時の全 15 条件判定（`RESERVATION_ELIGIBLE`）と、実行開始時のスロット判定（`START_ELIGIBLE`）が分離されていること。
++- 予約済みスロットの実行開始時に、未割当スロット残数（`EXECUTION_LIMIT_NOT_EXCEEDED`）の再評価による自己矛盾が発生しないこと。
++- 実行回数の残量が 0 になったことによって Owner Record が `EXPIRED` に変質しないこと（第9節の失効条件からの完全除外）。
++
+ ### 3.3 State Machine Separation & Runtime Disclaimer（状態分離と実証境界）
+-- 承認記録自体の状態と、実行枠、実行試行の状態が混同されていないこと。
+-- 実行回数の消費を理由に Owner Record が `EXPIRED` に変質しないこと。
+-- 本契約が文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_NOT_VERIFIED`）であり、Runtime 実証済みと混同されていないこと。
++- 承認記録自体の状態、実行枠の状態、実行試行の状態が混同されていないこと。
++- 本契約が文書上の規範的契約定義（`DOCUMENTARY_CONTRACT_ONLY / RUNTIME_START_FENCING_NOT_VERIFIED`）であり、Runtime 実証済みと混同されていないこと。
+ 
+ ---
+-
+-## 4. レビュー結果の推奨判定基準
+-
+-独立レビュアーは、検証完了後に以下のいずれかのステータスを返却してください：
+-
+-1. **`OWNER_DECISION_PACKAGE_R1_4_REVIEW_PASS / READY_FOR_OWNER_DECISION`**:
+-   - FND-ODP-007-R13-A/B/C の 3 点がすべて `RESOLVED` であり、既存7件の非退行性が確認され、Human Owner の個別意思決定資料として提出を推奨する。
+-2. **`PACKAGE_DEFECT_DETECTED / REVISION_REQUIRED`**:
+-   - 未解決事項または新たな不整合が存在し、再修正を求める。
+--- g1_d1_owner_decision_package_r1_4/12_INPUT_PROVENANCE_R1_4.md	2026-10-26 04:05:10.026531934 +0900
++++ g1_d1_owner_decision_package_r1_5/12_INPUT_PROVENANCE_R1_5.md	2026-10-26 10:33:36.322092483 +0900
+@@ -1,22 +1,22 @@
+-# 12. 入力原本来歴と照合記録（Input Provenance R1.4）
++# 12. 入力原本来歴と照合記録（Input Provenance R1.5）
+ 
+ ## 1. 入力原本の完全性検証結果
+ 
+-本 R1.4 最小限是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
++本 R1.5 限定是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
+ 
+-### 1.1 R1.3 意思決定パッケージ（直接の是正対象）
++### 1.1 R1.4 意思決定パッケージ（直接の是正対象）
++- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_4_2026-10-26.tar.gz`
++- **期待 SHA-256**: `e1120c0a2f769f9a7c4138c9cf8ce18ffa1b7315c925c6141388dd194065e57a`
++- **実測 SHA-256**: `e1120c0a2f769f9a7c4138c9cf8ce18ffa1b7315c925c6141388dd194065e57a`
++- **期待バイトサイズ**: `79,039 bytes`
++- **実測バイトサイズ**: `79,039 bytes`
++- **検証ステータス**: **`MATCH (完全一致検証 PASS)`**
++- **内部完全性**: 内部 `SHA256SUMS.txt` 21 項目全件一致検証 PASS
++
++### 1.2 R1.3 意思決定パッケージ（先行原本）
+ - **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_3_2026-10-26.tar.gz`
+-- **期待 SHA-256**: `44edae4084bde625bc7c94e55930b3d0235c0134e0725e5bb8f68bc2477c4b8c`
+ - **実測 SHA-256**: `44edae4084bde625bc7c94e55930b3d0235c0134e0725e5bb8f68bc2477c4b8c`
+-- **期待バイトサイズ**: `62,633 bytes`
+ - **実測バイトサイズ**: `62,633 bytes`
+-- **検証ステータス**: **`MATCH (完全一致検証 PASS)`**
+-- **内部完全性**: 内部 `SHA256SUMS.txt` 19 項目全件一致検証 PASS
+-
+-### 1.2 R1.2 意思決定パッケージ（比較用原本）
+-- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_2_2026-10-26.tar.gz`
+-- **実測 SHA-256**: `4bcd9d4c57b8e485f5c71ced8d9ef4aef1716f40049ed7400a68e715320654a1`
+-- **実測バイトサイズ**: `50,454 bytes`
+ - **検証ステータス**: 完全一致確認 PASS
+ 
+ ### 1.3 上位の再試験計画 R1.3
