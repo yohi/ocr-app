@@ -46,6 +46,32 @@ function testRejectedMutation(name, { env, checkHead, fetchOpenThreads, threadHo
     });
   });
 }
+
+async function runHeadMutationScenario(checkHead, threadCount = 1) {
+  let headChecks = 0;
+  let mutationCalls = 0;
+  const exitCode = await withTempDir('ocr-thread-head-mutation-', async root => run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
+    token: 'offline-token',
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
+    fetchOpenThreads: async () => Array.from({ length: threadCount }, (_, index) => ({
+      id: `thread-${index + 1}`, path: 'changed.js', line: 1, comments: [],
+    })),
+    threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
+    authorizeBeforeMutation: async () => true,
+    checkHead: async () => {
+      headChecks++;
+      return checkHead(headChecks);
+    },
+    graphql: async (_token, query) => {
+      mutationCalls++;
+      return query.includes('resolveReviewThread')
+        ? { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } }
+        : { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
+    },
+  }));
+  return { exitCode, headChecks, mutationCalls };
+}
 import {
   createConfig,
   fetchAllOpenThreads,
@@ -1187,85 +1213,18 @@ test('shadow reports HTTP and JSON fetch failures safely', async t => {
 // moved to top
 
 test('HEAD verification allows mutation when expected and current HEAD match', async () => {
-  await withTempDir('ocr-thread-head-match-', async root => {
-    let headChecks = 0;
-    let mutationCalls = 0;
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => { headChecks++; return EXPECTED_HEAD; },
-      graphql: async (_token, query) => {
-        mutationCalls++;
-        return query.includes('resolveReviewThread')
-          ? { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } }
-          : { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
-      },
-    });
-
-    assert.equal(exitCode, 0);
-    assert.equal(headChecks, 2); // Once before reply, once before resolve
-    assert.equal(mutationCalls, 2);
-  });
+  const result = await runHeadMutationScenario(() => EXPECTED_HEAD);
+  assert.deepEqual(result, { exitCode: 0, headChecks: 2, mutationCalls: 2 });
 });
 
 test('HEAD verification rejects reply and resolve when HEAD changes before reply', async () => {
-  await withTempDir('ocr-thread-head-reply-change-', async root => {
-    let headChecks = 0;
-    let mutationCalls = 0;
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [
-        { id: 'thread-1', path: 'changed.js', line: 1, comments: [] },
-        { id: 'thread-2', path: 'changed.js', line: 1, comments: [] },
-      ],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => { headChecks++; return OTHER_HEAD; },
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(headChecks, 1);
-    assert.equal(mutationCalls, 0);
-  });
+  const result = await runHeadMutationScenario(() => OTHER_HEAD, 2);
+  assert.deepEqual(result, { exitCode: 1, headChecks: 1, mutationCalls: 0 });
 });
 
 test('HEAD verification rejects resolve when HEAD changes after reply but before resolve', async () => {
-  await withTempDir('ocr-thread-head-resolve-change-', async root => {
-    let headChecks = 0;
-    let mutationCalls = 0;
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [
-        { id: 'thread-1', path: 'changed.js', line: 1, comments: [] },
-        { id: 'thread-2', path: 'changed.js', line: 1, comments: [] },
-      ],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => {
-        headChecks++;
-        return headChecks === 1 ? EXPECTED_HEAD : OTHER_HEAD;
-      },
-      graphql: async (_token, query) => {
-        mutationCalls++;
-        return query.includes('resolveReviewThread')
-          ? { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } }
-          : { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
-      },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(headChecks, 2);
-    assert.equal(mutationCalls, 1); // Only reply executed, resolve prohibited
-  });
+  const result = await runHeadMutationScenario(check => check === 1 ? EXPECTED_HEAD : OTHER_HEAD, 2);
+  assert.deepEqual(result, { exitCode: 1, headChecks: 2, mutationCalls: 1 });
 });
 
 testRejectedMutation('HEAD verification prohibits mutation when HEAD fetch fails', {
@@ -1320,32 +1279,9 @@ testRejectedMutation('shadow rejects mutation and exits non-zero when EXPECTED_S
 });
 
 test('HEAD verification rejects resolve when HEAD fetch fails before resolve', async () => {
-  await withTempDir('ocr-thread-head-resolve-fetch-fail-', async root => {
-    let headChecks = 0;
-    let mutationCalls = 0;
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => {
-        headChecks++;
-        if (headChecks === 1) return EXPECTED_HEAD;
-        throw new Error('network failed on resolve check');
-      },
-      graphql: async (_token, query) => {
-        mutationCalls++;
-        if (query.includes('addPullRequestReviewThreadReply')) {
-          return { data: { addPullRequestReviewThreadReply: { comment: { id: 'reply-1' } } } };
-        }
-        return { data: { resolveReviewThread: { thread: { id: 'thread-1', isResolved: true } } } };
-      },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(headChecks, 2);
-    assert.equal(mutationCalls, 1); // Reply succeeded, resolve was rejected before mutation
+  const result = await runHeadMutationScenario(check => {
+    if (check === 1) return EXPECTED_HEAD;
+    throw new Error('network failed on resolve check');
   });
+  assert.deepEqual(result, { exitCode: 1, headChecks: 2, mutationCalls: 1 });
 });
