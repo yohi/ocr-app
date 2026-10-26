@@ -444,7 +444,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
   };
 
   const verifyHead = async () => {
-    if (!env.EXPECTED_SHA) return;
+    if (!strictGraphqlFailure && !env.EXPECTED_SHA) return;
     const shaPattern = /^[0-9a-f]{40}$/i;
     if (typeof env.EXPECTED_SHA !== 'string' || !shaPattern.test(env.EXPECTED_SHA)) {
       throw new Error('HEAD_VALIDATION_FAILED');

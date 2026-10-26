@@ -22,7 +22,8 @@ for (const mode of ['off', 'shadow']) {
       const exitCode = await run({
         args: ['--repo', 'OWNER/REPO', '--pr', '123', '--target-dir', root, '--auto-resolve'],
         token: 'target-token',
-        env: { DECISION_ROUTING_MODE: mode, TARGET_REPO: mode === 'shadow' ? 'owner/repo' : undefined },
+        env: { DECISION_ROUTING_MODE: mode, TARGET_REPO: mode === 'shadow' ? 'owner/repo' : undefined, EXPECTED_SHA: 'a'.repeat(40) },
+        checkHead: async () => 'a'.repeat(40),
         fetchOpenThreads: async ({ owner, name }) => {
           assert.equal(owner, 'OWNER');
           assert.equal(name, 'REPO');
@@ -162,7 +163,8 @@ test('shadow GraphQL mutation failure produces a failing Check conclusion offlin
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
       token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: 'a'.repeat(40) },
+      checkHead: async () => 'a'.repeat(40),
       fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
       threadHost: async () => {
         hostCalls++;
