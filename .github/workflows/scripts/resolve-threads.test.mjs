@@ -10,6 +10,42 @@ import { runThreadHost } from './antigravity-host.mjs';
 
 const EXPECTED_HEAD = 'a'.repeat(40);
 const OTHER_HEAD = 'b'.repeat(40);
+
+function withTempDir(prefix, callback) {
+  const root = mkdtempSync(join(tmpdir(), prefix));
+  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
+  return Promise.resolve()
+    .then(() => callback(root))
+    .finally(() => {
+      rmSync(root, { recursive: true, force: true });
+    });
+}
+
+function testRejectedMutation(name, { env, checkHead, fetchOpenThreads, threadHost, expectedHostCalls = 1 }) {
+  test(name, async () => {
+    await withTempDir('ocr-thread-mutation-rejected-', async root => {
+      let hostCalls = 0;
+      let mutationCalls = 0;
+      const exitCode = await run({
+        args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
+        token: 'offline-token',
+        env,
+        fetchOpenThreads: fetchOpenThreads ?? (async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }]),
+        threadHost: async () => {
+          hostCalls++;
+          return threadHost ? threadHost() : { status: 'success', decision: 'resolve', reason: 'fixed' };
+        },
+        authorizeBeforeMutation: async () => true,
+        checkHead,
+        graphql: async () => { mutationCalls++; return {}; },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.equal(hostCalls, expectedHostCalls);
+      assert.equal(mutationCalls, 0);
+    });
+  });
+}
 import {
   createConfig,
   fetchAllOpenThreads,
@@ -1151,11 +1187,9 @@ test('shadow reports HTTP and JSON fetch failures safely', async t => {
 // moved to top
 
 test('HEAD verification allows mutation when expected and current HEAD match', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-match-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let headChecks = 0;
-  let mutationCalls = 0;
-  try {
+  await withTempDir('ocr-thread-head-match-', async root => {
+    let headChecks = 0;
+    let mutationCalls = 0;
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
       token: 'offline-token',
@@ -1175,17 +1209,13 @@ test('HEAD verification allows mutation when expected and current HEAD match', a
     assert.equal(exitCode, 0);
     assert.equal(headChecks, 2); // Once before reply, once before resolve
     assert.equal(mutationCalls, 2);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test('HEAD verification rejects reply and resolve when HEAD changes before reply', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-reply-change-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let headChecks = 0;
-  let mutationCalls = 0;
-  try {
+  await withTempDir('ocr-thread-head-reply-change-', async root => {
+    let headChecks = 0;
+    let mutationCalls = 0;
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
       token: 'offline-token',
@@ -1203,17 +1233,13 @@ test('HEAD verification rejects reply and resolve when HEAD changes before reply
     assert.equal(exitCode, 1);
     assert.equal(headChecks, 1);
     assert.equal(mutationCalls, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
 test('HEAD verification rejects resolve when HEAD changes after reply but before resolve', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-resolve-change-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let headChecks = 0;
-  let mutationCalls = 0;
-  try {
+  await withTempDir('ocr-thread-head-resolve-change-', async root => {
+    let headChecks = 0;
+    let mutationCalls = 0;
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
       token: 'offline-token',
@@ -1239,106 +1265,31 @@ test('HEAD verification rejects resolve when HEAD changes after reply but before
     assert.equal(exitCode, 1);
     assert.equal(headChecks, 2);
     assert.equal(mutationCalls, 1); // Only reply executed, resolve prohibited
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });
 
-test('HEAD verification prohibits mutation when HEAD fetch fails', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-fetch-fail-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let mutationCalls = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => { throw new Error('API network failure'); },
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(mutationCalls, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('HEAD verification prohibits mutation when HEAD fetch fails', {
+  env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
+  checkHead: async () => { throw new Error('API network failure'); },
 });
 
-test('HEAD verification prohibits mutation when EXPECTED_SHA is malformed', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-malformed-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let mutationCalls = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: 'invalid-not-40-hex' },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => EXPECTED_HEAD,
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(mutationCalls, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('HEAD verification prohibits mutation when EXPECTED_SHA is malformed', {
+  env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: 'invalid-not-40-hex' },
+  checkHead: async () => EXPECTED_HEAD,
 });
 
-test('HEAD revalidation failure prevents processing subsequent threads', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-subsequent-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let hostCalls = 0;
-  let mutationCalls = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [
-        { id: 'thread-1', path: 'changed.js', line: 1, comments: [] },
-        { id: 'thread-2', path: 'changed.js', line: 1, comments: [] },
-      ],
-      threadHost: async () => { hostCalls++; return { status: 'success', decision: 'resolve', reason: 'fixed' }; },
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => OTHER_HEAD,
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(hostCalls, 1); // Second thread is never evaluated by host
-    assert.equal(mutationCalls, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('HEAD revalidation failure prevents processing subsequent threads', {
+  env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: EXPECTED_HEAD },
+  fetchOpenThreads: async () => [
+    { id: 'thread-1', path: 'changed.js', line: 1, comments: [] },
+    { id: 'thread-2', path: 'changed.js', line: 1, comments: [] },
+  ],
+  checkHead: async () => OTHER_HEAD,
 });
 
-test('off mode rejects mutation against stale HEAD when EXPECTED_SHA is provided', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-off-head-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let mutationCalls = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'off', EXPECTED_SHA: EXPECTED_HEAD },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => OTHER_HEAD,
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(mutationCalls, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('off mode rejects mutation against stale HEAD when EXPECTED_SHA is provided', {
+  env: { DECISION_ROUTING_MODE: 'off', EXPECTED_SHA: EXPECTED_HEAD },
+  checkHead: async () => OTHER_HEAD,
 });
 
 test('empty threads case does not invoke HEAD revalidation or mutations', async () => {
@@ -1358,62 +1309,20 @@ test('empty threads case does not invoke HEAD revalidation or mutations', async 
   assert.equal(mutationCalls, 0);
 });
 
-test('shadow rejects mutation and exits non-zero when EXPECTED_SHA is unset', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-shadow-no-expected-sha-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let mutationCalls = 0;
-  let headChecks = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => { headChecks++; return EXPECTED_HEAD; },
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(mutationCalls, 0);
-    assert.equal(headChecks, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('shadow rejects mutation and exits non-zero when EXPECTED_SHA is unset', {
+  env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
+  checkHead: async () => EXPECTED_HEAD,
 });
 
-test('shadow rejects mutation and exits non-zero when EXPECTED_SHA is empty string', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-shadow-empty-expected-sha-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let mutationCalls = 0;
-  let headChecks = 0;
-  try {
-    const exitCode = await run({
-      args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root],
-      token: 'offline-token',
-      env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: '' },
-      fetchOpenThreads: async () => [{ id: 'thread-1', path: 'changed.js', line: 1, comments: [] }],
-      threadHost: async () => ({ status: 'success', decision: 'resolve', reason: 'fixed' }),
-      authorizeBeforeMutation: async () => true,
-      checkHead: async () => { headChecks++; return EXPECTED_HEAD; },
-      graphql: async () => { mutationCalls++; return {}; },
-    });
-
-    assert.equal(exitCode, 1);
-    assert.equal(mutationCalls, 0);
-    assert.equal(headChecks, 0);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+testRejectedMutation('shadow rejects mutation and exits non-zero when EXPECTED_SHA is empty string', {
+  env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', EXPECTED_SHA: '' },
+  checkHead: async () => EXPECTED_HEAD,
 });
 
 test('HEAD verification rejects resolve when HEAD fetch fails before resolve', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'ocr-thread-head-resolve-fetch-fail-'));
-  writeFileSync(join(root, 'changed.js'), 'const fixed = true;\n');
-  let headChecks = 0;
-  let mutationCalls = 0;
-  try {
+  await withTempDir('ocr-thread-head-resolve-fetch-fail-', async root => {
+    let headChecks = 0;
+    let mutationCalls = 0;
     const exitCode = await run({
       args: ['--repo', 'owner/repo', '--pr', '123', '--target-dir', root, '--auto-resolve'],
       token: 'offline-token',
@@ -1438,7 +1347,5 @@ test('HEAD verification rejects resolve when HEAD fetch fails before resolve', a
     assert.equal(exitCode, 1);
     assert.equal(headChecks, 2);
     assert.equal(mutationCalls, 1); // Reply succeeded, resolve was rejected before mutation
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+  });
 });

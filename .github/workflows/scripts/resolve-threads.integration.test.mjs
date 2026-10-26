@@ -10,6 +10,30 @@ import { run } from './resolve-threads.mjs';
 import { runThreadHost } from './antigravity-host.mjs';
 import { updateCheckRun } from './update-check-run.mjs';
 
+async function assertFailingCheckRun({ resultStatus, resultPath, checkWritesRef }) {
+  const check = await updateCheckRun({
+    env: {
+      CONCLUSION: resultStatus === 0 ? 'success' : 'failure',
+      DECISION_ROUTING_MODE: 'shadow',
+      TARGET_REPO: 'owner/repo',
+      PR_NUMBER: '123',
+      CHECK_RUN_ID: '456',
+      GITHUB_TOKEN: 'offline-token',
+      RESULT_PATH: resultPath,
+      DETAILS_URL: 'https://github.com/owner/central/actions/runs/789',
+    },
+    fetchImpl: async (url, options) => {
+      assert.equal(url, 'https://api.github.com/repos/owner/repo/check-runs/456');
+      assert.equal(options.method, 'PATCH');
+      assert.equal(JSON.parse(options.body).conclusion, 'failure');
+      checkWritesRef.count++;
+      return { ok: true };
+    },
+  });
+  assert.equal(check.conclusion, 'failure');
+  assert.equal(checkWritesRef.count, 1);
+}
+
 for (const mode of ['off', 'shadow']) {
   test(`${mode} real thread Host preserves authorized reply and explicit auto-resolve`, async () => {
     const root = mkdtempSync(join(tmpdir(), 'ocr-thread-success-'));
@@ -129,25 +153,12 @@ test('actual resolver CLI denial fails the Check despite a successful main revie
     writeFileSync(resultPath, JSON.stringify({
       schema_version: '1.0', mode: 'review', status: 'success', coverage: 1, findings: [], message: '',
     }));
-    let checkWrites = 0;
-    const check = await updateCheckRun({
-      env: {
-        // Model the workflow's job.status mapping after the non-continue-on-error CLI step.
-        CONCLUSION: result.status === 0 ? 'success' : 'failure',
-        DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', PR_NUMBER: '123',
-        CHECK_RUN_ID: '456', GITHUB_TOKEN: 'offline-token', RESULT_PATH: resultPath,
-        DETAILS_URL: 'https://github.com/owner/central/actions/runs/789',
-      },
-      fetchImpl: async (url, options) => {
-        assert.equal(url, 'https://api.github.com/repos/owner/repo/check-runs/456');
-        assert.equal(options.method, 'PATCH');
-        assert.equal(JSON.parse(options.body).conclusion, 'failure');
-        checkWrites++;
-        return { ok: true };
-      },
+    const checkWritesRef = { count: 0 };
+    await assertFailingCheckRun({
+      resultStatus: result.status,
+      resultPath,
+      checkWritesRef,
     });
-    assert.equal(check.conclusion, 'failure');
-    assert.equal(checkWrites, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -185,24 +196,12 @@ test('shadow GraphQL mutation failure produces a failing Check conclusion offlin
     writeFileSync(resultPath, JSON.stringify({
       schema_version: '1.0', mode: 'review', status: 'success', coverage: 1, findings: [], message: '',
     }));
-    const check = await updateCheckRun({
-      env: {
-        CONCLUSION: exitCode === 0 ? 'success' : 'failure',
-        DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo', PR_NUMBER: '123',
-        CHECK_RUN_ID: '456', GITHUB_TOKEN: 'offline-token', RESULT_PATH: resultPath,
-        DETAILS_URL: 'https://github.com/owner/central/actions/runs/789',
-      },
-      fetchImpl: async (url, options) => {
-        assert.equal(url, 'https://api.github.com/repos/owner/repo/check-runs/456');
-        assert.equal(options.method, 'PATCH');
-        assert.equal(JSON.parse(options.body).conclusion, 'failure');
-        checkWrites++;
-        return { ok: true };
-      },
+    const checkWritesRef = { count: 0 };
+    await assertFailingCheckRun({
+      resultStatus: exitCode,
+      resultPath,
+      checkWritesRef,
     });
-
-    assert.equal(check.conclusion, 'failure');
-    assert.equal(checkWrites, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
