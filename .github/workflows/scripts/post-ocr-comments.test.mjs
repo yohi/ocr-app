@@ -975,7 +975,7 @@ test('shadow review posting stops before the GitHub mutation when fresh authoriz
   await assert.rejects(run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
-    env: { DECISION_ROUTING_MODE: 'shadow' },
+    env: { DECISION_ROUTING_MODE: 'shadow', TARGET_REPO: 'owner/repo' },
     authorizeBeforeMutation: async () => false,
   }), /ROUTING_ACTIVATION_DENIED/);
 
@@ -989,7 +989,7 @@ test('direct enforce adapter invocation remains denied without publisher authori
   await assert.rejects(run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
-    env: { DECISION_ROUTING_MODE: 'enforce' },
+    env: { DECISION_ROUTING_MODE: 'enforce', TARGET_REPO: 'owner/repo' },
   }), /ROUTING_ACTIVATION_DENIED/);
 
   assert.deepEqual(requests, []);
@@ -1002,7 +1002,7 @@ test('enforce adapter posts when the publisher supplies its post-Gate authorizat
   const exitCode = await run({
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
-    env: { DECISION_ROUTING_MODE: 'enforce' },
+    env: { DECISION_ROUTING_MODE: 'enforce', TARGET_REPO: 'owner/repo' },
     authorizeBeforeMutation: async () => true,
   });
 
@@ -1010,6 +1010,72 @@ test('enforce adapter posts when the publisher supplies its post-Gate authorizat
   assert.equal(requests.length, 1);
   assert.equal(requests[0].method, 'POST');
   assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
+});
+
+for (const { mode, repo, target, description } of [
+  { mode: 'shadow', repo: undefined, target: 'owner/repo', description: 'missing CLI repo' },
+  { mode: 'shadow', repo: 'other/repo', target: 'owner/repo', description: 'mismatched repos' },
+  { mode: 'shadow', repo: 'owner/repo', target: undefined, description: 'missing target' },
+  { mode: 'shadow', repo: 'owner/repo/extra', target: 'owner/repo/extra', description: 'malformed CLI repo' },
+  { mode: 'shadow', repo: 'owner/repo', target: 'bad target', description: 'malformed target repo' },
+  { mode: 'future-mode', repo: 'owner/repo', target: 'owner/repo', description: 'unknown mode' },
+]) {
+  test(`rejects ${description} before API calls despite an allowed callback`, async () => {
+    const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+    let apiCalls = 0;
+    let authorizationCalls = 0;
+
+    await assert.rejects(run({
+      args: [...(repo === undefined ? [] : ['--repo', repo]), '--pr', '123', '--result', resultPath],
+      token: 'test-token',
+      env: { DECISION_ROUTING_MODE: mode, TARGET_REPO: target },
+      authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
+      githubApi: async () => { apiCalls++; return { data: {}, status: 201 }; },
+    }));
+
+    assert.equal(apiCalls, 0);
+    assert.equal(authorizationCalls, 0);
+  });
+}
+
+test('allows case-insensitive repo equality in shadow and enforce modes', async t => {
+  for (const mode of ['shadow', 'enforce']) {
+    await t.test(mode, async () => {
+      const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+      const requests = [];
+      const exitCode = await run({
+        args: ['--repo', 'OWNER/REPO', '--pr', '123', '--result', resultPath],
+        token: 'test-token',
+        env: { DECISION_ROUTING_MODE: mode, TARGET_REPO: 'owner/repo' },
+        authorizeBeforeMutation: async () => true,
+        githubApi: async (method, path) => {
+          requests.push({ method, path });
+          return { data: { html_url: 'https://github.com/owner/repo/pull/123#issuecomment-1' }, status: 201 };
+        },
+      });
+
+      assert.equal(exitCode, 1);
+      assert.deepEqual(requests, [{ method: 'POST', path: '/issues/123/comments' }]);
+    });
+  }
+});
+
+test('off mode keeps legacy publisher behavior when TARGET_REPO differs', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'review failed' });
+  const requests = [];
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: { DECISION_ROUTING_MODE: 'off', TARGET_REPO: 'different/repo' },
+    authorizeBeforeMutation: async () => true,
+    githubApi: async (method, path) => {
+      requests.push({ method, path });
+      return { data: {}, status: 201 };
+    },
+  });
+
+  assert.equal(exitCode, 1);
+  assert.deepEqual(requests, [{ method: 'POST', path: '/issues/123/comments' }]);
 });
 
 test('rejects mismatched expected result digest before any GitHub request', async () => {
@@ -1062,7 +1128,7 @@ test('stops individual fallback and summary after fresh authorization denial', a
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
     expectedSha: 'head-sha',
-    env: { DECISION_ROUTING_MODE: 'enforce' },
+    env: { DECISION_ROUTING_MODE: 'enforce', TARGET_REPO: 'owner/repo' },
     authorizeBeforeMutation: async () => {
       authorizationCalls++;
       events.push({ authorization: authorizationCalls });
@@ -1106,7 +1172,7 @@ test('stops individual fallback after a HEAD mismatch', async () => {
     args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
     token: 'test-token',
     expectedSha: 'head-sha',
-    env: { DECISION_ROUTING_MODE: 'enforce' },
+    env: { DECISION_ROUTING_MODE: 'enforce', TARGET_REPO: 'owner/repo' },
     authorizeBeforeMutation: async () => { authorizationCalls++; return true; },
   });
 

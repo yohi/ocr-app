@@ -1,0 +1,540 @@
+$ node "--test" "--test-name-pattern=^incomplete features and unobserved security metadata never establish safe code$" ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+✔ incomplete features and unobserved security metadata never establish safe code (8.197113ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.633168
+
+$ node "--test" "--test-name-pattern=^allows only fully reviewable README markdown modifications as fast$" ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+✔ allows only fully reviewable README markdown modifications as fast (4.925446ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 104.174172
+
+$ node "--test" "--test-name-pattern=^allows an added allowlisted README markdown file as fast$" ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+✔ allows an added allowlisted README markdown file as fast (7.520803ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 104.771212
+
+$ node "--test" "--test-name-pattern=^deny paths override allow paths and code or mixed changes remain deep$" ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+✔ deny paths override allow paths and code or mixed changes remain deep (6.741298ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 104.64815
+
+$ node "--test" "--test-name-pattern=^rename, binary, executable/mode changes and unknown metadata remain deep$" ".github/workflows/scripts/classify-pr-review-risk.test.mjs"
+✔ rename, binary, executable/mode changes and unknown metadata remain deep (8.731855ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 110.804871
+
+$ node "--test" "--test-name-pattern=^enforce prepares a run-bound route and decision without a Decision API call when nothing is reviewable$" ".github/workflows/scripts/prepare-review-routing.test.mjs"
+✔ enforce prepares a run-bound route and decision without a Decision API call when nothing is reviewable (13.617602ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 243.96146
+
+$ node "--test" "--test-name-pattern=^Given enforce route with no reviewable files, When invoked, Then it returns trusted skipped without Host or model proof$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ Given enforce route with no reviewable files, When invoked, Then it returns trusted skipped without Host or model proof (4.898923ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 226.164681
+
+$ node "--test" "--test-name-pattern=^rejects invalid, incomplete, inherited, unknown, and oversized input rather than leaking it$" ".github/workflows/scripts/build-decision-state.test.mjs"
+✔ rejects invalid, incomplete, inherited, unknown, and oversized input rather than leaking it (3.524675ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 100.603123
+
+$ node "--test" "--test-name-pattern=^projects exactly the R4 §4\\.3 and §6\\.2 example state$" ".github/workflows/scripts/build-decision-state.test.mjs"
+✔ projects exactly the R4 §4.3 and §6.2 example state (4.092818ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 97.554114
+
+$ node "--test" "--test-name-pattern=^validator rejects inherited properties, unknown keys, and bogus outbound buckets$" ".github/workflows/scripts/build-decision-state.test.mjs"
+✔ validator rejects inherited properties, unknown keys, and bogus outbound buckets (1.97096ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 104.75969
+
+$ node "--test" "--test-name-pattern=^does not trust dispatch visibility and rejects checkout identity or head mismatch$" ".github/workflows/scripts/authorize-decision-egress.test.mjs"
+✔ does not trust dispatch visibility and rejects checkout identity or head mismatch (3.88444ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 105.758976
+
+$ node "--test" "--test-name-pattern=^HTTP 429 unavailable decision uses the local risk floor without raw error text$" ".github/workflows/scripts/select-review-model.test.mjs"
+✔ HTTP 429 unavailable decision uses the local risk floor without raw error text (4.689526ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 219.659042
+
+$ node "--test" "--test-name-pattern=^enforce requires explicit valid fallbackModels before spawning$" ".github/workflows/scripts/antigravity-host.test.mjs"
+✔ enforce requires explicit valid fallbackModels before spawning (6.302609ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 127.893794
+
+$ node "--test" "--test-name-pattern=^enforce fallbackModels array controls ordered fallback attempts and empty disables fallback$" ".github/workflows/scripts/antigravity-host.test.mjs"
+✔ enforce fallbackModels array controls ordered fallback attempts and empty disables fallback (14.122908ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 134.538872
+
+$ node "--test" "--test-name-pattern=^enforce observer records ordered fallback attempt sequence$" ".github/workflows/scripts/antigravity-host.test.mjs"
+✔ enforce observer records ordered fallback attempt sequence (9.737076ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 123.811735
+
+$ node "--test" "--test-name-pattern=^fallback success is sealed without impersonating the primary model$" ".github/workflows/scripts/ocr-routing-audit.test.mjs"
+✔ fallback success is sealed without impersonating the primary model (7.406633ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 234.766587
+
+$ node "--test" "--test-name-pattern=^primary failure falls back, seals audit, passes Gate, checks HEAD, uploads, and posts once$" ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+✔ primary failure falls back, seals audit, passes Gate, checks HEAD, uploads, and posts once (15.010865ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 254.353876
+
+$ node "--test" "--test-name-pattern=^production finalizer supplies the certified route and run path for a nonempty review$" ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+✔ production finalizer supplies the certified route and run path for a nonempty review (11.339085ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 245.237538
+
+$ node "--test" "--test-name-pattern=^routing artifact upload contains exactly the three public audit files$" ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+✔ routing artifact upload contains exactly the three public audit files (3.728927ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 239.688573
+
+$ node "--test" "--test-name-pattern=^upload, missing artifact, malformed result, scope, check-ID, and changed-HEAD failures do not post$" ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+✔ upload, missing artifact, malformed result, scope, check-ID, and changed-HEAD failures do not post (5.140051ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 158.933048
+
+$ node "--test" "--test-name-pattern=^rejects catalog self-endorsement without approved index evidence$" ".github/workflows/scripts/load-review-certification.test.mjs"
+✔ rejects catalog self-endorsement without approved index evidence (3.701892ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 113.851838
+
+$ node "--test" "--test-name-pattern=^publishing requires a fully matching sealed and delivered audit$" ".github/workflows/scripts/evaluate-routing-publish.test.mjs"
+✔ publishing requires a fully matching sealed and delivered audit (8.975447ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 229.275338
+
+$ node "--test" "--test-name-pattern=^production publisher never reports published before a failed real post$" ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+✔ production publisher never reports published before a failed real post (11.365614ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 255.646063
+
+$ node "--test" "--test-name-pattern=^zero-review normal skip is eligible but scope-gap skip is not$" ".github/workflows/scripts/evaluate-routing-publish.test.mjs"
+✔ zero-review normal skip is eligible but scope-gap skip is not (4.312022ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 227.946568
+
+$ node "--test" "--test-name-pattern=^enforce has one publish boundary and legacy posting is off or shadow only$" ".github/workflows/scripts/ocr-routing-workflow.test.mjs"
+✔ enforce has one publish boundary and legacy posting is off or shadow only (2.239718ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 105.570082
+
+$ node "--test" "--test-name-pattern=^off real thread Host preserves authorized reply and explicit auto-resolve$" ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+✔ off real thread Host preserves authorized reply and explicit auto-resolve (6.492795ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 120.813252
+
+$ node "--test" "--test-name-pattern=^shadow real thread Host preserves authorized reply and explicit auto-resolve$" ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+✔ shadow real thread Host preserves authorized reply and explicit auto-resolve (6.855813ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 120.768942
+
+$ node "--test" "--test-name-pattern=^direct enforce resolver invocation is blocked before fetching threads$" ".github/workflows/scripts/resolve-threads.test.mjs"
+ROUTING_ACTIVATION_DENIED
+✔ direct enforce resolver invocation is blocked before fetching threads (1.776435ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 93.512985
+
+$ node "--test" "--test-name-pattern=^final audit writer validates binding and seals final\\.json once with private modes$" ".github/workflows/scripts/ocr-routing-audit.test.mjs"
+✔ final audit writer validates binding and seals final.json once with private modes (6.395418ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 236.315852
+
+$ node "--test" "--test-name-pattern=^rechecks the PR head before posting and refuses stale review results$" ".github/workflows/scripts/post-ocr-comments.test.mjs"
+✔ rechecks the PR head before posting and refuses stale review results (11.379806ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 138.00527
+
+$ node "--test" "--test-name-pattern=^Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer (4.338118ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 234.243403
+
+$ node "--test" "--test-name-pattern=^production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs$" ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+✔ production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs (11.412146ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 247.940587
+
+$ node "--test" "--test-name-pattern=^never includes arbitrary review errors in enforce output$" ".github/workflows/scripts/update-check-run.test.mjs"
+▶ buildCheckRunUpdate
+  ✔ never includes arbitrary review errors in enforce output (1.693777ms)
+✔ buildCheckRunUpdate (3.586096ms)
+ℹ tests 1
+ℹ suites 1
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 109.420979
+
+$ node "--test" "--test-name-pattern=^run binding keeps canonical run ID and freezes runner identity$" ".github/workflows/scripts/prepare-review-routing.test.mjs"
+✔ run binding keeps canonical run ID and freezes runner identity (1.929487ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 232.305974
+
+$ node "--test" "--test-name-pattern=^route serializer emits the exact 15-key contract and writer seals the standalone route privately$" ".github/workflows/scripts/prepare-review-routing.test.mjs"
+✔ route serializer emits the exact 15-key contract and writer seals the standalone route privately (5.995123ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 235.258645
+
+$ node "--test" "--test-name-pattern=^Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned (4.682581ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 231.116516
+
+$ node "--test" "--test-name-pattern=^Given revoked fresh authority, When invoked, Then Host is not called and denial is fixed$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ Given revoked fresh authority, When invoked, Then Host is not called and denial is fixed (4.783654ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 235.089673
+
+$ node "--test" "--test-name-pattern=^Given a fake PATH agy and distinct attested executable, When enforce runs, Then only attested path is spawned$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ Given a fake PATH agy and distinct attested executable, When enforce runs, Then only attested path is spawned (9.68746ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 237.377976
+
+$ node "--test" "--test-name-pattern=^startup denial stops the complete offline pipeline before Host, upload, post, or thread effects$" ".github/workflows/scripts/routing-remediation.integration.test.mjs"
+✔ startup denial stops the complete offline pipeline before Host, upload, post, or thread effects (4.751403ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 253.080326
+
+$ node "--test" "--test-name-pattern=^shadow missing route cannot bypass freshly revoked activation$" ".github/workflows/scripts/run-routing-review.test.mjs"
+✔ shadow missing route cannot bypass freshly revoked activation (4.461887ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 228.724408
+
+$ node "--test" "--test-name-pattern=^production upload reauthorization accepts a normal zero-byte skip stream$" ".github/workflows/scripts/ocr-routing-entrypoints.test.mjs"
+✔ production upload reauthorization accepts a normal zero-byte skip stream (10.01963ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 255.000534
+
+$ node "--test" "--test-name-pattern=^real thread Host revoked authorization stops all threads with failure$" ".github/workflows/scripts/resolve-threads.test.mjs"
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+✔ real thread Host revoked authorization stops all threads with failure (6.899491ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 125.927296
+
+$ node "--test" "--test-name-pattern=^real thread Host unavailable authorization stops all threads with failure$" ".github/workflows/scripts/resolve-threads.test.mjs"
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+✔ real thread Host unavailable authorization stops all threads with failure (7.265035ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 128.453287
+
+$ node "--test" "--test-name-pattern=^real thread Host reauthorizes a retry and propagates revocation$" ".github/workflows/scripts/resolve-threads.test.mjs"
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+✔ real thread Host reauthorizes a retry and propagates revocation (10.384436ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 122.553304
+
+$ node "--test" "--test-name-pattern=^actual resolver CLI denial fails the Check despite a successful main review offline$" ".github/workflows/scripts/resolve-threads.integration.test.mjs"
+✔ actual resolver CLI denial fails the Check despite a successful main review offline (87.419398ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 203.857575
+
+$ node "--test" "--test-name-pattern=^shadow rejects CLI scope other/repo against owner/repo before fetching threads$" ".github/workflows/scripts/resolve-threads.test.mjs"
+ROUTING_ACTIVATION_DENIED
+✔ shadow rejects CLI scope other/repo against owner/repo before fetching threads (4.018512ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 118.853738
+
+$ node "--test" "--test-name-pattern=^requests only origin and verified HEAD using argument arrays$" ".github/workflows/scripts/read-checkout-identity.test.mjs"
+✔ requests only origin and verified HEAD using argument arrays (3.477416ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 107.079259

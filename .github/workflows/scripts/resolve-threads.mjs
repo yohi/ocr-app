@@ -16,6 +16,7 @@ import https from 'node:https';
 import { pathToFileURL } from 'node:url';
 import { runThreadHost } from './antigravity-host.mjs';
 import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs';
+import { fetchCurrentHead } from './check-pr-head.mjs';
 
 export class CliError extends Error {}
 
@@ -138,6 +139,9 @@ export function buildFetchThreadsQuery({ owner, name, prNumber, cursor = null })
             line
             originalLine
             comments(first: 50) {
+              pageInfo {
+                hasNextPage
+              }
               nodes {
                 id
                 body
@@ -191,7 +195,7 @@ export function extractCodeContext(targetDir, filePath) {
   }
 }
 
-export function executeGraphQLQuery(token, query) {
+export function executeGraphQLQuery(token, query, { strict = false } = {}) {
   return new Promise((resolveReq, rejectReq) => {
     const req = https.request({
       hostname: 'api.github.com',
@@ -208,10 +212,14 @@ export function executeGraphQLQuery(token, query) {
       res.on('data', chunk => data += chunk);
       res.on('error', rejectReq);
       res.on('end', () => {
+        if (strict && (!Number.isInteger(res.statusCode) || res.statusCode < 200 || res.statusCode >= 300)) {
+          rejectReq(new Error('GRAPHQL_HTTP_FAILED'));
+          return;
+        }
         try {
           resolveReq(JSON.parse(data));
         } catch (e) {
-          rejectReq(new Error(`Failed to parse GraphQL response: ${data}`));
+          rejectReq(strict ? new Error('GRAPHQL_RESPONSE_INVALID') : new Error(`Failed to parse GraphQL response: ${data}`));
         }
       });
     });
@@ -235,15 +243,129 @@ export function isOcrThread(thread) {
   return /^opencodereview-app(\[bot\])?$/i.test(login.trim());
 }
 
-export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
+function isPlainRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+function hasGraphqlErrors(response, strict) {
+  const errors = response?.errors;
+  if (!strict) return Boolean(errors);
+  return errors !== undefined && errors !== null && (!Array.isArray(errors) || errors.length > 0);
+}
+
+function requireNonEmptyString(value) {
+  if (typeof value !== 'string' || value.length === 0) throw new Error('THREAD_FETCH_FAILED');
+}
+
+function requireNullablePositiveInteger(value) {
+  if (value !== null && (!Number.isSafeInteger(value) || value < 1)) throw new Error('THREAD_FETCH_FAILED');
+}
+
+function validateReviewComment(comment) {
+  if (!isPlainRecord(comment)) throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(comment.id);
+  if (typeof comment.body !== 'string') throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(comment.createdAt);
+  if (!Object.hasOwn(comment, 'author')) throw new Error('THREAD_FETCH_FAILED');
+  if (comment.author !== null) {
+    if (!isPlainRecord(comment.author)) throw new Error('THREAD_FETCH_FAILED');
+    requireNonEmptyString(comment.author.login);
+  }
+}
+
+function validateReviewThread(thread) {
+  if (!isPlainRecord(thread)) throw new Error('THREAD_FETCH_FAILED');
+  requireNonEmptyString(thread.id);
+  if (typeof thread.isResolved !== 'boolean' || typeof thread.isOutdated !== 'boolean') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  requireNonEmptyString(thread.path);
+  if (!Object.hasOwn(thread, 'line') || !Object.hasOwn(thread, 'originalLine')) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  requireNullablePositiveInteger(thread.line);
+  requireNullablePositiveInteger(thread.originalLine);
+  if (!isPlainRecord(thread.comments) || !Array.isArray(thread.comments.nodes)) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  if (!isPlainRecord(thread.comments.pageInfo) || typeof thread.comments.pageInfo.hasNextPage !== 'boolean') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  if (thread.comments.pageInfo.hasNextPage) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  for (const comment of thread.comments.nodes) validateReviewComment(comment);
+}
+
+function validateReviewThreadPage(reviewThreads) {
+  if (!isPlainRecord(reviewThreads) || !Array.isArray(reviewThreads.nodes)
+    || !isPlainRecord(reviewThreads.pageInfo)
+    || typeof reviewThreads.pageInfo.hasNextPage !== 'boolean'
+    || !Object.hasOwn(reviewThreads.pageInfo, 'endCursor')) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  const { hasNextPage, endCursor } = reviewThreads.pageInfo;
+  if (hasNextPage) {
+    requireNonEmptyString(endCursor);
+  } else if (endCursor !== null && typeof endCursor !== 'string') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  for (const thread of reviewThreads.nodes) validateReviewThread(thread);
+}
+
+async function fetchAllOpenThreadsStrict({ owner, name, prNumber, token, graphql }) {
   const openThreads = [];
   let cursor = null;
+  let pageCount = 0;
+  const seenCursors = new Set();
 
   while (true) {
+    if (pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
     const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
-    const response = await executeGraphQLQuery(token, query);
+    const response = await graphql(token, query, { strict: true });
+    pageCount++;
 
-    if (response.errors) {
+    if (!isPlainRecord(response)) throw new Error('THREAD_FETCH_FAILED');
+    if (hasGraphqlErrors(response, true)) {
+      throw new Error('THREAD_FETCH_FAILED');
+    }
+
+    const reviewThreads = response.data?.repository?.pullRequest?.reviewThreads;
+    validateReviewThreadPage(reviewThreads);
+
+    for (const thread of reviewThreads.nodes) {
+      if (!thread.isResolved && isOcrThread(thread)) {
+        openThreads.push({
+          id: thread.id,
+          path: thread.path,
+          line: thread.line || thread.originalLine,
+          comments: thread.comments?.nodes || [],
+        });
+      }
+    }
+
+    if (!reviewThreads.pageInfo.hasNextPage) break;
+    const nextCursor = reviewThreads.pageInfo.endCursor;
+    if (seenCursors.has(nextCursor) || pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  return openThreads;
+}
+
+export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphql = executeGraphQLQuery, strictFailure = false }) {
+  if (strictFailure) {
+    return fetchAllOpenThreadsStrict({ owner, name, prNumber, token, graphql });
+  }
+
+  const openThreads = [];
+  let cursor = null;
+  while (true) {
+    const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
+    const response = await graphql(token, query);
+    if (hasGraphqlErrors(response, false)) {
       console.error('GraphQL Query Errors:', JSON.stringify(response.errors));
       break;
     }
@@ -266,17 +388,17 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token }) {
 
     if (reviewThreads.pageInfo?.hasNextPage && reviewThreads.pageInfo?.endCursor) {
       cursor = reviewThreads.pageInfo.endCursor;
-    } else {
-      break;
-    }
+    } else break;
   }
 
   return openThreads;
 }
 
 export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost,
-  env = process.env, authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
-  fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery } = {}) {
+  env = process.env, authorizeBeforeHost = () => reauthorizeRoutingMutation({ env }),
+  authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
+  fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery,
+  checkHead = fetchCurrentHead } = {}) {
   let config;
   try {
     config = createConfig(args, token);
@@ -288,13 +410,34 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     throw err;
   }
 
+  const routingMode = env.DECISION_ROUTING_MODE ?? 'off';
+  if (routingMode !== 'off') {
+    const repoPattern = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+    if (routingMode !== 'shadow' || typeof env.TARGET_REPO !== 'string'
+      || !repoPattern.test(config.repo) || !repoPattern.test(env.TARGET_REPO)
+      || config.repo.toLowerCase() !== env.TARGET_REPO.toLowerCase()) {
+      console.error('ROUTING_ACTIVATION_DENIED');
+      return 1;
+    }
+  }
+
+  const strictGraphqlFailure = routingMode === 'shadow';
   console.log(`Checking open review threads for PR #${config.prNumber} in ${config.repo}...`);
-  const openThreads = await fetchOpenThreads({
-    owner: config.owner,
-    name: config.name,
-    prNumber: config.prNumber,
-    token: config.token,
-  });
+  let openThreads;
+  try {
+    openThreads = await fetchOpenThreads({
+      owner: config.owner,
+      name: config.name,
+      prNumber: config.prNumber,
+      token: config.token,
+      graphql,
+      strictFailure: strictGraphqlFailure,
+    });
+  } catch (error) {
+    if (!strictGraphqlFailure) throw error;
+    console.error('THREAD_FETCH_FAILED');
+    return 1;
+  }
 
   console.log(`Found ${openThreads.length} unresolved review threads.`);
   if (openThreads.length === 0) {
@@ -303,6 +446,48 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
 
   let resolvedCount = 0;
   let authorizationDenied = false;
+  let operationFailed = false;
+  const authorizeHost = async () => {
+    try {
+      if (await authorizeBeforeHost() === true) return true;
+    } catch {
+      // Authority failures must not become a successful CLI completion.
+    }
+    authorizationDenied = true;
+    return false;
+  };
+  const authorizeMutation = async () => {
+    try {
+      if (await authorizeBeforeMutation() === true) return true;
+    } catch (error) {
+      if (!strictGraphqlFailure) throw error;
+      // An unavailable authority is a denial in shadow mode.
+    }
+    if (strictGraphqlFailure) authorizationDenied = true;
+    return false;
+  };
+
+  const verifyHead = async () => {
+    if (!strictGraphqlFailure && !env.EXPECTED_SHA) return;
+    const shaPattern = /^[0-9a-f]{40}$/i;
+    if (typeof env.EXPECTED_SHA !== 'string' || !shaPattern.test(env.EXPECTED_SHA)) {
+      throw new Error('HEAD_VALIDATION_FAILED');
+    }
+    let actualHead;
+    try {
+      actualHead = await checkHead({
+        token: config.token,
+        targetRepo: config.repo,
+        prNumber: config.prNumber,
+      });
+    } catch {
+      throw new Error('HEAD_VALIDATION_FAILED');
+    }
+    if (typeof actualHead !== 'string' || !shaPattern.test(actualHead) || actualHead.toLowerCase() !== env.EXPECTED_SHA.toLowerCase()) {
+      throw new Error('HEAD_MISMATCH');
+    }
+  };
+
   for (const thread of openThreads) {
     const codeSnippet = extractCodeContext(config.targetDir, thread.path);
     if (!codeSnippet) {
@@ -315,7 +500,12 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       prompt,
       cwd: config.targetDir,
       model: process.env.RESOLVE_LLM_MODEL || process.env.OCR_LLM_MODEL,
+      authorizeBeforeSpawn: authorizeHost,
     });
+    if (authorizationDenied) {
+      console.error('ROUTING_ACTIVATION_DENIED');
+      break;
+    }
 
     if (evaluation.status === 'success' && evaluation.decision === 'resolve') {
       console.log(`Thread ${thread.id} (${thread.path}:${thread.line}) evaluated as RESOLVED: ${evaluation.reason}`);
@@ -325,35 +515,69 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
         : `💡 HEADでの修正をLLMが確認しました。\n理由: ${evaluation.reason}\n\n※ スレッドの自動解決（resolveReviewThread）には明示的な --auto-resolve オプションまたはメンテナーの承認が必要です。\n\n---\n*Evaluated by OpenCodeReview*`;
 
       try {
-        if (await authorizeBeforeMutation() !== true) {
+        if (!await authorizeMutation()) {
           authorizationDenied = true;
           break;
         }
-        const replyResult = await graphql(config.token, buildReplyMutation(thread.id, replyBody));
-        if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
+        await verifyHead();
+        const replyQuery = buildReplyMutation(thread.id, replyBody);
+        const replyResult = strictGraphqlFailure
+          ? await graphql(config.token, replyQuery, { strict: true })
+          : await graphql(config.token, replyQuery);
+        if (strictGraphqlFailure) {
+          const replyId = replyResult?.data?.addPullRequestReviewThreadReply?.comment?.id;
+          if (!isPlainRecord(replyResult) || hasGraphqlErrors(replyResult, true)
+            || typeof replyId !== 'string' || replyId.length === 0) {
+            throw new Error('THREAD_MUTATION_FAILED');
+          }
+        } else if (replyResult.errors || !replyResult.data?.addPullRequestReviewThreadReply?.comment?.id) {
           throw new Error(`Reply mutation failed: ${JSON.stringify(replyResult.errors || replyResult)}`);
         }
 
         // Only invoke resolveReviewThread mutation when explicit --auto-resolve option is enabled
         if (config.autoResolve) {
-          if (await authorizeBeforeMutation() !== true) {
+          if (!await authorizeMutation()) {
             authorizationDenied = true;
             break;
           }
-          const resolveResult = await graphql(config.token, buildResolveMutation(thread.id));
-          if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
+          await verifyHead();
+          const resolveQuery = buildResolveMutation(thread.id);
+          const resolveResult = strictGraphqlFailure
+            ? await graphql(config.token, resolveQuery, { strict: true })
+            : await graphql(config.token, resolveQuery);
+          if (strictGraphqlFailure) {
+            const resultThread = resolveResult?.data?.resolveReviewThread?.thread;
+            if (!isPlainRecord(resolveResult) || hasGraphqlErrors(resolveResult, true)
+              || resultThread?.id !== thread.id || resultThread?.isResolved !== true) {
+              throw new Error('THREAD_MUTATION_FAILED');
+            }
+          } else if (resolveResult.errors || !resolveResult.data?.resolveReviewThread?.thread?.isResolved) {
             throw new Error(`Resolve mutation failed: ${JSON.stringify(resolveResult.errors || resolveResult)}`);
           }
           resolvedCount++;
         }
       } catch (err) {
+        if (strictGraphqlFailure && authorizationDenied) {
+          console.error('ROUTING_ACTIVATION_DENIED');
+          break;
+        }
+        if (err.message === 'HEAD_VALIDATION_FAILED' || err.message === 'HEAD_MISMATCH') {
+          operationFailed = true;
+          console.error(err.message);
+          break;
+        }
+        if (strictGraphqlFailure) {
+          operationFailed = true;
+          console.error('THREAD_MUTATION_FAILED');
+          break;
+        }
         console.error(`Failed to process thread ${thread.id}: ${err.message}`);
       }
     }
   }
 
   console.log(`Finished processing review threads. Auto-resolved ${resolvedCount} / ${openThreads.length} threads.`);
-  return authorizationDenied ? 1 : 0;
+  return authorizationDenied || operationFailed ? 1 : 0;
 }
 
 const executedDirectly = process.argv[1] !== undefined &&

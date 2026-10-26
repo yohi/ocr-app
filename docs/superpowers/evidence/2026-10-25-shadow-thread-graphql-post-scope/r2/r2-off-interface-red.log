@@ -1,0 +1,32 @@
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+✖ off resolver preserves legacy GraphQL fetch and mutation failure behavior (6.699681ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 133.986139
+
+✖ failing tests:
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:466:1
+✖ off resolver preserves legacy GraphQL fetch and mutation failure behavior (6.699681ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  3 !== 2
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:496:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

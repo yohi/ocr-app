@@ -1,0 +1,347 @@
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+THREAD_MUTATION_FAILED
+✔ off real thread Host preserves authorized reply and explicit auto-resolve (9.343635ms)
+✔ shadow real thread Host preserves authorized reply and explicit auto-resolve (1.943057ms)
+✔ actual resolver CLI denial fails the Check despite a successful main review offline (177.103443ms)
+✔ shadow GraphQL mutation failure produces a failing Check conclusion offline (6.289237ms)
+✔ production CLI rejects HTTP 500 with success-shaped GraphQL JSON before Host or mutation (54.075014ms)
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+✔ createConfig parses CLI args and token correctly (4.667057ms)
+✔ parseLlmResponse parses valid JSON with resolved boolean (0.554399ms)
+✔ parseLlmResponse handles invalid JSON by returning resolved: false (0.333292ms)
+✔ buildFetchThreadsQuery generates valid GraphQL query (0.234727ms)
+✔ buildReplyMutation formats mutation string correctly (0.24862ms)
+✔ buildResolveMutation formats mutation string correctly (0.173945ms)
+✔ extractCodeContext loads file snippet correctly (1.035762ms)
+✔ parseLlmResponse returns resolved: false for non-boolean resolved property like "false" or "true" (0.784287ms)
+✔ parseThreadHostResponse accepts only a valid explicit resolve decision (1.368058ms)
+✔ parseThreadHostResponse keeps malformed, missing, and ambiguous output unresolved (0.658493ms)
+✔ extractCodeContext prevents path traversal outside target directory (0.476282ms)
+✔ buildPrompt includes prompt injection protection and untrusted data tags (0.277436ms)
+✔ model selection prioritizes RESOLVE_LLM_MODEL over OCR_LLM_MODEL (0.142768ms)
+✔ isOcrThread correctly identifies opencodereview-app and opencodereview-app[bot] (0.480144ms)
+✔ shadow thread processing stops before replying when fresh authorization is revoked (3.448337ms)
+✔ shadow thread processing passes fresh authorization to the host before spawn (2.554888ms)
+✔ real thread Host revoked authorization stops all threads with failure (4.499685ms)
+✔ real thread Host unavailable authorization stops all threads with failure (0.881046ms)
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:null) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:undefined) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+✔ real thread Host reauthorizes a retry and propagates revocation (41.219253ms)
+✔ shadow rejects CLI scope other/repo against owner/repo before fetching threads (0.482881ms)
+✔ shadow rejects CLI scope owner/repo against undefined before fetching threads (4.372227ms)
+✔ shadow rejects CLI scope owner/repo/extra against owner/repo/extra before fetching threads (0.235348ms)
+✔ direct enforce resolver invocation is blocked before fetching threads (3.079551ms)
+✔ shadow resolver treats a valid empty GraphQL result as success (1.231546ms)
+✔ shadow resolver rejects GraphQL fetch errors before processing threads (0.386442ms)
+✔ shadow resolver discards first-page threads when a later page fails (3.484771ms)
+✔ shadow resolver rejects a GraphQL response missing review thread nodes (0.458598ms)
+✔ off resolver preserves legacy GraphQL fetch and mutation failure behavior (3.169012ms)
+✔ off resolver preserves legacy GraphQL pagination error as an empty successful result (0.487295ms)
+✔ shadow mutation authorization exception fails closed without a mutation (0.79724ms)
+✔ shadow resolver rejects GraphQL transport failure before starting a Host (0.328013ms)
+✔ shadow stops after reply-errors and reports failure (2.802454ms)
+✔ shadow stops after reply-missing and reports failure (0.979066ms)
+✔ shadow stops after reply-transport and reports failure (0.844391ms)
+✔ shadow stops after resolve-errors and reports failure (0.730512ms)
+✔ shadow stops after resolve-missing and reports failure (0.903903ms)
+✔ shadow stops after resolve-transport and reports failure (0.801479ms)
+✔ shadow rejects empty thread object before Host or mutation (0.648151ms)
+✔ shadow rejects array thread node before Host or mutation (0.234676ms)
+✔ shadow rejects missing thread ID before Host or mutation (0.194512ms)
+✔ shadow rejects empty thread ID before Host or mutation (0.135266ms)
+✔ shadow rejects non-boolean isResolved before Host or mutation (0.125826ms)
+✔ shadow rejects string true isResolved before Host or mutation (0.122292ms)
+✔ shadow rejects non-boolean isOutdated before Host or mutation (0.129203ms)
+✔ shadow rejects empty thread path before Host or mutation (0.131009ms)
+✔ shadow rejects non-positive thread line before Host or mutation (0.338607ms)
+✔ shadow rejects missing thread line before Host or mutation (0.199203ms)
+✔ shadow rejects fractional originalLine before Host or mutation (0.161379ms)
+✔ shadow rejects missing originalLine before Host or mutation (0.119578ms)
+✔ shadow rejects missing comments connection before Host or mutation (0.104087ms)
+✔ shadow rejects non-array comment nodes before Host or mutation (0.118422ms)
+✔ shadow rejects null comment node before Host or mutation (0.108523ms)
+✔ shadow rejects array comment node before Host or mutation (0.11015ms)
+✔ shadow rejects non-string comment ID before Host or mutation (0.109617ms)
+✔ shadow rejects empty comment ID before Host or mutation (0.117489ms)
+✔ shadow rejects non-string comment body before Host or mutation (0.15949ms)
+✔ shadow rejects missing comment timestamp before Host or mutation (0.125308ms)
+✔ shadow rejects non-object author before Host or mutation (0.111169ms)
+✔ shadow rejects missing author login before Host or mutation (0.104217ms)
+✔ shadow rejects non-string author login before Host or mutation (0.102561ms)
+✔ shadow rejects a null thread node even though the GraphQL connection can contain nullable items (0.19187ms)
+✔ shadow accepts author null and treats the comment as non-OCR (0.184062ms)
+✔ shadow validates resolved and non-OCR nodes before filtering them (1.597212ms)
+✔ shadow accepts an empty errors array with a valid empty thread page (0.226913ms)
+✔ shadow completes a production fetch, reply and auto-resolve with exact mutation results (0.903347ms)
+✔ shadow accepts empty comment body and nullable line fields (0.94399ms)
+✔ shadow rejects repeated pagination cursor and never passes partial threads to Host (0.758529ms)
+✔ shadow rejects an invalid node on a later page before passing earlier page threads to Host (0.739144ms)
+✔ shadow rejects null cursor while another page is required (0.468206ms)
+✔ shadow rejects numeric cursor while another page is required (0.149957ms)
+✔ shadow rejects empty cursor while another page is required (0.130389ms)
+✔ shadow rejects non-boolean hasNextPage (0.113245ms)
+✔ shadow rejects missing terminal cursor field (0.11325ms)
+✔ shadow rejects numeric terminal cursor (0.10493ms)
+✔ shadow accepts a valid end after exactly 200 pages (1.666458ms)
+✔ shadow fails at page 200 when another page is requested without fetching page 201 (2.620661ms)
+✔ production GraphQL fetch accepts HTTP 200 with a complete success-shaped JSON body (1.886668ms)
+✔ production GraphQL fetch rejects HTTP 500 even with a success-shaped JSON body (0.61972ms)
+✔ production GraphQL fetch rejects a non-integer 2xx status in shadow (0.562674ms)
+✔ production GraphQL reply rejects HTTP 500 success-shaped JSON and stops later threads (1.113004ms)
+✔ production GraphQL resolve rejects HTTP 500 success-shaped JSON and stops later threads (1.049408ms)
+✔ off preserves legacy handling of HTTP 500 success-shaped fetch and reply responses (1.552355ms)
+✔ shadow rejects numeric reply ID and stops before the next thread (1.18988ms)
+✔ shadow rejects object reply ID and stops before the next thread (0.849273ms)
+✔ shadow rejects empty reply ID and stops before the next thread (0.421849ms)
+✔ shadow rejects missing reply ID and stops before the next thread (2.576386ms)
+✔ shadow accepts an empty GraphQL errors array when reply success data is valid (1.139921ms)
+✔ shadow rejects resolve response with string isResolved (0.715897ms)
+✔ shadow rejects resolve response with numeric isResolved (0.38257ms)
+✔ shadow rejects resolve response with wrong thread ID (0.706189ms)
+✔ shadow rejects resolve response with non-string thread ID (0.756545ms)
+✔ shadow rejects resolve response with missing thread ID (0.782159ms)
+✔ shadow reports HTTP and JSON fetch failures safely (0.816198ms)
+ℹ tests 98
+ℹ suites 0
+ℹ pass 98
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 362.479509

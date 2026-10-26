@@ -7,6 +7,11 @@
 > remains **PARTIAL / NOT_ESTABLISHED**. Preserve the original logs as historical
 > evidence. See the [drift-remediation verification record](2026-10-22-routing-drift-remediation-g1.md)
 > for the subsequent fixes and their separately identified verification scope.
+>
+> **2026-10-24 follow-up:** Fresh fixed-source verification for the shadow thread authorization fixes is recorded
+> in [the 2026-10-24 G1 evidence](2026-10-24-shadow-thread-authorization-g1.md).
+> That record identifies its own tested commit, logs, source digest and approval limits;
+> it does not upgrade this historical record or establish complete G1 acceptance.
 
 ## 状態サマリ
 

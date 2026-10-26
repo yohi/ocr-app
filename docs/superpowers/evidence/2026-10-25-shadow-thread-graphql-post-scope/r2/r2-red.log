@@ -1,0 +1,1271 @@
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+THREAD_MUTATION_FAILED
+✔ off real thread Host preserves authorized reply and explicit auto-resolve (6.644251ms)
+✔ shadow real thread Host preserves authorized reply and explicit auto-resolve (1.375086ms)
+✔ actual resolver CLI denial fails the Check despite a successful main review offline (83.678317ms)
+✔ shadow GraphQL mutation failure produces a failing Check conclusion offline (0.903896ms)
+✖ production CLI rejects HTTP 500 with success-shaped GraphQL JSON before Host or mutation (85.58795ms)
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+✔ createConfig parses CLI args and token correctly (2.966023ms)
+✔ parseLlmResponse parses valid JSON with resolved boolean (0.397608ms)
+✔ parseLlmResponse handles invalid JSON by returning resolved: false (0.311123ms)
+✔ buildFetchThreadsQuery generates valid GraphQL query (0.21646ms)
+✔ buildReplyMutation formats mutation string correctly (0.22577ms)
+✔ buildResolveMutation formats mutation string correctly (0.156368ms)
+✔ extractCodeContext loads file snippet correctly (0.576858ms)
+✔ parseLlmResponse returns resolved: false for non-boolean resolved property like "false" or "true" (0.17629ms)
+✔ parseThreadHostResponse accepts only a valid explicit resolve decision (1.218333ms)
+✔ parseThreadHostResponse keeps malformed, missing, and ambiguous output unresolved (0.433781ms)
+✔ extractCodeContext prevents path traversal outside target directory (0.422681ms)
+✔ buildPrompt includes prompt injection protection and untrusted data tags (0.347701ms)
+✔ model selection prioritizes RESOLVE_LLM_MODEL over OCR_LLM_MODEL (0.141181ms)
+✔ isOcrThread correctly identifies opencodereview-app and opencodereview-app[bot] (0.326871ms)
+✔ shadow thread processing stops before replying when fresh authorization is revoked (2.479074ms)
+✔ shadow thread processing passes fresh authorization to the host before spawn (0.87592ms)
+✔ real thread Host revoked authorization stops all threads with failure (3.689059ms)
+✔ real thread Host unavailable authorization stops all threads with failure (0.730843ms)
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Failed to process thread thread-1: Reply mutation failed: [synthetic error redacted]
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+GraphQL Query Errors: [synthetic error redacted]
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+THREAD_MUTATION_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File  not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+File changed.js not found in target-repo; skipping thread thread-1
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:null) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: undefined
+THREAD_MUTATION_FAILED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 2 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+✔ real thread Host reauthorizes a retry and propagates revocation (16.524158ms)
+✔ shadow rejects CLI scope other/repo against owner/repo before fetching threads (0.461471ms)
+✔ shadow rejects CLI scope owner/repo against undefined before fetching threads (0.15516ms)
+✔ shadow rejects CLI scope owner/repo/extra against owner/repo/extra before fetching threads (0.146617ms)
+✔ direct enforce resolver invocation is blocked before fetching threads (0.248189ms)
+✔ shadow resolver treats a valid empty GraphQL result as success (2.389601ms)
+✔ shadow resolver rejects GraphQL fetch errors before processing threads (0.36829ms)
+✔ shadow resolver discards first-page threads when a later page fails (0.692693ms)
+✔ shadow resolver rejects a GraphQL response missing review thread nodes (0.321862ms)
+✔ off resolver preserves legacy GraphQL fetch and mutation failure behavior (0.808886ms)
+✔ off resolver preserves legacy GraphQL pagination error as an empty successful result (0.349023ms)
+✔ shadow mutation authorization exception fails closed without a mutation (0.695213ms)
+✔ shadow resolver rejects GraphQL transport failure before starting a Host (0.293584ms)
+✔ shadow stops after reply-errors and reports failure (0.850514ms)
+✔ shadow stops after reply-missing and reports failure (0.449647ms)
+✔ shadow stops after reply-transport and reports failure (0.381855ms)
+✔ shadow stops after resolve-errors and reports failure (0.382438ms)
+✔ shadow stops after resolve-missing and reports failure (0.401175ms)
+✔ shadow stops after resolve-transport and reports failure (0.383541ms)
+✖ shadow rejects empty thread object before Host or mutation (2.268281ms)
+✖ shadow rejects array thread node before Host or mutation (0.562944ms)
+✖ shadow rejects missing thread ID before Host or mutation (0.62005ms)
+✖ shadow rejects empty thread ID before Host or mutation (0.461229ms)
+✖ shadow rejects non-boolean isResolved before Host or mutation (0.338342ms)
+✖ shadow rejects string true isResolved before Host or mutation (0.303738ms)
+✖ shadow rejects non-boolean isOutdated before Host or mutation (0.420886ms)
+✖ shadow rejects empty thread path before Host or mutation (0.405935ms)
+✖ shadow rejects non-positive thread line before Host or mutation (0.395244ms)
+✖ shadow rejects missing thread line before Host or mutation (0.408361ms)
+✖ shadow rejects fractional originalLine before Host or mutation (0.364946ms)
+✖ shadow rejects missing originalLine before Host or mutation (0.336681ms)
+✖ shadow rejects missing comments connection before Host or mutation (0.216165ms)
+✖ shadow rejects non-array comment nodes before Host or mutation (0.194242ms)
+✖ shadow rejects null comment node before Host or mutation (0.191855ms)
+✖ shadow rejects array comment node before Host or mutation (0.194821ms)
+✖ shadow rejects non-string comment ID before Host or mutation (0.350125ms)
+✖ shadow rejects empty comment ID before Host or mutation (0.314743ms)
+✖ shadow rejects non-string comment body before Host or mutation (0.292453ms)
+✖ shadow rejects missing comment timestamp before Host or mutation (0.291802ms)
+✖ shadow rejects non-object author before Host or mutation (0.1918ms)
+✖ shadow rejects missing author login before Host or mutation (0.185769ms)
+✖ shadow rejects non-string author login before Host or mutation (0.178275ms)
+✔ shadow rejects a null thread node even though the GraphQL connection can contain nullable items (0.413067ms)
+✔ shadow accepts author null and treats the comment as non-OCR (0.18862ms)
+✖ shadow validates resolved and non-OCR nodes before filtering them (0.345202ms)
+✔ shadow accepts an empty errors array with a valid empty thread page (0.200961ms)
+✖ shadow completes a production fetch, reply and auto-resolve with exact mutation results (1.036495ms)
+✔ shadow accepts empty comment body and nullable line fields (0.579781ms)
+✖ shadow rejects repeated pagination cursor and never passes partial threads to Host (0.649907ms)
+✖ shadow rejects an invalid node on a later page before passing earlier page threads to Host (0.715995ms)
+✔ shadow rejects null cursor while another page is required (0.236975ms)
+✔ shadow rejects numeric cursor while another page is required (0.136978ms)
+✔ shadow rejects empty cursor while another page is required (0.108469ms)
+✔ shadow rejects non-boolean hasNextPage (0.110229ms)
+✖ shadow rejects missing terminal cursor field (1.390244ms)
+✖ shadow rejects numeric terminal cursor (0.346856ms)
+✔ shadow accepts a valid end after exactly 200 pages (0.722155ms)
+✖ shadow fails at page 200 when another page is requested without fetching page 201 (0.947232ms)
+✔ production GraphQL fetch accepts HTTP 200 with a complete success-shaped JSON body (1.372817ms)
+✖ production GraphQL fetch rejects HTTP 500 even with a success-shaped JSON body (0.40608ms)
+✖ production GraphQL fetch rejects a non-integer 2xx status in shadow (0.353724ms)
+✖ production GraphQL reply rejects HTTP 500 success-shaped JSON and stops later threads (1.16564ms)
+✖ production GraphQL resolve rejects HTTP 500 success-shaped JSON and stops later threads (0.998766ms)
+✔ off preserves legacy handling of HTTP 500 success-shaped fetch and reply responses (0.733864ms)
+✖ shadow rejects numeric reply ID and stops before the next thread (0.851308ms)
+✖ shadow rejects object reply ID and stops before the next thread (0.511444ms)
+✔ shadow rejects empty reply ID and stops before the next thread (0.559792ms)
+✔ shadow rejects missing reply ID and stops before the next thread (0.339603ms)
+✖ shadow accepts an empty GraphQL errors array when reply success data is valid (0.716142ms)
+✖ shadow rejects resolve response with string isResolved (0.77737ms)
+✖ shadow rejects resolve response with numeric isResolved (0.519241ms)
+✖ shadow rejects resolve response with wrong thread ID (0.492797ms)
+✖ shadow rejects resolve response with non-string thread ID (0.434088ms)
+✖ shadow rejects resolve response with missing thread ID (0.420652ms)
+✔ shadow reports HTTP and JSON fetch failures safely (0.569684ms)
+ℹ tests 98
+ℹ suites 0
+ℹ pass 55
+ℹ fail 43
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 305.947073
+
+✖ failing tests:
+
+test at .github/workflows/scripts/resolve-threads.integration.test.mjs:200:1
+✖ production CLI rejects HTTP 500 with success-shaped GraphQL JSON before Host or mutation (85.58795ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.integration.test.mjs:246:12)
+      at Test.runInAsyncScope (node:async_hooks:226:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects empty thread object before Host or mutation (2.268281ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects array thread node before Host or mutation (0.562944ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing thread ID before Host or mutation (0.62005ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects empty thread ID before Host or mutation (0.461229ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-boolean isResolved before Host or mutation (0.338342ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects string true isResolved before Host or mutation (0.303738ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-boolean isOutdated before Host or mutation (0.420886ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects empty thread path before Host or mutation (0.405935ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-positive thread line before Host or mutation (0.395244ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing thread line before Host or mutation (0.408361ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects fractional originalLine before Host or mutation (0.364946ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing originalLine before Host or mutation (0.336681ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing comments connection before Host or mutation (0.216165ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-array comment nodes before Host or mutation (0.194242ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects null comment node before Host or mutation (0.191855ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects array comment node before Host or mutation (0.194821ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-string comment ID before Host or mutation (0.350125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects empty comment ID before Host or mutation (0.314743ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-string comment body before Host or mutation (0.292453ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing comment timestamp before Host or mutation (0.291802ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-object author before Host or mutation (0.1918ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects missing author login before Host or mutation (0.185769ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:635:3
+✖ shadow rejects non-string author login before Host or mutation (0.178275ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:637:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:653:1
+✖ shadow validates resolved and non-OCR nodes before filtering them (0.345202ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:661:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:673:1
+✖ shadow completes a production fetch, reply and auto-resolve with exact mutation results (1.036495ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:696:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:731:1
+✖ shadow rejects repeated pagination cursor and never passes partial threads to Host (0.649907ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  3 !== 2
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:760:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 3,
+    expected: 2,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:768:1
+✖ shadow rejects an invalid node on a later page before passing earlier page threads to Host (0.715995ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:794:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:809:3
+✖ shadow rejects missing terminal cursor field (1.390244ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:811:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:809:3
+✖ shadow rejects numeric terminal cursor (0.346856ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+
+    {
+  +   exitCode: 0,
+  -   exitCode: 1,
+      hostCalls: 0,
+      mutationCalls: 0
+    }
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:811:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { exitCode: 0, hostCalls: 0, mutationCalls: 0 },
+    expected: { exitCode: 1, hostCalls: 0, mutationCalls: 0 },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:835:1
+✖ shadow fails at page 200 when another page is requested without fetching page 201 (0.947232ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  201 !== 200
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:856:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 201,
+    expected: 200,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:879:1
+✖ production GraphQL fetch rejects HTTP 500 even with a success-shaped JSON body (0.40608ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:892:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:897:1
+✖ production GraphQL fetch rejects a non-integer 2xx status in shadow (0.353724ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:905:10)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:909:3
+✖ production GraphQL reply rejects HTTP 500 success-shaped JSON and stops later threads (1.16564ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:940:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:909:3
+✖ production GraphQL resolve rejects HTTP 500 success-shaped JSON and stops later threads (0.998766ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:940:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:979:3
+✖ shadow rejects numeric reply ID and stops before the next thread (0.851308ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1000:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:979:3
+✖ shadow rejects object reply ID and stops before the next thread (0.511444ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1000:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1009:1
+✖ shadow accepts an empty GraphQL errors array when reply success data is valid (0.716142ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1028:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1043:3
+✖ shadow rejects resolve response with string isResolved (0.77737ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1068:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1043:3
+✖ shadow rejects resolve response with numeric isResolved (0.519241ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1068:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1043:3
+✖ shadow rejects resolve response with wrong thread ID (0.492797ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1068:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1043:3
+✖ shadow rejects resolve response with non-string thread ID (0.434088ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1068:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at .github/workflows/scripts/resolve-threads.test.mjs:1043:3
+✖ shadow rejects resolve response with missing thread ID (0.420652ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+  0 !== 1
+
+      at TestContext.<anonymous> (file:///home/y_ohi/program/private/ocr-app/.worktrees/fix-shadow-graphql-post-scope-guards/.github/workflows/scripts/resolve-threads.test.mjs:1068:14)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 0,
+    expected: 1,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

@@ -998,3 +998,12 @@ authorization or activation of `shadow/enforce`.
 | **RG-R1-001残余**（Minor） | 未push宣言が既存のGitHub commitと矛盾 | §15.2現行追補：`4df169f`はpush済み、当時の未書込は履歴、RG-R2はGitHub書込なし | `RESOLVED_IN_PROPOSAL`（独立R2再審査待ち） |
 
 **非変更**：RG-R1-003〜006の是正、R2 A〜D、R2-FND-001/003/005、R3-FND-001/002のproposal判定を維持。G0基本方針承認は個別運用認可でなく、G1/G2/G3/G4は`NOT_STARTED`。本改訂は実装・GitHub書込み・Decision API呼出し・shadow/enforce有効化を行わず、最終状態`REVISION_READY_FOR_INDEPENDENT_RECHECK`。本記録は独立レビューPASSを宣言しない。
+
+## 2026-10-25 Owner限定 A/B 実装候補の追補
+
+**適用状態**：Owner handoffに記された2026-10-25の限定契約承認に基づく候補実装範囲。これは設計差分の限定解除であり、独立レビュー、Gate受入、実運用権限、shadow/enforce activationを意味しない。従来の要件・除外は、以下の明記範囲だけを除き引き続き有効とする。
+
+- **A / `TARGET-NEW-001`**：`resolve-threads.mjs`と関連オフラインテストに限り、認可済み`shadow`のGraphQL thread fetch・pagination・reply・resolve失敗は非0終了とし、後続処理を止める。ページングが途中失敗した場合は部分threadを処理しない。正常な0件は成功。既存の再認可拒否はfail-closedを維持する。`off`のlegacy挙動、Host契約、モデル選択、OCR結果schema、workflow、Check Run更新、activation policyは変更対象外。
+- **B / `UNV-NEW-002`**：`post-ocr-comments.mjs`と関連オフラインテストに限り、`shadow`/`enforce`でGitHub APIアクセス前にCLI `--repo`と`TARGET_REPO`の整形式ASCII `owner/repo`値と大小文字無視の一致を検証する。不一致・欠落・不正形式・未知modeはfail-closedとし、注入callbackで回避できない。`off`挙動は変更しない。正規`publish-routing-review.mjs`のgateと同一対象repo引渡しを維持する。
+
+本追補は§10.7の`resolve-threads`非対象記述をAの限定範囲だけで上書きし、実装計画にあった`post-ocr-comments.mjs`の変更禁止をBの限定範囲だけで上書きする。その他の変更禁止・G0〜G4承認要件・過去Findingの状態を変えない。Candidateの上限は`CORRECTED_IN_CANDIDATE / INDEPENDENT_REVIEW_REQUIRED`であり、独立PASSまたはGate解除を自己宣言しない。

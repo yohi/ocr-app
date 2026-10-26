@@ -354,13 +354,25 @@ jobs:
             "$OCR_EXPECTED_REVIEWABLE_FILES" \
             "$RUNNER_TEMP/ocr-review-context.json"
 
-      - name: Resolve fixed review threads
+      - name: Revalidate PR head before thread resolution
+        id: validate-head-before-resolve
         if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && (env.DECISION_ROUTING_MODE == 'off' || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow'))
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
+        run: |
+          node self-repo/.github/workflows/scripts/check-pr-head.mjs
+
+      - name: Resolve fixed review threads
+        if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && (env.DECISION_ROUTING_MODE == 'off' || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow')) && steps.validate-head-before-resolve.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CENTRAL_GITHUB_TOKEN: ${{ github.token }}
           SELF_REPO_PATH: self-repo
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
+          EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
           RESOLVE_LLM_MODEL: ${{ vars.RESOLVE_LLM_MODEL || '' }}
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}

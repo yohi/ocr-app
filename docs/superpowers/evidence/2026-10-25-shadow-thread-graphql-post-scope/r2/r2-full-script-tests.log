@@ -1,0 +1,998 @@
+✔ runHost invokes agy and returns a validated review result (27.483926ms)
+✔ runHost sends large prompts through stdin instead of command arguments (5.053477ms)
+✔ runHost forwards live stderr progress without changing the JSON result (3.352804ms)
+✔ runHost sanitizes and bounds live stderr progress (30.34516ms)
+✔ runHost redacts OAuth token values from live stderr progress (6.949394ms)
+✔ runHost neutralizes GitHub Actions workflow commands in live stderr progress (2.600531ms)
+✔ runHost ignores progress sink failures (1.091115ms)
+✔ runHost does not forward stderr emitted after timeout (71.635574ms)
+✔ runHost does not flush buffered stderr after timeout settlement (40.848466ms)
+✔ runHost accepts review result without top-level message and defaults to empty string (1.926828ms)
+✔ runHost rejects review result with non-string top-level message (1.972353ms)
+✔ runHost unwraps agy CLI JSON envelope with string response (1.096662ms)
+✔ runHost unwraps agy CLI JSON envelope with markdown code block (2.052701ms)
+✔ runHost extracts envelope even when stdout contains prefix warnings or noise (3.997676ms)
+✔ runHost handles error status envelope from agy (2.483982ms)
+✔ runHost rejects malformed JSON as a sanitized failure (2.931627ms)
+✔ runHost rejects invalid severity and changed-line data (2.97458ms)
+✔ runHost times out without returning child output or secrets (5.336631ms)
+✔ runHost stops collecting output and escalates termination for a child that ignores SIGTERM (66.53743ms)
+✔ runHost sanitizes secrets from child errors and malformed output paths (0.692621ms)
+✔ runThreadHost accepts only an explicit resolve or keep decision (1.870534ms)
+✔ runThreadHost keeps malformed or ambiguous decisions unresolved (3.078556ms)
+✔ runThreadHost does not spawn when authorization is denied before spawn (0.241771ms)
+✔ resolveBatchLimits clamps invalid and excessive values (0.109282ms)
+✔ resolveTimeoutMs defaults to 5 minutes (300000ms) and respects environment variable (0.05194ms)
+✔ runHost retries on transient context canceled error and succeeds on subsequent attempt (4.560062ms)
+✔ runHost retries when headless command permission denial leaves an empty response (4.101583ms)
+✔ runHost does not retry on non-transient schema error (1.502926ms)
+✔ runHost falls back to the configured model after a capacity error (2.621651ms)
+✔ runHost falls back after a stalled primary host without retrying it (6.00987ms)
+✔ runHost does not retry a capacity failure after the fallback model also fails (3.279632ms)
+✔ runHost ignores a fallback model that normalizes to the primary model (1.948545ms)
+✔ enforce spawns the attested absolute executable while off and shadow retain agy lookup (5.464649ms)
+✔ enforce awaits asynchronous CLI identity before spawning (2.140126ms)
+✔ enforce without an attested executable fails without spawning (0.502495ms)
+✔ enforce requires explicit valid fallbackModels before spawning (0.754551ms)
+✔ enforce fallbackModels array controls ordered fallback attempts and empty disables fallback (3.681816ms)
+✔ enforce rechecks the attested CLI digest before each fallback spawn (1.46487ms)
+✔ routing stops before the next physical spawn when fresh authorization is revoked (1.626147ms)
+✔ attempt observer emits sanitized ordered events with exact CLI model arguments (1.643947ms)
+✔ attempt observer classifies a validated failed review as model_reported_failure (0.419152ms)
+✔ shadow observer errors are ignored and enforce observer errors fail closed (1.703922ms)
+✔ legacy mode retains environment fallback when fallbackModels is absent (2.889587ms)
+✔ enforce observer records timeout and spawn_failed results (6.047787ms)
+✔ enforce observer records ordered fallback attempt sequence (2.831042ms)
+✔ observer payload does not include stderr secrets or raw errors (1.550465ms)
+✔ normalizeAntigravityModel handles effort suffix and fallbacks (0.17705ms)
+✔ resolveModel prioritizes OCR_LLM_MODEL over ANTIGRAVITY_MODEL and defaults (0.081463ms)
+✔ resolvePrintTimeoutMs defaults independently of the host timeout (0.051685ms)
+✔ runHost passes --model flag to agy spawn args (1.747533ms)
+✔ runHost adds the trusted cwd as an absolute agy workspace (0.524657ms)
+✔ runHost keeps the agy print timeout below the host timeout by default (1.678752ms)
+✔ runHost invokes agy in a sandbox with non-interactive command approval (1.556053ms)
+✔ workflow executes only trusted workflow code and pinned tools (2.791525ms)
+✔ workflow installs OCR where the Antigravity shell can resolve it (0.752936ms)
+✔ pinned OCR package pattern accepts valid SemVer and rejects malformed versions (0.222379ms)
+✔ workflow prepares trusted review context before the context-only host (1.131653ms)
+✔ trusted markdown rules select only the configured documentation paths (1.446961ms)
+✔ workflow policy denies Antigravity tools after trusted context preparation (2.355453ms)
+✔ workflow uses the trusted Markdown rule for selection and delegation (0.285138ms)
+✔ workflow previews the checked out target repository and validates its result (0.460601ms)
+✔ external forks are checked before the app-token secret step (0.514554ms)
+✔ routing dependencies and decision secret are scoped to shadow/enforce preparation (0.837877ms)
+✔ enforce host call suppresses progress and check failure detail (0.318043ms)
+✔ authorizes a public repository only on exact trusted id and name match (4.679181ms)
+✔ classifies private as restricted (0.529016ms)
+✔ classifies internal as restricted (0.435879ms)
+✔ denies contradictory visibility as unknown (0.367716ms)
+✔ denies numeric ID mismatch (0.516141ms)
+✔ denies full_name mismatch (0.308811ms)
+✔ denies 403 response (0.449607ms)
+✔ denies 404 response (0.23972ms)
+✔ denies 5xx response (0.599556ms)
+✔ denies broken JSON response (0.483238ms)
+✔ denies timeout without leaking arbitrary error text (0.605691ms)
+✔ denies a hanging GitHub lookup after the request timeout (10000.178924ms)
+✔ does not trust dispatch visibility and rejects checkout identity or head mismatch (0.762615ms)
+✔ checkout mismatch denies egress without a Decision POST (0.273041ms)
+✔ denies an unapproved repository and absent or invalid Owner approval reference (0.348488ms)
+✔ denies malformed RunBinding fields without throwing (0.447443ms)
+✔ performs exactly one GET and never makes a downstream POST (0.253199ms)
+✔ startup step denies absent approvals and writes the exact false output (36.724817ms)
+✔ shadow and enforce startup authorize populated registries and write true exactly (75.038994ms)
+✔ central identity and authority reads use github token; target identity uses App token (4.446631ms)
+✔ off skips config reads, both GitHub GETs, and output writes (0.138722ms)
+✔ unknown mode rejects before config reads and output writes (0.149787ms)
+✔ missing target App token denies before identity GET and still writes false once (3.934317ms)
+✔ projects exactly the R4 §4.3 and §6.2 example state (1.508005ms)
+✔ uses exact count bucket boundaries (0.402121ms)
+✔ rejects invalid, incomplete, inherited, unknown, and oversized input rather than leaking it (0.422295ms)
+✔ validator rejects inherited properties, unknown keys, and bogus outbound buckets (0.195647ms)
+✔ validator rejects duplicate or unsorted outbound classification arrays (0.143305ms)
+✔ fetchCurrentHead reads the current PR head from GitHub (2.280172ms)
+✔ enforce HEAD CLI reports a fixed mismatch reason without raw errors (34.782757ms)
+✔ enforce HEAD CLI reports a fixed API exception reason without raw errors (40.715454ms)
+✔ run refuses to publish when the PR head differs from EXPECTED_SHA (0.445158ms)
+✔ parses owner/repository values without accepting malformed targets (4.389226ms)
+✔ marks same-repository pull requests internal and forks external (0.204054ms)
+✔ allows only fully reviewable README markdown modifications as fast (4.092171ms)
+✔ allows an added allowlisted README markdown file as fast (6.346185ms)
+✔ deny paths override allow paths and code or mixed changes remain deep (0.639773ms)
+✔ rename, binary, executable/mode changes and unknown metadata remain deep (0.592001ms)
+✔ incomplete features and unobserved security metadata never establish safe code (5.483519ms)
+✔ missing key denies without a request (1.203002ms)
+✔ denied grant is rejected before HTTP (0.218425ms)
+✔ stale run ID is rejected before HTTP (0.129041ms)
+✔ wrong run ID type is rejected before HTTP (0.123257ms)
+✔ wrong attempt type is rejected before HTTP (0.125493ms)
+✔ swapped attempt is rejected before HTTP (0.108611ms)
+✔ swapped HEAD is rejected before HTTP (0.079382ms)
+✔ wrong grant schema version is rejected before HTTP (0.070903ms)
+✔ extra state key is rejected before HTTP (0.100613ms)
+✔ invalid state enum is rejected before HTTP (0.138623ms)
+✔ posts the fixed free decision request once and normalizes success (2.409317ms)
+✔ timeout returns a sanitized failure with at most one request (0.393354ms)
+✔ HTTP 302 returns a sanitized failure with at most one request (3.458906ms)
+✔ HTTP 401 returns a sanitized failure with at most one request (0.126229ms)
+✔ HTTP 402 returns a sanitized failure with at most one request (0.095195ms)
+✔ HTTP 429 returns a sanitized failure with at most one request (0.062517ms)
+✔ HTTP 500 returns a sanitized failure with at most one request (0.053286ms)
+✔ HTTP 503 returns a sanitized failure with at most one request (0.057619ms)
+✔ malformed JSON text returns a sanitized failure with at most one request (0.126768ms)
+✔ wrong answer type returns a sanitized failure with at most one request (0.125714ms)
+✔ unknown choice returns a sanitized failure with at most one request (0.09636ms)
+✔ NaN serialized as null probability returns a sanitized failure with at most one request (0.088898ms)
+✔ out of range probability returns a sanitized failure with at most one request (0.092067ms)
+✔ non-unit probability sum returns a sanitized failure with at most one request (0.080861ms)
+✔ invalid optional confidence returns a sanitized failure with at most one request (0.071584ms)
+✔ filters paraphrased OCR findings already posted at the same changed location (6.967657ms)
+✔ does not suppress a similar comment from a different review bot (0.328079ms)
+✔ recognizes paraphrased local-link findings by their shared path and location (0.345967ms)
+✔ does not deduplicate comments from an outdated diff using original_line (0.237706ms)
+✔ does not deduplicate comments with conflicting boolean assertions (0.289508ms)
+✔ does not deduplicate against comments in resolved or outdated review threads (1.026921ms)
+✔ deduplicates against a bot comment in an unresolved current diff thread (0.489979ms)
+✔ publishing requires a fully matching sealed and delivered audit (4.367687ms)
+✔ scope gap blocks regardless of unrelated startup approval (0.232226ms)
+✔ zero-review normal skip is eligible but scope-gap skip is not (0.392983ms)
+✔ reviewable files require route validation even when no model is selected (0.131784ms)
+✔ publish gate rejects incomplete schemas and mismatched decision/audit fields (0.248041ms)
+✔ enforce Gate rejects absent or malformed result digest (0.132544ms)
+✔ publish gate requires a certified catalog model equal to the selected audit model (0.343621ms)
+✔ publish gate requires owner approval only for allowed egress (0.283966ms)
+✔ publish gate rejects skipped delivery and exact run binding mismatches (0.302768ms)
+✔ startup authorization is required for normal publication and skips (1.411801ms)
+✔ route validation rejects mismatches, invalid chains, and missing Host success (0.408808ms)
+✔ route strategy below risk floor or inconsistent with the decision is denied (0.148321ms)
+✔ fallback order cannot regress from fallback to primary (0.190171ms)
+✔ delivery, check run, and route constraints remain publication requirements (0.439822ms)
+✔ fast primary failure followed by allowed deep fallback is publishable (0.48157ms)
+✔ publish gate rejects a saved fallback outside the current certified route (0.176693ms)
+✔ parses paths containing spaces, tabs, and newlines using NUL framing (3.444916ms)
+✔ counts rename, deletion, copy, binary, symlink, submodule, and mode-only records (2.845507ms)
+✔ unknown and malformed Git records are rejected (0.944773ms)
+✔ extracts complete features from validated Git metadata even when no paths are reviewable (3.113069ms)
+✔ keeps Task 3 classification fail-closed and derives families and areas from both paths (1.923823ms)
+✔ missing raw mode or numstat is incomplete and remains deep risk (2.204518ms)
+✔ binary, symlink, submodule, executable, rename, and copy changes never resolve to fast (7.915342ms)
+▶ invalid refs, missing merge-base, and output overflow fail closed
+  ✔ rejects malformed SHA and base ref (0.665036ms)
+  ✔ missing merge-base yields incomplete deep-risk features (0.554699ms)
+  ✔ caps output size and fails closed (0.412017ms)
+✔ invalid refs, missing merge-base, and output overflow fail closed (5.607344ms)
+✔ suppresses an existence denial for a registered GitHub Actions runner label (1.954432ms)
+✔ suppresses a validity denial for a registered GitHub Actions runner label (1.283219ms)
+✔ suppresses a direct runner-context validity denial (0.193969ms)
+✔ keeps a valid operational warning about the registered runner (1.091648ms)
+✔ keeps a generic unsupported claim because it may describe a real limitation (0.426964ms)
+✔ keeps an existence denial about a container image (0.70458ms)
+✔ keeps an existence denial about repository runner-group eligibility (0.220378ms)
+✔ keeps a compound security finding that mentions the known label (0.280925ms)
+✔ suppresses a direct runner-label denial without requiring the full provider name (0.360189ms)
+✔ keeps an existence denial for an unregistered runner label (0.310162ms)
+✔ preserves non-suppressed findings and result metadata without mutating the input (0.235855ms)
+✔ returns an unchanged result when findings are absent (0.095676ms)
+✔ CLI filters the result file in place and reports suppressed rules (107.350936ms)
+✔ CLI exits non-zero and preserves malformed input (70.296163ms)
+[LLM Proxy] Listening on http://127.0.0.1:0 -> forwarding to http://127.0.0.1:37739/chat/completions
+✔ transformPayload converts role: "tool" and role: "function" to role: "user" (1.025835ms)
+✔ transformPayload caps max_completion_tokens based on MAX_COMPLETION_TOKENS env var (0.196585ms)
+[LLM Proxy] POST /chat/completions -> forwarding to 127.0.0.1:37739/chat/completions
+[LLM Proxy] Upstream response status: 200
+[LLM Proxy] Listening on http://127.0.0.1:0 -> forwarding to http://127.0.0.1:40819/openai/v1
+✔ createProxyServer intercepts and transforms request body before forwarding upstream (28.818602ms)
+[LLM Proxy] POST /chat/completions -> forwarding to 127.0.0.1:40819/openai/v1/chat/completions
+[LLM Proxy] Upstream response status: 200
+[LLM Proxy] Listening on http://127.0.0.1:0 -> forwarding to http://127.0.0.1:38103/openai/v1/chat/completions/?trace=1
+✔ createProxyServer correctly appends /chat/completions if targetUrl is a base URL (6.023538ms)
+[LLM Proxy] POST /chat/completions -> forwarding to 127.0.0.1:38103/openai/v1/chat/completions?trace=1
+[LLM Proxy] Upstream response status: 200
+[LLM Proxy] Listening on http://127.0.0.1:0 -> forwarding to http://127.0.0.1:40615/chat/completions
+✔ createProxyServer preserves query params and normalizes existing /chat/completions/ suffix without duplicating it (5.950783ms)
+[LLM Proxy Error Response Body (429)]: {"error":{"code":429,"message":"Resource has been exhausted (e.g. check quota).","status":"RESOURCE_EXHAUSTED"}}
+[LLM Proxy] POST /chat/completions -> forwarding to 127.0.0.1:40615/chat/completions
+[LLM Proxy] Upstream response status: 429
+✔ createProxyServer forwards accept-encoding as identity and preserves gzip error response without corrupting binary data (13.509307ms)
+✔ rejects catalog self-endorsement without approved index evidence (7.920564ms)
+✔ returns exactly resolver evidence for valid certification, capability dossier, and inventory approvals (11.324887ms)
+✔ rejects a model certification whose CLI evidence digest is not the approved inventory digest (2.980047ms)
+✔ rejects tampered bytes and expired or revoked owner approvals (8.805563ms)
+✔ rejects wrong model, tier, and version after refreshed evidence and approval digests (5.881812ms)
+✔ accepts the current repository approval when another repository shares the capability digest (8.52217ms)
+✔ accepts the active approval when an expired approval shares its repository and capability digest (4.082743ms)
+✔ rejects duplicate active approvals for the same capability digest and repository (4.465536ms)
+✔ rejects cross-repository certification, capability, and inventory approvals (3.812306ms)
+✔ rejects path traversal, absolute paths, and symlink evidence (5.791215ms)
+✔ rejects evidence files larger than 64 KiB (4.030815ms)
+✔ rejects duplicate inventory IDs after refreshing inventory and approval digests (0.929717ms)
+✔ rejects a wrong installed CLI binary digest (2.02289ms)
+✔ reads the installed executable identity and rejects target-checkout and swapped PATH executables (1.444791ms)
+✔ fails closed when CLI resolution or file reads fail (0.814086ms)
+✔ CLI inventory reports approved model IDs and no live provider capacity claim (0.867625ms)
+✔ preserves passed validation for matching result bytes (4.07267ms)
+✔ fails passed validation for missing or mismatching validator digest (0.87387ms)
+✔ does not promote non-passed validation (0.581958ms)
+✔ records null digest when result bytes are unavailable (0.415603ms)
+✔ decision record is strict, bound, and frozen (1.571054ms)
+✔ decision record rejects an invalid enum and malformed binding (1.722888ms)
+✔ decision writer creates private files once (1.478166ms)
+✔ attempt recorder rejects unknown events and does not persist catalog-external models (1.790097ms)
+✔ attempt recorder binds generated IDs and enforces attempts.ndjson mode (1.563691ms)
+✔ attempt recorder rejects startup and publication as non-Host events (1.394844ms)
+✔ attempt recorder rejects invalid run-attempt bindings and extra event keys (0.767016ms)
+✔ attempt recorder marks malformed events unavailable and throws only in enforce (0.684001ms)
+✔ final audit only identifies a validated single host success (14.715063ms)
+✔ final audit requires a complete Host chain without pre-publication fiction (6.392904ms)
+✔ fallback success is sealed without impersonating the primary model (2.163808ms)
+✔ route validation rejects out-of-chain models and unavailable bundle models (0.556642ms)
+✔ route validation accepts failed Host completion without completed attempts (0.199618ms)
+✔ route validation rejects completed attempts that regress from fallback to primary (0.281816ms)
+✔ skipped Host completion leaves the success model null (0.171467ms)
+✔ same-model retries remain distinct chain attempts while output model list is unique (0.865339ms)
+✔ zero-review skip permits an empty event chain (0.729191ms)
+✔ shadow successful review records completed, success, and executed models without enforce events (0.362258ms)
+✔ two successful Host completion events are rejected and cannot execute a model (0.74731ms)
+✔ nested feature scope gap is preserved in final audit (0.283571ms)
+✔ final audit validates repo and owner approval ref bounds (0.50294ms)
+✔ final audit writer validates binding and seals final.json once with private modes (1.116777ms)
+✔ final audit writer rejects a mismatched run binding (0.541673ms)
+✔ production off Host entrypoint runs without loading the routing catalog or preparation module (23.772305ms)
+✔ production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs (5.054372ms)
+✔ production finalizer supplies the certified route and run path for a nonempty review (3.152811ms)
+✔ production upload reauthorization accepts a normal zero-byte skip stream (1.97453ms)
+✔ production skip Gate uses fresh complete authority inputs and the real eligibility function (2.993551ms)
+✔ production publisher never reports published before a failed real post (3.093205ms)
+✔ production publisher reports success only after its single real posting adapter succeeds (1.69517ms)
+✔ routing artifact upload contains exactly the three public audit files (0.430074ms)
+✔ production failed post reaches the completed Check Run as PUBLISH_FAILED (2.895163ms)
+✔ production final HEAD revalidation failure reaches the Check Run as HEAD_CHANGED (1.174382ms)
+✔ final HEAD revalidation without a mismatch reason reports HEAD_VALIDATION_FAILED (0.867084ms)
+✔ production artifact delivery failure/artifact reports ROUTING_AUDIT_MISSING (1.601544ms)
+✔ production artifact delivery success/missing ID reports ROUTING_AUDIT_MISSING (2.105075ms)
+✔ Reauthorize routing audit upload suppresses untrusted filesystem diagnostics (0.961155ms)
+✔ Reauthorize routing audit upload suppresses untrusted json diagnostics (0.630304ms)
+✔ Reauthorize routing audit upload suppresses untrusted api diagnostics (0.802101ms)
+✔ Reauthorize routing audit upload suppresses untrusted code diagnostics (0.630716ms)
+✔ Evaluate routing publish eligibility suppresses untrusted filesystem diagnostics (0.468961ms)
+✔ Evaluate routing publish eligibility suppresses untrusted json diagnostics (0.5467ms)
+✔ Evaluate routing publish eligibility suppresses untrusted api diagnostics (0.576583ms)
+✔ Evaluate routing publish eligibility suppresses untrusted code diagnostics (0.571108ms)
+✔ publisher HEAD change after the workflow recheck reaches the Check Run as HEAD_CHANGED (1.117226ms)
+✔ a publisher entrypoint JSON failure emits only a fixed reason and reaches the Check Run (0.818102ms)
+✔ failed gate reason is retained when later publication steps are skipped (0.555562ms)
+✔ publisher failure with no output still reports PUBLISH_FAILED (0.525345ms)
+✔ shadow upload diagnostics retain their existing behavior (0.623257ms)
+✔ startup denial reaches the completed Check Run through actual startup outputs (2.066333ms)
+✔ startup failure without outputs has a fixed activation-denied fallback (0.563892ms)
+✔ startup fallback cannot replace the higher-priority ROUTING_AUDIT_MISSING reason (0.576898ms)
+✔ startup fallback cannot replace the higher-priority HEAD_CHANGED reason (0.427772ms)
+✔ startup fallback cannot replace the higher-priority HEAD_VALIDATION_FAILED reason (0.398321ms)
+✔ startup fallback cannot replace the higher-priority PUBLISH_FAILED reason (0.377524ms)
+✔ publisher HEAD retrieval failure reports HEAD_VALIDATION_FAILED without posting (1.289359ms)
+✔ Prepare dynamic routing contains enforce binding exceptions at the production boundary (1.141993ms)
+✔ Prepare dynamic routing contains enforce filesystem exceptions at the production boundary (0.814715ms)
+✔ Prepare dynamic routing contains enforce json exceptions at the production boundary (0.647376ms)
+✔ Prepare dynamic routing contains enforce api exceptions at the production boundary (0.55213ms)
+✔ Prepare dynamic routing retains shadow exception behavior (0.725963ms)
+✔ Prepare dynamic routing contains dependency import errors in enforce mode (0.775028ms)
+✔ Run Antigravity review host contains enforce binding exceptions at the production boundary (0.676425ms)
+✔ Run Antigravity review host contains enforce filesystem exceptions at the production boundary (0.640707ms)
+✔ Run Antigravity review host contains enforce json exceptions at the production boundary (0.608737ms)
+✔ Run Antigravity review host contains enforce api exceptions at the production boundary (0.663886ms)
+✔ Run Antigravity review host retains shadow exception behavior (0.689133ms)
+✔ Run Antigravity review host contains dependency import errors in enforce mode (0.609943ms)
+✔ Finalize routing audit contains enforce binding exceptions at the production boundary (0.579049ms)
+✔ Finalize routing audit contains enforce filesystem exceptions at the production boundary (0.596536ms)
+✔ Finalize routing audit contains enforce json exceptions at the production boundary (0.58995ms)
+✔ Finalize routing audit contains enforce api exceptions at the production boundary (0.638236ms)
+✔ Finalize routing audit retains shadow exception behavior (1.814625ms)
+✔ Finalize routing audit contains dependency import errors in enforce mode (0.683277ms)
+✔ Run Antigravity review host captures enforce git stderr before handling command failure (1.055248ms)
+✔ Run Antigravity review host captures enforce gh stderr before handling command failure (0.77545ms)
+✔ Finalize routing audit captures enforce git stderr before handling command failure (0.883787ms)
+✔ Finalize routing audit captures enforce gh stderr before handling command failure (0.671507ms)
+✔ production finalizer contains a missing decision after failed preparation (0.726668ms)
+✔ production preparation captures enforce source-manifest git stderr (0.817971ms)
+✔ off mode retains legacy Host and skips routing steps (5.920339ms)
+✔ shadow fallback requires startup approval and handles absent prepared route best-effort (6.144022ms)
+✔ non-off startup requires positive authorization and shadow does not ignore failure (0.548496ms)
+✔ routing review startup hashes the decision egress policy for authorization (0.310396ms)
+✔ routing evidence upload requires fresh upload authorization (0.540315ms)
+✔ enforce routing gate revalidates context and startup authorization before eligibility (0.560137ms)
+✔ finalizer binds validated-result step output to current raw bytes (4.200903ms)
+✔ enforce has one publish boundary and legacy posting is off or shadow only (0.772253ms)
+✔ always-run mutations are guarded by authorized startup (0.973834ms)
+✔ preserves the run id string and parses attempt once as number (9.66046ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "0" (0.853294ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "02" (0.223476ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "+2" (0.199989ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "2e1" (0.182892ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "9007199254740992" (0.208309ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT " 2" (0.186565ms)
+✔ rejects invalid GITHUB_RUN_ATTEMPT "2 " (0.216781ms)
+✔ rejects missing GITHUB_RUN_ID (0.299353ms)
+✔ rejects missing GITHUB_RUN_ATTEMPT (0.323625ms)
+✔ rejects missing COMMIT_SHA (0.20426ms)
+✔ rejects missing DECISION_ROUTING_MODE (0.16879ms)
+✔ rejects noncanonical run IDs (0.339793ms)
+✔ rejects mismatched serialized numeric types without coercion (0.66266ms)
+✔ accepts serialized grant fields without mode but validates mode when present (0.806451ms)
+✔ rejects differences in each run binding field (0.418874ms)
+✔ rejects empty and incomplete bindings (0.367632ms)
+✔ rejects run bindings with extra own keys or a non-plain prototype (1.551548ms)
+Skipped 1 duplicate review comment(s)
+No new review comments to post
+Posted Summary comment for 0 review comments
+✔ does not repost an equivalent OCR finding already in the PR review history (15.533188ms)
+Posted Summary comment for 0 review comments
+✔ posts a Summary issue comment when the comments array is empty (44.802197ms)
+Posted Summary comment for 0 review comments
+✔ posts an informative Summary when the review has no findings (6.881484ms)
+Posted Summary comment for 0 review comments
+✔ reports zero changed files without inventing file details (10.48732ms)
+✔ warns and returns zero when every comment is invalid (10.484175ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts only valid comments when the result contains invalid and valid elements (6.776127ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts a batch review when GitHub accepts the review request (4.358226ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts findings for a changed Markdown file through the normal review path (2.368519ms)
+Batch review failed; posting 2 comments individually
+Posted 2 review comments individually
+Posted Summary comment for 2 review comments
+✔ falls back to individual comments when GitHub rejects the batch review (7.923713ms)
+Batch review failed; posting 2 comments individually
+Failed to post individual review comment (HTTP 422)
+Failed to post 1 individual review comments
+✔ continues individual posting and returns one when an individual request fails (3.956767ms)
+✔ propagates a batch transport error without an individual fallback (3.127154ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ normalizes OCR-format comments (content, end_line) to body and line (2.052527ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ prefers body/line over content/end_line when both are present (4.63494ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ falls back to start_line when end_line is missing in OCR format (1.847468ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ skips comments with invalid line numbers (1.798686ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ skips OCR-format comments with invalid end_line or start_line (1.079557ms)
+Posted Summary comment for 0 review comments
+✔ exports the PR summary comment URL for the Check Run output (2.646902ms)
+Posted 2 review comments
+Posted Summary comment for 2 review comments
+✔ posts one Summary issue comment with generated counts and all valid findings (2.294275ms)
+Skipped 1 duplicate review comment(s)
+No new review comments to post
+Posted Summary comment for 0 review comments
+✔ posts a zero-finding Summary when every finding was already posted (2.841204ms)
+Skipped 1 duplicate review comment(s)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ summarizes only findings that remain after duplicate filtering (2.364845ms)
+Posted 2 review comments
+Posted Summary comment for 2 review comments
+✔ sorts Summary file rows by UTF-16 code unit regardless of input order (3.240526ms)
+No valid positions found for comments
+Posted Summary comment for 1 review comments
+✔ posts a Summary when valid comments have no diff positions (1.598235ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses one longer fence around a Summary containing triple backticks (4.493809ms)
+✔ does not post a Summary when no comments are valid (2.075512ms)
+Posted 1 review comments
+✔ returns one when posting the Summary comment fails after inline review (2.002273ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts inline review then Summary for an OCR-format result (1.797577ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ omits elapsed from the Summary when it is not a string (4.430855ms)
+Posted skip comment to PR
+✔ posts a skip comment when OCR status is skipped with a message (2.888134ms)
+Posted skip comment to PR
+✔ posts a default skip comment when OCR status is skipped without a message (1.246577ms)
+Failed to post skip comment (HTTP 403)
+✔ returns one when posting skip comment fails (0.727857ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ wraps each review comment body in a code block (3.270727ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses a longer fence when the comment body contains triple backticks (1.777558ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses an even longer fence for long backtick runs in the body (0.973429ms)
+Posted 70 review comments
+Posted Summary comment for 70 review comments
+✔ truncates summary comment body to stay within 65536 characters while preserving closing fence and footer (18.051249ms)
+Posted failure comment to PR
+✔ posts a failure comment when OCR status is failed with a message (1.344697ms)
+Posted failure comment to PR
+✔ posts a default failure comment when OCR status is failed without a message (3.830477ms)
+Failed to post failure comment (HTTP 403)
+✔ returns one when posting failure comment fails (0.850538ms)
+Posted 1 review comments
+Updated Summary comment for 1 review comments
+✔ updates an existing bot-owned marked Summary instead of creating a duplicate (1.052369ms)
+Posted 1 review comments
+Updated Summary comment for 1 review comments
+✔ updates an existing bot-owned marked Summary found on the second comments page (2.456379ms)
+✔ rechecks the PR head before posting and refuses stale review results (2.574819ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ does not modify a user comment containing the Summary marker (8.642736ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ supports findings array from antigravity host format (2.360172ms)
+✔ shadow review posting stops before the GitHub mutation when fresh authorization is revoked (4.175086ms)
+✔ direct enforce adapter invocation remains denied without publisher authorization (1.310733ms)
+Posted failure comment to PR
+✔ enforce adapter posts when the publisher supplies its post-Gate authorization (1.200968ms)
+✔ rejects missing CLI repo before API calls despite an allowed callback (0.642176ms)
+✔ rejects mismatched repos before API calls despite an allowed callback (0.981302ms)
+✔ rejects missing target before API calls despite an allowed callback (1.539302ms)
+✔ rejects malformed CLI repo before API calls despite an allowed callback (5.065589ms)
+✔ rejects malformed target repo before API calls despite an allowed callback (1.635488ms)
+✔ rejects unknown mode before API calls despite an allowed callback (2.429916ms)
+Posted failure comment to PR
+▶ allows case-insensitive repo equality in shadow and enforce modes
+  ✔ shadow (1.133179ms)
+Posted failure comment to PR
+  ✔ enforce (0.544773ms)
+✔ allows case-insensitive repo equality in shadow and enforce modes (2.166811ms)
+Posted failure comment to PR
+✔ off mode keeps legacy publisher behavior when TARGET_REPO differs (0.720483ms)
+✔ rejects mismatched expected result digest before any GitHub request (1.179449ms)
+Batch review failed; posting 3 comments individually
+Failed to post individual review comment (ROUTING_ACTIVATION_DENIED)
+Failed to post 1 individual review comments
+Posted failure comment to PR
+✔ posts parsed result bytes when expected digest matches (0.787783ms)
+✔ stops individual fallback and summary after fresh authorization denial (1.33995ms)
+Batch review failed; posting 2 comments individually
+Failed to post individual review comment (HEAD_VALIDATION_FAILED)
+Failed to post 1 individual review comments
+✔ stops individual fallback after a HEAD mismatch (0.811149ms)
+✔ buildReviewContext prepares rules and diff for the selected files (3.570245ms)
+✔ buildReviewContext does not invoke tools when no files are reviewable (0.482003ms)
+✔ buildReviewContext rejects unsafe review paths before invoking Git (0.87097ms)
+✔ buildReviewContext rejects an oversized diff instead of truncating review input (0.452954ms)
+✔ CLI context preparation uses the workflow step working directory (99.337203ms)
+✔ run binding keeps canonical run ID and freezes runner identity (2.095165ms)
+✔ route serializer emits the exact 15-key contract and writer seals the standalone route privately (3.582832ms)
+✔ enforce route carries only selected certified execution fields (0.437487ms)
+✔ enforce route rejects a missing model when reviewable files exist (0.823276ms)
+✔ saved route binding mismatch fails before a caller can spawn Host (0.904779ms)
+✔ off mode performs no routing I/O or network request (1.07327ms)
+✔ shadow prepares a run-bound route and decision without a Decision API call when nothing is reviewable (10.533879ms)
+✔ enforce prepares a run-bound route and decision without a Decision API call when nothing is reviewable (3.371329ms)
+✔ checkout identity is independent of matching dispatch and CHECKOUT_REPO values (3.097256ms)
+✔ denied startup aborts before routing writes, Decision POST, or model evidence reads (1.231354ms)
+✔ production trusted-input defaults deny cleanly when the central registry has no activation (15.112326ms)
+✔ default path denies central authority fetch failure even with a populated pinned registry (2.779739ms)
+✔ enforce preparation uses a verified certification bundle end to end (14.368671ms)
+✔ default enforce preparation loads and verifies evidence from central config routing-evidence (10.009363ms)
+✔ enforce preparation rejects omitted model certification evidence before Decision POST (2.474327ms)
+✔ shadow startup revocation is re-evaluated before a Decision POST (3.174537ms)
+✔ valid fallback publishes in gate, head, post order (11.721416ms)
+✔ does not call post adapter for missing result digest (0.959473ms)
+✔ does not call post adapter for changed result bytes (1.265645ms)
+✔ re-fetches central authority for each mutation callback (2.351785ms)
+✔ denies mutation when fresh authority, context, CLI identity, or Gate fails (4.255493ms)
+✔ publication uses the run-scoped result path when OCR_RESULT_PATH is unset (1.158648ms)
+✔ startup revocation thrown by provenance revalidation does not check Gate, HEAD, or post (0.790933ms)
+✔ route mismatch or invalid chain gate denial does not post (0.869411ms)
+✔ fresh central authorization GET failure stops before revalidation and all publication calls (0.681442ms)
+✔ execution context revalidation failure does not proceed to Gate, HEAD, or post (1.183833ms)
+✔ reverse fallback chain rejects a deep success followed by the fast primary (0.911029ms)
+✔ authorized publication refuses a changed current HEAD (0.763488ms)
+✔ posting failure returns PUBLISH_FAILED without retry (0.892512ms)
+✔ missing delivery or Check Run ID is denied before HEAD and post (0.993827ms)
+✔ optional summary write failure does not change publication result (0.758908ms)
+✔ reads a valid HTTPS origin and actual HEAD (7.025781ms)
+✔ reads a valid SSH origin and actual HEAD (0.488724ms)
+✔ reads a valid case-normalized HTTPS origin origin and actual HEAD (0.783586ms)
+✔ reads a valid case-normalized SSH origin origin and actual HEAD (0.274644ms)
+✔ requests only origin and verified HEAD using argument arrays (0.978364ms)
+✔ rejects wrong repository (0.956555ms)
+✔ rejects missing remote (0.423776ms)
+✔ rejects credential URL (0.206574ms)
+✔ rejects local path (1.704833ms)
+✔ rejects query string (0.655025ms)
+✔ rejects fragment (0.267593ms)
+✔ rejects multiline origin (0.163492ms)
+✔ rejects oversized origin output (1.196945ms)
+✔ rejects stale actual HEAD (0.167069ms)
+✔ rejects malformed HEAD (0.113278ms)
+✔ rejects oversized HEAD output (0.119155ms)
+✔ maps git command failures to the fixed mismatch error (0.270608ms)
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in OWNER/REPO...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+THREAD_MUTATION_FAILED
+✔ off real thread Host preserves authorized reply and explicit auto-resolve (5.172415ms)
+✔ shadow real thread Host preserves authorized reply and explicit auto-resolve (0.6957ms)
+✔ actual resolver CLI denial fails the Check despite a successful main review offline (73.095357ms)
+✔ shadow GraphQL mutation failure produces a failing Check conclusion offline (1.53701ms)
+✔ production CLI rejects HTTP 500 with success-shaped GraphQL JSON before Host or mutation (94.620438ms)
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+✔ createConfig parses CLI args and token correctly (1.755377ms)
+✔ parseLlmResponse parses valid JSON with resolved boolean (0.212899ms)
+✔ parseLlmResponse handles invalid JSON by returning resolved: false (0.168979ms)
+✔ buildFetchThreadsQuery generates valid GraphQL query (0.100879ms)
+✔ buildReplyMutation formats mutation string correctly (0.100113ms)
+✔ buildResolveMutation formats mutation string correctly (0.066855ms)
+✔ extractCodeContext loads file snippet correctly (0.280335ms)
+✔ parseLlmResponse returns resolved: false for non-boolean resolved property like "false" or "true" (0.079769ms)
+✔ parseThreadHostResponse accepts only a valid explicit resolve decision (0.555929ms)
+✔ parseThreadHostResponse keeps malformed, missing, and ambiguous output unresolved (0.190037ms)
+✔ extractCodeContext prevents path traversal outside target directory (0.160106ms)
+✔ buildPrompt includes prompt injection protection and untrusted data tags (0.15062ms)
+✔ model selection prioritizes RESOLVE_LLM_MODEL over OCR_LLM_MODEL (0.065293ms)
+✔ isOcrThread correctly identifies opencodereview-app and opencodereview-app[bot] (0.137684ms)
+✔ shadow thread processing stops before replying when fresh authorization is revoked (1.526754ms)
+✔ shadow thread processing passes fresh authorization to the host before spawn (0.51519ms)
+✔ real thread Host revoked authorization stops all threads with failure (1.90776ms)
+✔ real thread Host unavailable authorization stops all threads with failure (0.40873ms)
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+ROUTING_ACTIVATION_DENIED
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: fixed
+Finished processing review threads. Auto-resolved 1 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 0 unresolved review threads.
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+THREAD_FETCH_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+THREAD_MUTATION_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:null) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:undefined) evaluated as RESOLVED: undefined
+Thread thread-2 (changed.js:undefined) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Found 2 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 2 threads.
+Checking open review threads for PR #123 in owner/repo...
+Checking open review threads for PR #123 in owner/repo...
+✔ real thread Host reauthorizes a retry and propagates revocation (9.500628ms)
+✔ shadow rejects CLI scope other/repo against owner/repo before fetching threads (0.212581ms)
+✔ shadow rejects CLI scope owner/repo against undefined before fetching threads (0.183724ms)
+✔ shadow rejects CLI scope owner/repo/extra against owner/repo/extra before fetching threads (0.075605ms)
+✔ direct enforce resolver invocation is blocked before fetching threads (0.119072ms)
+✔ shadow resolver treats a valid empty GraphQL result as success (2.895169ms)
+✔ shadow resolver rejects GraphQL fetch errors before processing threads (0.273066ms)
+✔ shadow resolver discards first-page threads when a later page fails (2.556445ms)
+✔ shadow resolver rejects a GraphQL response missing review thread nodes (0.189203ms)
+✔ off resolver preserves legacy GraphQL fetch and mutation failure behavior (0.471529ms)
+✔ off resolver preserves legacy GraphQL pagination error as an empty successful result (0.180483ms)
+✔ shadow mutation authorization exception fails closed without a mutation (0.289142ms)
+✔ shadow resolver rejects GraphQL transport failure before starting a Host (0.137552ms)
+✔ shadow stops after reply-errors and reports failure (1.583083ms)
+✔ shadow stops after reply-missing and reports failure (0.223146ms)
+✔ shadow stops after reply-transport and reports failure (0.163571ms)
+✔ shadow stops after resolve-errors and reports failure (0.166459ms)
+✔ shadow stops after resolve-missing and reports failure (0.161033ms)
+✔ shadow stops after resolve-transport and reports failure (0.168504ms)
+✔ shadow rejects empty thread object before Host or mutation (0.334315ms)
+✔ shadow rejects array thread node before Host or mutation (0.105806ms)
+✔ shadow rejects missing thread ID before Host or mutation (0.077351ms)
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+THREAD_MUTATION_FAILED
+✔ shadow rejects empty thread ID before Host or mutation (0.064802ms)
+✔ shadow rejects non-boolean isResolved before Host or mutation (0.048701ms)
+✔ shadow rejects string true isResolved before Host or mutation (0.045124ms)
+✔ shadow rejects non-boolean isOutdated before Host or mutation (0.044376ms)
+✔ shadow rejects empty thread path before Host or mutation (0.051854ms)
+✔ shadow rejects non-positive thread line before Host or mutation (0.04559ms)
+✔ shadow rejects missing thread line before Host or mutation (0.048204ms)
+✔ shadow rejects fractional originalLine before Host or mutation (0.058018ms)
+✔ shadow rejects missing originalLine before Host or mutation (0.03647ms)
+✔ shadow rejects missing comments connection before Host or mutation (0.032983ms)
+✔ shadow rejects non-array comment nodes before Host or mutation (0.033279ms)
+✔ shadow rejects null comment node before Host or mutation (0.035213ms)
+✔ shadow rejects array comment node before Host or mutation (0.037575ms)
+✔ shadow rejects non-string comment ID before Host or mutation (0.033313ms)
+✔ shadow rejects empty comment ID before Host or mutation (0.225196ms)
+✔ shadow rejects non-string comment body before Host or mutation (0.089287ms)
+✔ shadow rejects missing comment timestamp before Host or mutation (0.047441ms)
+✔ shadow rejects non-object author before Host or mutation (0.03969ms)
+✔ shadow rejects missing author login before Host or mutation (0.036169ms)
+✔ shadow rejects non-string author login before Host or mutation (0.037487ms)
+✔ shadow rejects a null thread node even though the GraphQL connection can contain nullable items (0.118013ms)
+✔ shadow accepts author null and treats the comment as non-OCR (0.081326ms)
+✔ shadow validates resolved and non-OCR nodes before filtering them (0.110415ms)
+✔ shadow accepts an empty errors array with a valid empty thread page (0.146589ms)
+✔ shadow completes a production fetch, reply and auto-resolve with exact mutation results (0.564651ms)
+✔ shadow accepts empty comment body and nullable line fields (0.408985ms)
+✔ shadow rejects repeated pagination cursor and never passes partial threads to Host (0.41145ms)
+✔ shadow rejects an invalid node on a later page before passing earlier page threads to Host (0.328147ms)
+✔ shadow rejects null cursor while another page is required (0.112671ms)
+✔ shadow rejects numeric cursor while another page is required (0.047704ms)
+✔ shadow rejects empty cursor while another page is required (0.038621ms)
+✔ shadow rejects non-boolean hasNextPage (0.03927ms)
+✔ shadow rejects missing terminal cursor field (0.049186ms)
+✔ shadow rejects numeric terminal cursor (0.036095ms)
+✔ shadow accepts a valid end after exactly 200 pages (0.463293ms)
+✔ shadow fails at page 200 when another page is requested without fetching page 201 (1.014235ms)
+✔ production GraphQL fetch accepts HTTP 200 with a complete success-shaped JSON body (0.617785ms)
+✔ production GraphQL fetch rejects HTTP 500 even with a success-shaped JSON body (0.157717ms)
+✔ production GraphQL fetch rejects a non-integer 2xx status in shadow (0.125212ms)
+✔ production GraphQL reply rejects HTTP 500 success-shaped JSON and stops later threads (0.471073ms)
+✔ production GraphQL resolve rejects HTTP 500 success-shaped JSON and stops later threads (0.343091ms)
+✔ off preserves legacy handling of HTTP 500 success-shaped fetch and reply responses (0.378493ms)
+✔ shadow rejects numeric reply ID and stops before the next thread (0.297473ms)
+✔ shadow rejects object reply ID and stops before the next thread (0.188338ms)
+✔ shadow rejects empty reply ID and stops before the next thread (0.158667ms)
+✔ shadow rejects missing reply ID and stops before the next thread (0.142388ms)
+✔ shadow accepts an empty GraphQL errors array when reply success data is valid (0.439037ms)
+✔ shadow rejects resolve response with string isResolved (0.356333ms)
+✔ shadow rejects resolve response with numeric isResolved (0.155994ms)
+✔ shadow rejects resolve response with wrong thread ID (0.154258ms)
+✔ shadow rejects resolve response with non-string thread ID (0.122109ms)
+✔ shadow rejects resolve response with missing thread ID (0.138597ms)
+✔ shadow reports HTTP and JSON fetch failures safely (0.24366ms)
+✔ Host event stream seals with exactly nine keys and no startup or publication event (3.227233ms)
+✔ zero-review recorder produces a zero-byte stream accepted by the finalizer (0.559063ms)
+✔ canonical attempt validation rejects incomplete, reused, reordered and post-success events (0.560408ms)
+✔ enforce recorder rejects pending models while shadow can observe their CLI IDs (0.324314ms)
+✔ valid shadow grants only shadow and enforce requires all stage approvals (4.035469ms)
+✔ empty default registry and basic policy approval do not authorize startup (0.305148ms)
+✔ startup rejects missing stale revoked wrong-scope and wrong-stage approvals (0.826849ms)
+✔ operational dossiers reject non-exact allowed mode and effect sets (0.536035ms)
+✔ source manifest hashes sorted tracked paths and raw file bytes (7.372424ms)
+✔ source manifest rejects duplicates, missing files, and symlinks (0.778513ms)
+✔ central authorization fetch fails closed for HTTP errors, timeout, and identity mismatch (23.306533ms)
+✔ central authority rejects malformed JSON and oversized bodies before further requests (1.232944ms)
+✔ central authority uses authenticated fixed-ref GETs and returns exact raw dossiers (5.154542ms)
+✔ central authority rejects repository names that could change the GitHub API origin (0.178934ms)
+✔ writes private context atomically without overwrite and reads exact run binding (2.003474ms)
+✔ rejects malformed, linked, oversized and run-mismatched context before consumer activity (0.444987ms)
+✔ rejects altered hashes, unexpected keys and authorization without invoking consumer callbacks (0.49441ms)
+✔ rejects changed CLI digest before loading certification (1.407249ms)
+✔ rejects incorrect binding types and each retry, head and mode mismatch (0.671894ms)
+✔ fresh startup validation denies stale/expired or revoked approval inputs (0.172031ms)
+✔ writes, reads and revalidates a null-CLI shadow context without certification (0.833263ms)
+✔ requires non-null CLI fields for model proof (0.311056ms)
+✔ returns the trusted catalog and verified model evidence as the certified bundle (1.708106ms)
+✔ rejects an expired approval during fresh revalidation (0.307651ms)
+✔ rejects a freshly revoked startup approval (2.316333ms)
+✔ cleanup failure does not replace normalized write failure (0.196015ms)
+✔ shadow mutation authorization uses central and target credentials and denies when authority is revoked (1.492309ms)
+✔ off mode does not fetch routing authorization (0.325745ms)
+✔ startup denial and central REST failures stop all downstream effects (111.714529ms)
+✔ dossier digest, issuer, expired approval, and revoked approval are denied by production startup evaluation (35.48762ms)
+✔ production central-authority reader consumes mutable fake REST responses on each live read (2.241929ms)
+✔ startup denial stops the complete offline pipeline before Host, upload, post, or thread effects (1.436341ms)
+✔ off mode has no new routing effects and preserves exact legacy Host options (0.425958ms)
+✔ shadow absent route continues legacy review only after fresh startup authorization (0.50187ms)
+✔ shadow existing-route binding mismatch sets guard and blocks Host and downstream mutations (1.645788ms)
+✔ shadow audit upload failure preserves legacy review and Check result with a fixed diagnostic (1.22143ms)
+✔ authorized shadow observer failure preserves legacy review result and model options (1.487493ms)
+✔ missing sealed context is rejected by the real context reader before any downstream adapter (0.878605ms)
+✔ wrong checkout identity and valid activation for another repository both deny preparation (3.456552ms)
+✔ wrong run attempt and missing model certification deny before Host spawn (3.57743ms)
+✔ CLI substitution and changed trusted digests are denied before the Host boundary (2.196493ms)
+✔ CLI symlink resolves to its attested realpath and a PATH shadow is never passed to Host (1.333003ms)
+✔ preparation evaluates the supplied live registry before writing route or decision seals (0.490361ms)
+✔ zero-review enforce seals execution context without model or certification proof (5.330385ms)
+✔ primary failure falls back, seals audit, passes Gate, checks HEAD, uploads, and posts once (8.942079ms)
+✔ zero-review enforce is a neutral skip with no decision post, model attempt, or Host spawn (5.631672ms)
+✔ failed audit sealing followed by a pre-failed delivery cannot post through publisher (1.533532ms)
+✔ publisher re-reads live authority and never posts after central failure or revocation (1.01244ms)
+✔ fresh registry revocation and central REST failures stop upload or post at their live-read boundary (5.845299ms)
+✔ upload, missing artifact, malformed result, scope, check-ID, and changed-HEAD failures do not post (3.740407ms)
+✔ Gate evaluation is read-only and rejects absent check identity and failed delivery (0.901284ms)
+✔ readCheckoutIdentity rejects an isolated checkout with a different HEAD (54.738212ms)
+✔ traceability covers stable design IDs without claiming runtime proof (11979.757581ms)
+✔ Given revoked fresh authority, When invoked, Then Host is not called and denial is fixed (2.22528ms)
+✔ Given authorized enforce route, When invoked, Then exact certified model and audit options reach Host (0.334905ms)
+✔ Given a routed Host attempt, When spawn authorization runs, Then central authority is fetched and evaluated again (0.274577ms)
+✔ Given authority is revoked at a retry boundary, When Host returns denial, Then routing guard suppresses later mutations (0.247379ms)
+✔ Given a missing, invalid, or differently bound decision, When routing runs, Then neither mode starts Host (0.94629ms)
+✔ Given nested certification evidence and the real model resolver, When invoked, Then the certified route reaches Host (1.383617ms)
+✔ Given a fake PATH agy and distinct attested executable, When enforce runs, Then only attested path is spawned (2.682611ms)
+✔ Given enforce route with no reviewable files, When invoked, Then it returns trusted skipped without Host or model proof (0.273156ms)
+✔ Given invalid certification evidence, When invoked, Then Host is not called (0.193271ms)
+✔ Given a cached registry but revoked fresh authority, When invoked, Then Host is not called (0.227473ms)
+✔ Given shadow context binding mismatch, When invoked, Then Host is not called (0.198794ms)
+✔ Given shadow observer setup failure, When invoked, Then Host continues without observer (0.226597ms)
+✔ Given off mode, When invoked, Then legacy Host runs without routing reads (0.165645ms)
+✔ Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned (0.177975ms)
+✔ Given shadow route absence, When invoked, Then fresh authorization precedes legacy Host without context or observer (0.135683ms)
+✔ shadow missing route cannot bypass freshly revoked activation (0.123079ms)
+✔ off runs in a clean process with routing dependencies unavailable (71.059579ms)
+✔ a deep local risk floor cannot be downgraded by a confident fast decision (7.417071ms)
+✔ low choice probability selects deep (0.532567ms)
+✔ a probability margin below the threshold selects deep (0.427566ms)
+✔ invalid decision uses the local risk floor (0.52938ms)
+✔ HTTP 429 unavailable decision uses the local risk floor without raw error text (0.577891ms)
+✔ missing-key decision uses the local risk floor (0.344431ms)
+✔ egress denial retains its decision status while using the local risk floor (0.332507ms)
+✔ not-requested decision status is preserved when features skip the Decision request (0.230864ms)
+✔ docs-only local fast floor can select fast (0.300702ms)
+✔ enforce rejects uncertified requested deep models without downgrading to fast (1.006936ms)
+✔ enforce rejects the real pending plain catalog without leaking a raw validation error (0.370823ms)
+✔ shadow proposes a strategy with pending catalog but selects no Host model or fallback (1.193038ms)
+✔ enforce returns an explicit empty fallback list when the certified primary has no fallback (0.259392ms)
+✔ enforce returns only the certified primary model allowed by its fallback policy (0.346998ms)
+✔ no reviewable files returns a not-requested route without selecting a model (0.185271ms)
+✔ unknown mode fails closed (0.205056ms)
+✔ off mode is rejected rather than invoking this workflow resolver (0.130325ms)
+✔ returned route strings reject newline injection and model IDs are bounded (0.69385ms)
+✔ choice probability of 0.65 is sufficient when the margin is clear (0.19353ms)
+✔ enforce Check Run json failure exits unsuccessfully with only CHECK_UPDATE_FAILED (72.570627ms)
+✔ enforce Check Run read failure exits unsuccessfully with only CHECK_UPDATE_FAILED (56.783515ms)
+✔ enforce Check Run http failure exits unsuccessfully with only CHECK_UPDATE_FAILED (58.162057ms)
+✔ enforce Check Run network failure exits unsuccessfully with only CHECK_UPDATE_FAILED (60.554976ms)
+✔ successful enforce Check Run update exits successfully without a failure diagnostic (57.301257ms)
+✔ off Check Run diagnostics retain the existing exception message (58.673265ms)
+✔ shadow Check Run diagnostics retain the existing exception message (59.515601ms)
+▶ buildCheckRunUpdate
+  ✔ links successful review results to the PR and workflow run (0.783154ms)
+  ✔ includes the review failure reason in the check run output (0.155909ms)
+  ✔ marks skipped review results as neutral (0.087625ms)
+  ✔ never includes arbitrary review errors in enforce output (0.124984ms)
+  ✔ maps unknown enforce reasons to a fixed general reason (0.105072ms)
+  ✔ preserves the trusted ROUTING_ACTIVATION_DENIED denial (0.086184ms)
+  ✔ preserves the trusted ROUTE_ATTEMPT_MISMATCH denial (0.077455ms)
+  ✔ preserves the trusted ROUTING_AUTHORITY_UNAVAILABLE denial (0.059602ms)
+✔ buildCheckRunUpdate (6.206409ms)
+✔ counts reviewable files from the deterministic OCR preview (3.99007ms)
+✔ rejects a preview without a reviewable file list (2.802853ms)
+✔ rejects a skipped result when the preview selected reviewable files (0.48599ms)
+✔ rejects a failed result even when the preview selected no files (0.276808ms)
+✔ accepts a successful result covering all previewed files (1.263073ms)
+✔ rejects findings on files that are only present as supporting context (0.317473ms)
+✔ accepts a skipped result when the preview selected no files (0.501805ms)
+✔ rejects a successful result with zero coverage for previewed files (0.293983ms)
+✔ rejects a successful result without numeric complete coverage (0.303142ms)
+✔ emits the raw-byte digest for validated JSON (38.906675ms)
+✔ emits the raw-byte digest before rejecting malformed JSON (60.106946ms)
+✔ enforce validation diagnostics hide untrusted finding paths (65.596734ms)
+✔ off validation diagnostics retain untrusted finding paths (67.956797ms)
+✔ shadow validation diagnostics retain untrusted finding paths (67.772365ms)
+✔ accepts the R4 pending catalog shape and rejects unknown root/model properties (3.617666ms)
+✔ rejects duplicate model IDs and model catalog version mismatches (0.92891ms)
+✔ rejects fallback self references (0.511257ms)
+✔ detects a cycle between same-tier models independently of tier degradation (0.536959ms)
+✔ rejects a deep-to-fast fallback independently of fallback cycles (0.414319ms)
+✔ rejects absent preferred and fallback model IDs (0.404865ms)
+✔ refuses pending, suspended, and revoked models as primary or fallback (0.986153ms)
+✔ requires trusted evidence bound to the exact certification reference and model metadata (0.417639ms)
+✔ fails closed when any certification evidence binding field mismatches (0.877102ms)
+✔ resolves certified primary and fallback models for fast and deep strategies (1.480618ms)
+✔ accepts the pending example catalog during semantic validation (0.262779ms)
+✔ does not resolve an unavailable deep model or return any model ID (0.2778ms)
+✔ requires non-degrading capability tiers and rejects duplicate fallbacks (0.366844ms)
+✔ keeps pending models unavailable even when catalog and CLI names match (0.244227ms)
+ℹ tests 651
+ℹ suites 1
+ℹ pass 651
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12311.914694

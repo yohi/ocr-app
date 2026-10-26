@@ -1,0 +1,13 @@
+Checking open review threads for PR #123 in owner/repo...
+Found 1 unresolved review threads.
+Thread thread-1 (changed.js:1) evaluated as RESOLVED: undefined
+Finished processing review threads. Auto-resolved 0 / 1 threads.
+✔ off resolver preserves legacy GraphQL fetch and mutation failure behavior (3.215703ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121.781891

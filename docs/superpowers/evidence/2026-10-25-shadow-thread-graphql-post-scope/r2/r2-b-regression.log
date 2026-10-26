@@ -1,0 +1,160 @@
+Posted Summary comment for 0 review comments
+✔ posts a Summary issue comment when the comments array is empty (30.068222ms)
+Posted Summary comment for 0 review comments
+✔ posts an informative Summary when the review has no findings (4.573978ms)
+Posted Summary comment for 0 review comments
+✔ reports zero changed files without inventing file details (3.013366ms)
+✔ warns and returns zero when every comment is invalid (2.436235ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts only valid comments when the result contains invalid and valid elements (6.458676ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts a batch review when GitHub accepts the review request (7.090465ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts findings for a changed Markdown file through the normal review path (3.629122ms)
+Batch review failed; posting 2 comments individually
+Posted 2 review comments individually
+Posted Summary comment for 2 review comments
+✔ falls back to individual comments when GitHub rejects the batch review (12.779133ms)
+Batch review failed; posting 2 comments individually
+Failed to post individual review comment (HTTP 422)
+Failed to post 1 individual review comments
+✔ continues individual posting and returns one when an individual request fails (9.521723ms)
+✔ propagates a batch transport error without an individual fallback (4.346507ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ normalizes OCR-format comments (content, end_line) to body and line (6.304179ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ prefers body/line over content/end_line when both are present (4.212419ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ falls back to start_line when end_line is missing in OCR format (7.220754ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ skips comments with invalid line numbers (3.450428ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ skips OCR-format comments with invalid end_line or start_line (3.292047ms)
+Posted Summary comment for 0 review comments
+✔ exports the PR summary comment URL for the Check Run output (3.905167ms)
+Posted 2 review comments
+Posted Summary comment for 2 review comments
+✔ posts one Summary issue comment with generated counts and all valid findings (3.610518ms)
+Skipped 1 duplicate review comment(s)
+No new review comments to post
+Posted Summary comment for 0 review comments
+✔ posts a zero-finding Summary when every finding was already posted (3.887502ms)
+Skipped 1 duplicate review comment(s)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ summarizes only findings that remain after duplicate filtering (3.981837ms)
+Posted 2 review comments
+Posted Summary comment for 2 review comments
+✔ sorts Summary file rows by UTF-16 code unit regardless of input order (2.508112ms)
+No valid positions found for comments
+Posted Summary comment for 1 review comments
+✔ posts a Summary when valid comments have no diff positions (1.665421ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses one longer fence around a Summary containing triple backticks (5.710746ms)
+✔ does not post a Summary when no comments are valid (2.059773ms)
+Posted 1 review comments
+✔ returns one when posting the Summary comment fails after inline review (1.775394ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ posts inline review then Summary for an OCR-format result (0.884761ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ omits elapsed from the Summary when it is not a string (2.923228ms)
+Posted skip comment to PR
+✔ posts a skip comment when OCR status is skipped with a message (1.389329ms)
+Posted skip comment to PR
+✔ posts a default skip comment when OCR status is skipped without a message (3.252147ms)
+Failed to post skip comment (HTTP 403)
+✔ returns one when posting skip comment fails (2.117594ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ wraps each review comment body in a code block (1.647099ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses a longer fence when the comment body contains triple backticks (1.720179ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ uses an even longer fence for long backtick runs in the body (5.781507ms)
+Posted 70 review comments
+Posted Summary comment for 70 review comments
+✔ truncates summary comment body to stay within 65536 characters while preserving closing fence and footer (53.609604ms)
+Posted failure comment to PR
+✔ posts a failure comment when OCR status is failed with a message (2.726992ms)
+Posted failure comment to PR
+✔ posts a default failure comment when OCR status is failed without a message (1.562256ms)
+Failed to post failure comment (HTTP 403)
+✔ returns one when posting failure comment fails (1.288416ms)
+Posted 1 review comments
+Updated Summary comment for 1 review comments
+✔ updates an existing bot-owned marked Summary instead of creating a duplicate (2.267939ms)
+Posted 1 review comments
+Updated Summary comment for 1 review comments
+✔ updates an existing bot-owned marked Summary found on the second comments page (2.292981ms)
+✔ rechecks the PR head before posting and refuses stale review results (2.064437ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ does not modify a user comment containing the Summary marker (4.198889ms)
+Posted 1 review comments
+Posted Summary comment for 1 review comments
+✔ supports findings array from antigravity host format (3.615061ms)
+✔ shadow review posting stops before the GitHub mutation when fresh authorization is revoked (3.270735ms)
+✔ direct enforce adapter invocation remains denied without publisher authorization (4.753759ms)
+Posted failure comment to PR
+✔ enforce adapter posts when the publisher supplies its post-Gate authorization (1.901377ms)
+✔ rejects missing CLI repo before API calls despite an allowed callback (1.132935ms)
+✔ rejects mismatched repos before API calls despite an allowed callback (1.697218ms)
+✔ rejects missing target before API calls despite an allowed callback (1.248617ms)
+✔ rejects malformed CLI repo before API calls despite an allowed callback (2.060858ms)
+✔ rejects malformed target repo before API calls despite an allowed callback (3.389569ms)
+✔ rejects unknown mode before API calls despite an allowed callback (0.59598ms)
+Posted failure comment to PR
+▶ allows case-insensitive repo equality in shadow and enforce modes
+  ✔ shadow (1.40999ms)
+Posted failure comment to PR
+  ✔ enforce (0.474123ms)
+✔ allows case-insensitive repo equality in shadow and enforce modes (2.372895ms)
+Posted failure comment to PR
+✔ off mode keeps legacy publisher behavior when TARGET_REPO differs (3.627668ms)
+✔ rejects mismatched expected result digest before any GitHub request (4.043445ms)
+Posted failure comment to PR
+✔ posts parsed result bytes when expected digest matches (2.986757ms)
+Batch review failed; posting 3 comments individually
+Failed to post individual review comment (ROUTING_ACTIVATION_DENIED)
+Failed to post 1 individual review comments
+✔ stops individual fallback and summary after fresh authorization denial (1.132432ms)
+Batch review failed; posting 2 comments individually
+Failed to post individual review comment (HEAD_VALIDATION_FAILED)
+Failed to post 1 individual review comments
+✔ stops individual fallback after a HEAD mismatch (1.674503ms)
+✔ valid fallback publishes in gate, head, post order (10.159542ms)
+✔ does not call post adapter for missing result digest (1.257128ms)
+✔ does not call post adapter for changed result bytes (1.295512ms)
+✔ re-fetches central authority for each mutation callback (5.864699ms)
+✔ denies mutation when fresh authority, context, CLI identity, or Gate fails (7.176245ms)
+✔ publication uses the run-scoped result path when OCR_RESULT_PATH is unset (2.983381ms)
+✔ startup revocation thrown by provenance revalidation does not check Gate, HEAD, or post (0.912142ms)
+✔ route mismatch or invalid chain gate denial does not post (0.885331ms)
+✔ fresh central authorization GET failure stops before revalidation and all publication calls (2.383675ms)
+✔ execution context revalidation failure does not proceed to Gate, HEAD, or post (0.843736ms)
+✔ reverse fallback chain rejects a deep success followed by the fast primary (0.955088ms)
+✔ authorized publication refuses a changed current HEAD (0.889458ms)
+✔ posting failure returns PUBLISH_FAILED without retry (0.865547ms)
+✔ missing delivery or Check Run ID is denied before HEAD and post (1.034699ms)
+✔ optional summary write failure does not change publication result (0.762781ms)
+ℹ tests 73
+ℹ suites 0
+ℹ pass 73
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 435.294411
