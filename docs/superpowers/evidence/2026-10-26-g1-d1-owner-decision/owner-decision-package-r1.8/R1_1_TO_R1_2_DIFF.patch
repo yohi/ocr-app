@@ -1,0 +1,814 @@
+--- g1_d1_owner_decision_package_r1_1/00_OWNER_EXECUTIVE_SUMMARY_R1_1.md	2026-10-26 03:03:52.775026678 +0900
++++ g1_d1_owner_decision_package_r1_2/00_OWNER_EXECUTIVE_SUMMARY_R1_2.md	2026-10-26 03:20:16.797036808 +0900
+@@ -1,12 +1,12 @@
+-# 00. Human Owner 向け全体概要（Executive Summary R1.1）
++# 00. Human Owner 向け全体概要（Executive Summary R1.2）
+ 
+ ## 1. 役割・権限境界と本書の目的
+ 
+-本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.1 是正版** です。
+-R1 独立限定再レビューで指摘された 3 件の残存 Finding（FND-ODP-001: Major, FND-ODP-007: Major, FND-ODP-008: Moderate）に対して限定是正を実施し、Human Owner の意思決定と AI の技術的助言を厳格に分離するとともに、承認記録の対象結合（Package/HEAD/証跡/VM/Stage）および STOP 再開 Gate の非循環化を確立しました。
++本書は、`yohi/ocr-app` の **G1-D1 Human Owner Decision Package（意思決定判断資料）R1.2 最小限是正版** です。
++R1.1 独立限定再レビューで指摘された 2 件の残存 Finding（FND-ODP-001: Major, FND-ODP-007: Major）に対して最小限の限定是正を実施し、Method A における「1つの承認記録が必ず1つの Stage のみを対象とすること（1 Record = 1 Stage 原則）」、および外部 Owner Decision Record の共通必須スキーマ・一意 ID 発行規則・結合規則を完成させました。
+ 
+ ### 権限と職責の分離宣言
+-- **現在の実行権限**: `READ_ONLY_SOURCE / STATIC_ANALYSIS / DOCUMENT_CORRECTION_ONLY / NO_EXECUTION_GRANT / NO_OWNER_AUTHORITY / NO_GATE_AUTHORITY`
++- **現在の実行権限**: `READ_ONLY_SOURCE / STATIC_ANALYSIS / DOCUMENT_CORRECTION_ONLY / NO_TEST_EXECUTION / NO_OWNER_AUTHORITY / NO_GATE_AUTHORITY`
+ - **作成担当・独立レビュアー・実行担当・Human Owner・正式Gate担当の分離**:
+   - 本資料是正担当 AI エージェントは、意思決定の準備と技術的助言のみを行い、いかなる承認も代行しません。
+   - テスト実行、環境変更、依存転送、STOP 解除、正式 Gate 解除の権限を持ちません。
+@@ -16,13 +16,12 @@
+ 
+ ---
+ 
+-## 2. R1.1 限定是正概要（3件の残存 Finding 是正）
++## 2. R1.2 最小限是正概要（2件の残存 Finding 是正）
+ 
+-| Finding ID | 重要度 | 是正対象と内容 | R1.1 是正結果 |
++| Finding ID | 重要度 | 是正対象と内容 | R1.2 是正結果 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-001** | Major | 意思決定台帳 CSV における AI 推奨値と Human Owner 判断値の構造的分離 | CSV スキーマを改訂し、`recommended_*` 列と `owner_*` 列を分離。Owner 決定欄はすべて未記入、全8項目 `NOT_APPROVED` を維持。 |
+-| **FND-ODP-007** | Major | Owner 承認記録の外部レコード化および対象識別（Package/HEAD/証跡/VM/Stage）の結合 | パッケージ自身の自己参照ハッシュ循環を排除し、不変パッケージと独立した「外部判断記録」として設計。必須バインディングと失効条件を定義。 |
+-| **FND-ODP-008** | Moderate | STOP 発生後再開 Gate の 3 段階（Phase A/B/C）非循環化 | 旧10条件を維持しつつ、Pre-approval（Phase A: 9条件）、Owner Decision（Phase B: 承認）、Post-approval Eligibility（Phase C: 実行資格確認）に再編。 |
++| **FND-ODP-001** | Major | Method A（Stage別承認）における複数 Stage 事前承認の排除と単一 Stage 承認の強制 | `1 Record = 1 Stage` 原則を規範化。テンプレートを単一入力方式へ変更し、複数指定・範囲指定・ワイルドカードを無効化。次 Stage には新たな独立判断記録を必須化。 |
++| **FND-ODP-007** | Major | 外部 Owner Decision Record 共通必須スキーマおよび一意 ID 発行規則・結合規則の完成 | 7 つの論理ブロックから成る共通スキーマを策定。ID 発行 7 原則・フォーマットを定義し、Package/HEAD/VM/Evidence/Scope 結合および発効・失効条件を完成。 |
+ 
+ ---
+ 
+@@ -30,12 +29,12 @@
+ 
+ - **対象リポジトリ**: `https://github.com/yohi/ocr-app`
+ - **ブランチ**: `fix/shadow-graphql-post-scope-guards`
+-- **固定HEAD**: `6b08251170265c444ce8957377e6bfca23b21fd7`（検証済み・変更なし）
+-- **直接の是正対象 R1 アーカイブ**:
+-  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_2026-10-26.tar.gz`
+-  - 期待/実測 SHA-256: `2dd85610753240e002502f64bc022a16708703d5c3c56208120b465cf06ce872` (`MATCH`)
+-  - 期待/実測サイズ: `59,313 bytes` (`MATCH`)
+-  - 内部 `SHA256SUMS.txt` 15項目全件一致確認 PASS。
++- **Fixed HEAD**: `6b08251170265c444ce8957377e6bfca23b21fd7`（検証済み・変更なし）
++- **直接の是正対象 R1.1 アーカイブ**:
++  - `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_1_2026-10-26.tar.gz`
++  - 期待/実測 SHA-256: `ef9bce3c68d2eb074840d6498dc84a1debcd5e30cf58859e4368ce9321cf93d7` (`MATCH`)
++  - 期待/実測サイズ: `46,293 bytes` (`MATCH`)
++  - 内部 `SHA256SUMS.txt` 16 項目全件一致確認 PASS。
+ - **上位再試験計画 R1.3**:
+   - `OCR_APP_G1_D1_UNRESOLVED_19_RETEST_PLAN_R1_3_2026-10-26.tar.gz` (SHA-256: `e293...`, 33,389 bytes, PASS)
+ - **全体回帰テスト対象**: `.github/workflows/scripts/*.test.mjs` 配下の全 39 ファイルを固定HEADより照合済み。
+@@ -66,12 +65,12 @@
+ 
+ ### 承認方式（Approval Method）と判断区分（Decision Disposition）の分離
+ - **Approval Method**:
+-  - `METHOD_A_STAGE_BY_STAGE` (推奨): 各 Stage の結果・証跡を確認後、次 Stage を個別に承認する。
+-  - `METHOD_B_CONDITIONAL_PROGRESSION`: 事前条件充足による段階進行。
++  - `METHOD_A_STAGE_BY_STAGE` (推奨): 1つの承認記録が必ず単一の Stage のみを承認対象とし、先行証跡確認後に次 Stage を承認する。
++  - `METHOD_B_CONDITIONAL_PROGRESSION`: 現時点では `NOT_AUTHORIZED_UNTIL_SEPARATELY_APPROVED`。
+ - **Decision Disposition**:
+   - `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`
+ - **安全側の未指定時動作（Fail-closed 契約）**:
+-  - いずれかの必須フィールドが未記入の場合、`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT` となり、いかなる実行権限も付与されません。
++  - いずれかの必須フィールドが未記入または不一致の場合、`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT` となり、いかなる実行権限も付与されません。
+ 
+ ---
+ 
+@@ -82,7 +81,7 @@
+ | **DEC-01A** | キャッシュインベントリ検査 | 承認対象パス限定走査、ロックファイル照合、不足集合・マニフェスト案作成 | パッケージ持ち込み・転送・展開、`npm ci/install`、ホスト変更、外部通信 | **APPROVE** 推奨 |
+ | **DEC-01B** | 不足依存限定転送 | 01Aで特定・承認された特定パッケージのみの内容アドレス抽出、SHA-512照合転送、VM内再検証 | `npm ci/install` 実行、`~/.npm` 全体コピー、未検証パッケージ転送、外部通信 | **HOLD** 推奨（01A完了まで） |
+ | **DEC-02** | 独立ローカルGit環境配備 | 固定HEAD・tree・blob整合性確認、追跡ファイル一致検証、リモート未設定Gitメタデータ配備 | ホスト `.git` 共有、リモート接続、ソース改変、Git hooks実行、Secrets共有 | **APPROVE** 推奨 |
+-| **DEC-03** | 実行権限・リソース上限 | Stage別実行許可（初回は Stage 0 のみ）、cgroup上限枠（メモリ512MiB, PID128, 60s, con=1） | Stage一括無条件実行、cgroup外実行、外部通信、ホストDocker操作 | **APPROVE**（Method A, Stage 0限定） |
++| **DEC-03** | 実行権限・リソース上限 | Method A に基づく単一Stage（初回は Stage 0 のみ）の実行許可、cgroup上限枠 | 複数Stage事前承認、範囲指定、cgroup外実行、外部通信、ホストDocker操作 | **APPROVE**（Method A, Stage 0単一限定） |
+ | **DEC-04** | 全体回帰範囲・Gate審査基準 | 全39テストファイルの回帰範囲確定、多面的合格契約の合意 | 恣意的テスト除外、455件固定値強制、テスト結果承認の混同、正式Gate解除 | **APPROVE** 推奨 |
+ | **DEC-05** | Group B 診断実験（モック注入） | Stage 3 Primary 失敗後の実験前明示承認に基づくGitモック注入実験、診断ログ分離記録 | 無条件事前包括承認、プロダクションコード改変、正規回帰との混同、認可境界緩和 | **HOLD** 推奨（Stage 3結果待ち） |
+ | **DEC-06** | Group C 診断実験（フィクスチャ改善） | Stage 4 Primary 失敗後の実験前明示承認に基づくTEST-14非同期クリーンアップ実験、診断ログ分離記録 | 無条件事前包括承認、外側例外送出の合格扱い、ハング放置、正規PASS偽装 | **HOLD** 推奨（Stage 4結果待ち） |
+@@ -94,4 +93,4 @@
+ 
+ 1. **Gate状態の不変性**: 本パッケージの受領および検討中であっても、G1-D1 Formal Gate は **未承認（`BLOCKED`）** を維持します。
+ 2. **実行権限の非付与**: 本資料は Human Owner の判断材料であり、本資料の提示をもって AI エージェントに実行権限が付与されることは一切ありません。
+-3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_1.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
++3. **署名欄の未記入原則**: `10_OWNER_DECISION_RECORD_TEMPLATE_R1_2.md` は完全な白紙・未記入テンプレートとして提供されます。Human Owner ご自身が署名・判断を記入してください。
+--- g1_d1_owner_decision_package_r1_1/01_DECISION_MATRIX_R1_1.csv	2026-10-26 03:02:25.166203849 +0900
++++ g1_d1_owner_decision_package_r1_2/01_DECISION_MATRIX_R1_2.csv	2026-10-26 03:18:53.743204763 +0900
+@@ -2,8 +2,8 @@
+ DEC-01A,オフライン依存キャッシュインベントリ検査,VM内キャッシュ走査およびホスト側読取専用調査,METHOD_A_STAGE_BY_STAGE,APPROVE,読み取り専用調査であり不足パッケージ集合を安全に特定するために不可欠,NOT_APPROVED,,,,,,,
+ DEC-01B,オフライン不足依存パッケージ限定転送,01A確定パッケージのVM限定転送,METHOD_A_STAGE_BY_STAGE,HOLD,DEC-01Aのインベントリ検査結果および不足集合マニフェスト確定まで保留すべき,NOT_APPROVED,,,,,,,
+ DEC-02,独立ローカルGit環境配備,テストVM内Gitメタデータ配備,METHOD_A_STAGE_BY_STAGE,APPROVE,固定HEAD整合性およびhooks無効化等10要件を満たす独立Git配備はGroup B検証に不可欠,NOT_APPROVED,,,,,,,
+-DEC-03,再試験実行権限およびリソース上限付与,Stage 0〜5 実行権限およびcgroup上限枠,METHOD_A_STAGE_BY_STAGE,APPROVE,初回はStage 0（環境受入再確認）のみの実行を承認し段階的に進める方式Aを推奨,NOT_APPROVED,,,,,,,
++DEC-03,再試験実行権限およびリソース上限付与,Stage 0〜5 実行権限およびcgroup上限枠,METHOD_A_STAGE_BY_STAGE,APPROVE,"Method Aに基づき1レコード＝1Stage（初回はStage 0のみ）の実行承認を推奨（複数Stage指定・範囲指定・ワイルドカードは無効）",NOT_APPROVED,,,,,,,
+ DEC-04,全体回帰対象範囲（全39ファイル）およびGate審査基準合意,Stage 5 全体回帰範囲および合格基準,METHOD_A_STAGE_BY_STAGE,APPROVE,固定HEAD全39テストファイルの回帰範囲および多面的合格契約の合意として承認推奨,NOT_APPROVED,,,,,,,
+ DEC-05,Group B 診断実験（Gitモック注入）承認,Stage 3 失敗時診断実験,METHOD_A_STAGE_BY_STAGE,HOLD,Stage 3 Primary再試験の結果確認および実験前個別承認要件成立まで保留すべき,NOT_APPROVED,,,,,,,
+ DEC-06,Group C 診断実験（フィクスチャ改善）承認,Stage 4 失敗時診断実験,METHOD_A_STAGE_BY_STAGE,HOLD,Stage 4 Primary再試験の結果確認および実験前個別承認要件成立まで保留すべき,NOT_APPROVED,,,,,,,
+-DEC-07,STOP発生後の個別ステージ再開承認,STOP発生時の特定単一Stage再開,METHOD_A_STAGE_BY_STAGE,HOLD,STOP事象発生後の調査・修復および10条件充足検証完了まで包括事前承認は保留すべき,NOT_APPROVED,,,,,,,
++DEC-07,STOP発生後の個別ステージ再開承認,STOP発生時の特定単一Stage再開,METHOD_A_STAGE_BY_STAGE,HOLD,STOP事象発生後の調査・修復およびPhase A検証完了まで包括事前承認は保留すべき,NOT_APPROVED,,,,,,,
+--- g1_d1_owner_decision_package_r1_1/04_DEC_03_EXECUTION_RESOURCES_R1_1.md	2026-10-26 03:02:38.445176997 +0900
++++ g1_d1_owner_decision_package_r1_2/04_DEC_03_EXECUTION_RESOURCES_R1_2.md	2026-10-26 03:19:10.237171411 +0900
+@@ -1,32 +1,45 @@
+-# 04. DEC-03 — 再試験実行権限・リソース上限判断資料（R1.1限定是正版）
++# 04. DEC-03 — 再試験実行権限・リソース上限判断資料（R1.2限定是正版）
+ 
+ ## 1. Decision Summary
+ 
+ ### 1.1 判断する内容
+ 再試験計画 R1.3 に基づく各ステージ（Stage 0〜5）の実行権限、および実行時に課すリソース上限枠（cgroup メモリ制限、PID制限、外側タイムアウト、テストファイル並列度）を承認するかどうかの判断です。
+ 
+-### 1.2 承認方式（Approval Method）と判断区分（Decision Disposition）の完全分離（FND-ODP-001是正）
+-AI の技術的推奨と Human Owner の実際の判断を厳格に区別し、以下の3項目を独立した選択・判断フィールドとして定義します。
++### 1.2 Method A における単一 Stage 承認の厳格な契約（FND-ODP-001是正）
++R1.1 では推奨値と判断値の分離が行われましたが、DEC-03 において複数 Stage が同時に承認される余地を完全に排除するため、**`METHOD_A_STAGE_BY_STAGE` では「1つの Owner Decision Record が承認対象とする Stage は必ず1つのみ（1 Record = 1 Stage）」** とする規範的契約を確立します。
+ 
+-1. **Approval Method（承認方式）**:
+-   - `METHOD_A_STAGE_BY_STAGE` (推奨): 各 Stage の結果・証跡を確認後、次 Stage を個別に承認する。
+-   - `METHOD_B_CONDITIONAL_PROGRESSION`: 事前条件充足による段階進行。
+-2. **Decision Disposition（判断区分）**:
+-   - `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`
+-3. **Authorized Scope（承認範囲）**:
+-   - 対象Stage、許可操作、対象VM環境、実行回数、リソース制限、有効条件、失効条件。
+-
+-**安全側の未指定時動作（Fail-closed 契約）**:
+-判断区分から Method A/B を自動決定することは禁止します。`CONDITIONAL_APPROVE` という文字列だけで Method B や連続実行の権限が与えられることはありません。また、`APPROVE` から Method A を自動採択することも禁止します。
+-必須承認フィールド（方式、区分、対象Stage、許可操作、実行環境、実行回数、証跡結合）のいずれかが未記入の場合、**`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT`** となり、いかなる実行権限も付与されません。
++#### 規範的 Method A 契約規則（10原則）
++1. **単一 Stage 原則**: 1つの Owner Decision Record が承認対象とする Stage は必ず1つのみとする。
++2. **単一値拘束**: `authorized_stage` は単一の Stage 識別子（`Stage 0` 〜 `Stage 5` のいずれか1つ）のみを受け付ける。
++3. **複数選択の無効化**: 複数の Stage を同時に選択・記載した承認記録は**完全に無効**とする。
++4. **範囲指定の無効化**: `Stage 0-3`, `Stage 1..2` 等の範囲指定は**完全に無効**とする。
++5. **ワイルドカード指定の無効化**: `ALL`, `*`, `Stage *` 等の総括指定は**完全に無効**とする。
++6. **未来 Stage の包括事前承認禁止**: 後続 Stage を事前に一括承認することは禁止する。
++7. **次 Stage への新 ID 必須**: 次の Stage を承認するには、必ず新しい Decision Record ID を持つ独立した判断記録の発行を必要とする。
++8. **先行証跡の審査必須**: 次の Stage の判断には、該当する前提 Stage の実行結果・一次証跡の審査を必須とする。
++9. **自動実行権限生成の禁止**: 前提 Stage が完全 PASS した場合であっても、次 Stage への実行権限は自動生成されない（独立した Owner 承認が必要）。
++10. **経路独立性と事前承認の分離**: DAG 上で Stage 3 や Stage 4 が独立経路であっても、それらの事前包括承認を意味しない。
++
++#### 安全側の未指定時動作（Fail-closed 契約）
++以下のいずれかに該当する場合、判断記録は無効となり、**`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT`** として実行を遮断します：
++- Stage 未指定
++- Stage 複数指定・範囲指定・ワイルドカード指定
++- 適用 Method 未指定
++- Owner 判断未記入
++- 次 Stage の個別判断記録が存在しない
++- リソース制限・対象環境・実行回数が未指定
++
++### 1.3 Method B との厳格な分離
++- **`CONDITIONAL_APPROVE` は Method B を意味しません。**
++- **`APPROVE` は Method A を意味しません。**
++- Method A と Method B は Human Owner が独立して選択する承認方式です。
++- 現時点において Method B による段階進行枠組みは未承認であり、**`NOT_AUTHORIZED_UNTIL_SEPARATELY_APPROVED`** と明記します。
+ 
+-### 1.3 初期推奨（技術的助言）
++### 1.4 初期推奨（技術的助言）
+ - **Recommended Approval Method**: `METHOD_A_STAGE_BY_STAGE`
+-- **Recommended Authorized Scope**: `Stage 0 only`（環境受入再確認のみ）
++- **Recommended Authorized Stage**: `Stage 0 only`（環境受入再確認のみ）
+ - **Recommended Disposition**: `APPROVE`（Stage 0 のみ）
+ 
+-※上記は AI エージェントによる技術的推奨であり、Human Owner が正式に選択・署名するまで、決定欄はすべて未記入です。
+-
+ ---
+ 
+ ## 2. 実行単位とテスト並列度の正確な定義
+@@ -44,46 +57,31 @@
+ ### 未実証性注記
+ 上記リソース候補値（512 MiB, 128, 60s）はすべて **`NOT_EXECUTION_VERIFIED / OWNER_APPROVAL_REQUIRED`** であり、実行前に Owner の承認を要します。
+ 
+-### 対象ケース数とファイル内テスト総数の区別
+-- Group B の 3 件は、限定再試験で注目する「既存の失敗ケース数」です。
+-- Group C の 6 件は、注目する「既存のキャンセルケース数」です。
+-- これらを、ファイル全体を実行した際のテスト総件数と混同してはなりません。
+-
+ ---
+ 
+-## 3. 各 Stage の実行境界と個別承認契約
++## 3. 各 Stage の個別承認要件と進入前提条件
+ 
+-Method A においては、1件の承認記録が対象とする Stage を一意に特定します。複数 Stage を同時にチェックした場合であっても、自動的に複数 Stage の連続実行許可とはならず、各 Stage の前提条件と逐次実行原則に従います。
++Method A においては、各 Stage ごとに独立した 1 件の承認記録（1 Record = 1 Stage）が発行されます。
+ 
+-| Stage | 名称 | 必須 Owner 意思決定 | 進入前提条件 | 実行許可操作 |
++| Stage | 名称 | 必須 Owner 意思決定記録 | 進入前提条件 | 実行許可操作 |
+ | :--- | :--- | :--- | :--- | :--- |
+-| **Stage 0** | **環境受入再確認** | **DEC-03 (Stage 0)** | VM起動、固定HEAD | 環境検証のみ（テスト未実行、パッケージ未導入） |
+-| **Stage 1** | **オフライン依存補完** | **DEC-01A, 01B, DEC-03 (Stage 1)** | Stage 0 PASS | `npm ci --offline --ignore-scripts` 実行・整合性検証 |
+-| **Stage 2** | **Group A 限定再試験** | **DEC-03 (Stage 2)** | Stage 1 PASS | Group A 対象テストファイルを並列度1で順次実行 |
+-| **Stage 3** | **Group B 限定再試験** | **DEC-02, DEC-03 (Stage 3)** | Stage 0 PASS | `authorize-routing-start.test.mjs` を並列度1で実行 |
+-| **Stage 4** | **Group C 限定再試験** | **DEC-03 (Stage 4)** | Stage 0 PASS | `authorize-decision-egress.test.mjs` を並列度1で実行 |
+-| **Stage 5** | **全体回帰確認** | **DEC-04, DEC-03 (Stage 5)** | **Stage 2, 3, 4 すべて PASS** | 全39ファイルを並列度1で順次実行 |
++| **Stage 0** | **環境受入再確認** | **DEC-03 (Stage 0 単一指定記録)** | VM起動、固定HEAD | 環境検証のみ（テスト未実行、パッケージ未導入） |
++| **Stage 1** | **オフライン依存補完** | **DEC-01A, 01B, DEC-03 (Stage 1 単一指定記録)** | Stage 0 PASS | `npm ci --offline --ignore-scripts` 実行・整合性検証 |
++| **Stage 2** | **Group A 限定再試験** | **DEC-03 (Stage 2 単一指定記録)** | Stage 1 PASS | Group A 対象テストファイルを並列度1で順次実行 |
++| **Stage 3** | **Group B 限定再試験** | **DEC-02, DEC-03 (Stage 3 単一指定記録)** | Stage 0 PASS | `authorize-routing-start.test.mjs` を並列度1で実行 |
++| **Stage 4** | **Group C 限定再試験** | **DEC-03 (Stage 4 単一指定記録)** | Stage 0 PASS | `authorize-decision-egress.test.mjs` を並列度1で実行 |
++| **Stage 5** | **全体回帰確認** | **DEC-04, DEC-03 (Stage 5 単一指定記録)** | **Stage 2, 3, 4 すべて PASS** | 全39ファイルを並列度1で順次実行 |
+ 
+ ---
+ 
+ ## 4. Decision Options（判断選択肢）
+ 
+ ### Approval Method 選択
+-- **`METHOD_A_STAGE_BY_STAGE`**: Stage別承認方式を採用する（**推奨**）。
+-- **`METHOD_B_CONDITIONAL_PROGRESSION`**: 条件付き段階承認方式を採用する。
++- **`METHOD_A_STAGE_BY_STAGE`**: Stage別承認方式を採用する（1 Record = 1 Stage 原則、**推奨**）。
++- **`METHOD_B_CONDITIONAL_PROGRESSION`**: 条件付き段階承認方式（現時点では `NOT_AUTHORIZED_UNTIL_SEPARATELY_APPROVED`）。
+ 
+ ### Decision Disposition 選択
+-- **`APPROVE`**: 選択した方式・範囲で実行を承認する（初回は Stage 0 のみ推奨）。
+-- **`CONDITIONAL_APPROVE`**: 追加条件を付与して承認する（未充足時は実行不可）。
++- **`APPROVE`**: 選択した方式・単一Stageで実行を承認する（初回は Stage 0 のみ推奨）。
++- **`CONDITIONAL_APPROVE`**: 追加条件を付与して承認する（条件未充足時は実行不可）。
+ - **`HOLD`**: 保留。
+ - **`REJECT`**: 実行を拒否する。
+-
+----
+-
+-## 5. Authorization Scope & Evidence Requirements
+-
+-### 5.1 承認範囲の厳格な記述
+-- **対象環境**: テスト専用VM。
+-- **初回許可Stage**: Stage 0 のみ。
+-- **リソース枠**: Memory 512 MiB, PID 128, Timeout 60s, Test-concurrency 1。
+-- **失効条件**: 外部通信検知、cgroup制限超過、固定HEAD不一致、STOP条件抵触。
+--- g1_d1_owner_decision_package_r1_1/09_APPROVAL_DEPENDENCY_AND_SEQUENCE_R1_1.md	2026-10-26 03:03:34.349063945 +0900
++++ g1_d1_owner_decision_package_r1_2/09_APPROVAL_DEPENDENCY_AND_SEQUENCE_R1_2.md	2026-10-26 03:19:59.482071835 +0900
+@@ -1,4 +1,4 @@
+-# 09. 承認依存関係と判断順序（Approval Dependency & Sequence R1.1）
++# 09. 承認依存関係と判断順序（Approval Dependency & Sequence R1.2）
+ 
+ ## 1. 意思決定の依存関係と判断フェーズ
+ 
+@@ -20,7 +20,7 @@
+ ### 1.1 初期判断候補（Phase 1: 即時判断可能）
+ - **DEC-01A**: 承認対象パス限定の読み取り専用調査のため、即時 APPROVE 可能。
+ - **DEC-02**: 独立Git配備のオブジェクト検証仕様が確定しており、Stage 3 の前提として即時 APPROVE 可能。
+-- **DEC-03**: リソース上限候補枠および Stage 0（受入）の実行について、方式A（Stage別）で即時 APPROVE 可能。
++- **DEC-03**: リソース上限候補枠および Stage 0（受入）の単一実行について、方式A（1 Record = 1 Stage）で即時 APPROVE 可能。
+ - **DEC-04**: 全39ファイルの独立静的照合が完了しており、審査基準として即時 APPROVE 可能。
+ 
+ ### 1.2 条件成立後の判断候補（Phase 2: 前提成立まで保留）
+@@ -45,16 +45,16 @@
+ Stage 4 -> Stage 5
+ ```
+ 
+-### 2.1 Stage と 意思決定項目の対応関係
++### 2.1 Stage と 意思決定項目の対応関係（Method A: 1 Record = 1 Stage 整合）
+ 
+-| Stage | 名称 | 必須 Owner 意思決定 | 進入前提条件 | 実行許可操作 |
++| Stage | 名称 | 必須 Owner 意思決定記録 | 進入前提条件 | 実行許可操作 |
+ | :--- | :--- | :--- | :--- | :--- |
+-| **Stage 0** | **環境受入再確認** | **DEC-03 (Stage 0)** | VM起動済み、固定HEADチェックアウト | 単一実行、テスト実行なし、環境検証のみ |
+-| **Stage 1** | **オフライン依存補完** | **DEC-01A, 01B, DEC-03 (Stage 1)** | Stage 0 PASS | キャッシュ配置、`npm ci --offline --ignore-scripts` 検証 |
+-| **Stage 2** | **Group A 限定再試験** | **DEC-03 (Stage 2)** | Stage 1 PASS | 並列度1での順次実行、Group A 対象ファイルのみ |
+-| **Stage 3** | **Group B 限定再試験** | **DEC-02, DEC-03 (Stage 3)**<br>*(失敗時のみ DEC-05)* | Stage 0 PASS<br>(Stage 1/2 とは独立) | 並列度1での実行、`authorize-routing-start.test.mjs` |
+-| **Stage 4** | **Group C 限定再試験** | **DEC-03 (Stage 4)**<br>*(失敗時のみ DEC-06)* | Stage 0 PASS<br>(Stage 1/2 とは独立) | 並列度1での実行、`authorize-decision-egress.test.mjs` |
+-| **Stage 5** | **全体回帰確認** | **DEC-04, DEC-03 (Stage 5)** | **Stage 2, 3, 4 すべてが PASS** | 並列度1での順次実行 (`--test-concurrency=1`)、全39ファイル |
++| **Stage 0** | **環境受入再確認** | **DEC-03 (Stage 0 単一指定記録)** | VM起動済み、固定HEADチェックアウト | 単一実行、テスト実行なし、環境検証のみ |
++| **Stage 1** | **オフライン依存補完** | **DEC-01A, 01B, DEC-03 (Stage 1 単一指定記録)** | Stage 0 PASS | キャッシュ配置、`npm ci --offline --ignore-scripts` 検証 |
++| **Stage 2** | **Group A 限定再試験** | **DEC-03 (Stage 2 単一指定記録)** | Stage 1 PASS | 並列度1での順次実行、Group A 対象ファイルのみ |
++| **Stage 3** | **Group B 限定再試験** | **DEC-02, DEC-03 (Stage 3 単一指定記録)**<br>*(失敗時のみ DEC-05)* | Stage 0 PASS<br>(Stage 1/2 とは独立) | 並列度1での実行、`authorize-routing-start.test.mjs` |
++| **Stage 4** | **Group C 限定再試験** | **DEC-03 (Stage 4 単一指定記録)**<br>*(失敗時のみ DEC-06)* | Stage 0 PASS<br>(Stage 1/2 とは独立) | 並列度1での実行、`authorize-decision-egress.test.mjs` |
++| **Stage 5** | **全体回帰確認** | **DEC-04, DEC-03 (Stage 5 単一指定記録)** | **Stage 2, 3, 4 すべてが PASS** | 並列度1での順次実行 (`--test-concurrency=1`)、全39ファイル |
+ 
+ ---
+ 
+@@ -70,7 +70,7 @@
+ 
+ ---
+ 
+-## 4. STOP 再開条件の非循環アーキテクチャ（FND-ODP-008是正反映）
++## 4. STOP 再開条件の非循環アーキテクチャ
+ 
+ STOP 発生時の再開フローは、以下の非循環な 3 段階によって制御されます：
+ 1. **Phase A (Pre-approval)**: STOP 原因特定、ログ保全、修復文書化、HEAD整合、隔離境界、cgroup制限等の事前検証。
+--- g1_d1_owner_decision_package_r1_1/10_OWNER_DECISION_RECORD_TEMPLATE_R1_1.md	2026-10-26 03:03:22.288088338 +0900
++++ g1_d1_owner_decision_package_r1_2/10_OWNER_DECISION_RECORD_TEMPLATE_R1_2.md	2026-10-26 03:19:47.247096574 +0900
+@@ -1,4 +1,4 @@
+-# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.1）
++# 10. Human Owner 意思決定記録欄（Owner Decision Record Template R1.2）
+ 
+ > **【重要・記入上の注意】**
+ > 本ドキュメントは、Human Owner ご自身が直接判断結果を記入・署名するための公式記録テンプレートです。
+@@ -7,12 +7,12 @@
+ 
+ ---
+ 
+-## 1. 外部意思決定記録アーキテクチャ（External Decision Record Architecture / FND-ODP-007是正）
++## 1. 外部意思決定記録アーキテクチャ（External Decision Record Architecture）
+ 
+ 本判断記録テンプレートは、自己参照的なハッシュ循環を排除し、不変のパッケージ本体と独立した「外部判断記録（External Owner Decision Record）」として運用されます。
+ 
+ ```text
+-[Owner Decision Package R1.1 (不変資料)]
++[Owner Decision Package R1.2 (不変資料)]
+     │
+     │ 確定SHA-256 (独立算出)
+     ▼
+@@ -22,7 +22,7 @@
+     ▼
+ [External Owner Decision Record (署名済み外部記録)]
+     │
+-    │ 個別DEC / 範囲 / 証跡 / VM / Stage / 署名
++    │ 個別DEC / 範囲 / 証跡 / VM / 単一Stage / 署名
+     ▼
+ [Authorization Eligibility Assessment (実行資格判定)]
+     │
+@@ -36,64 +36,103 @@
+ 
+ ---
+ 
+-## 2. 意思決定記録の必須バインディング項目（Decision Identity Binding）
++## 2. 外部 Owner Decision Record 共通必須スキーマ（FND-ODP-007是正）
+ 
+-各判断記録は、以下の全項目に一意に結び付けられます：
++全 DEC 共通で、正式な外部判断記録は以下の 7 つの論理ブロック・全フィールドを網羅しなければなりません。
+ 
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-[DEC-ID]-[SEQ]`
+-- **対象リポジトリ**: `https://github.com/yohi/ocr-app`
+-- **対象ブランチ**: `fix/shadow-graphql-post-scope-guards`
+-- **固定HEADコミットハッシュ**: `6b08251170265c444ce8957377e6bfca23b21fd7`（40桁 Git Object ID）
+-- **対象パッケージ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_1_2026-10-26.tar.gz`
+-- **パッケージ確定 SHA-256**: `[独立レビューにより確定された実測SHA-256]`
+-- **審査文書識別子**:
+-  - `00_OWNER_EXECUTIVE_SUMMARY_R1_1.md`
+-  - `01_DECISION_MATRIX_R1_1.csv`
+-  - `02_DEC_01_DEPENDENCY_TRANSFER_R1.md`
+-  - `03_DEC_02_LOCAL_GIT_R1.md`
+-  - `04_DEC_03_EXECUTION_RESOURCES_R1_1.md`
+-  - `05_DEC_04_TEST_SCOPE_GATE_R1.md`
+-  - `06_DEC_05_06_DIAGNOSTIC_EXPERIMENTS_R1.md`
+-  - `07_DEC_07_STOP_RESUME_R1_1.md`
+-  - `08_RISK_REGISTER_R1.md`
+-  - `09_APPROVAL_DEPENDENCY_AND_SEQUENCE_R1_1.md`
+-
+-### 必須の実行禁止条件（Fail-closed 契約）
+-以下のいずれかに該当する場合、本承認記録はいかなる実行権限としても機能しません：
+-- Package SHA-256 が未確認・不一致
+-- 対象 Stage が未指定
+-- 許可操作が未指定
+-- 対象 VM 識別子が未指定・不一致
+-- 実行許容回数が未指定
+-- 必須前提条件が未充足
+-- 判断区分が未記入
+-- 条件付き承認の付帯条件が未検証・未充足（`CONDITION_PENDING / EXECUTION_BLOCKED`）
++### A. Record Identity（記録識別情報）
++- `decision_record_id`: 一意の判断記録識別子（発行規則に準拠）。
++- `decision_record_revision`: 判断記録の版番号（初期値: `1.0`）。
++- `decision_id`: 対象の意思決定項目識別子（`DEC-01A` 〜 `DEC-07` のいずれか1つ）。
++- `record_sequence`: 当該 DEC に対する発行通番（`01`, `02`, ...）。
++- `record_status`: 記録の状態（`DRAFT`, `ISSUED`, `EFFECTIVE`, `EXPIRED`, `REVOKED`, `SUPERSEDED`, `INVALID`）。
++- `supersedes_record_id`: 改訂時に無効化・置換する過去の判断記録ID（初版時は `NONE`）。
++
++### B. Package Binding（パッケージ結合情報）
++- `package_name`: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_2_2026-10-26.tar.gz`
++- `package_revision`: `R1.2`
++- `package_sha256`: 独立レビューにより確定された実測 SHA-256（自己参照埋め込みを禁止）。
++- `package_byte_size`: パッケージの実測バイト数。
++- `fixed_repository`: `https://github.com/yohi/ocr-app`
++- `fixed_head`: `6b08251170265c444ce8957377e6bfca23b21fd7`（40桁 Git Object ID）
++- `independent_review_result_id`: パッケージを審査した独立レビュー結果識別子。
++
++### C. Evidence Binding（証跡結合情報）
++- `evidence_ids`: 審査した一次証跡識別子の一覧。
++- `evidence_sha256`: 各証跡の SHA-256 チェックサム（証跡IDと1対1で対応付けること）。
++- `reviewed_document_ids`: 審査対象とした本パッケージ内の文書ファイル名一覧。
++- `precondition_evidence_ids`: 前提条件の成立を証明する証跡IDおよびハッシュ。
++- `condition_satisfaction_evidence_ids`: 条件付き承認の付帯条件が充足されたことを証明する証跡IDおよびハッシュ。
++
++### D. Environment Binding（環境結合情報）
++- `vm_identifier`: 実行を許可するテスト専用 VM の一意なホスト名または UUID。
++- `execution_environment`: 対象環境区分（テスト専用隔離 VM）。
++- `host_vm_boundary`: ホスト環境との分離境界（ホストは完全 READ-ONLY）。
++- `network_boundary`: ネットワーク隔離要件（ループバックのみ有効、外部通信完全遮断）。
++- `secrets_isolation`: 機密情報隔離要件（ホスト Secrets、個人トークン非共有）。
++- `docker_socket_isolation`: ホスト Docker Socket 非共有要件（マウント厳禁）。
++
++### E. Authorization Scope（承認操作範囲）
++- `approval_method`: 承認方式（`METHOD_A_STAGE_BY_STAGE` または `METHOD_B_CONDITIONAL_PROGRESSION`）。
++- `decision_disposition`: 判断区分（`APPROVE`, `CONDITIONAL_APPROVE`, `HOLD`, `REJECT`）。
++- `authorized_stage`: **承認対象 Stage（Method A では必ず単一の Stage 0〜5 のいずれか1つ。複数指定・範囲指定・ワイルドカードは無効。Stage 概念のない DEC は `NOT_APPLICABLE` と明記）**。
++- `authorized_operations`: 承認により許可される具体的な操作の一覧。
++- `forbidden_operations`: 明示的に禁止される操作の一覧。
++- `execution_count_limit`: 許容実行回数の上限（通常は `1` 回）。
++- `resource_limits`: メモリ上限（512 MiB）、PID上限（128）、タイムアウト（60s）、並列度（concurrency=1）。
++- `required_preconditions`: 実行前に充足すべき前提条件の一覧。
++- `stop_conditions`: 直ちに実行を中断・安全停止すべき STOP 条件の一覧。
++
++### F. Validity（有効性・失効契約）
++- `effective_conditions`: 承認が効力を持つための必須条件。
++- `effective_from`: 承認の発効日時。
++- `expires_at`: 承認の失効有効期限。
++- `revocation_conditions`: 承認が取消・失効となる条件。
++- `revision_invalidation_rules`: 改訂時に旧承認が無効化される規則。
++
++### G. Human Owner Decision & Signature（判断・署名情報）
++- `owner_decision`: Human Owner の判断選択。
++- `owner_conditions`: Human Owner が課す付帯条件・指示事項。
++- `owner_decision_timestamp`: 判断を行った日時（UTC/JST 明記）。
++- `owner_signature`: Human Owner 本人による署名（電子署名または手書き署名）。
++- `signature_verification_method`: 署名の真正性を検証する方式。
+ 
+ ---
+ 
+-## 3. 意思決定記録総括表（全8項目・すべて未記入）
+-
+-| 意思決定ID | 項目名 | 承認方式 (Owner選択) | 判断区分 (Owner記入) | 判断日時 (Owner記入) | 署名 (Owner記入) |
+-| :--- | :--- | :--- | :--- | :--- | :--- |
+-| **DEC-01A** | キャッシュインベントリ検査 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-01B** | 不足依存限定転送 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-02**  | 独立ローカルGit環境配備 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-03**  | 再試験実行権限・リソース上限 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-04**  | 全体回帰範囲・Gate審査基準 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-05**  | Group B 診断実験承認 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-06**  | Group C 診断実験承認 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
+-| **DEC-07**  | STOP発生後個別再開承認 | `[          ]` | `[                      ]` | 2026-____-____ __:__ | ______________________ |
++## 3. 一意判断記録 ID 発行規則（FND-ODP-007是正）
++
++判断記録 ID の重複、衝突、過去 ID の再利用を完全に防止するため、以下の発行手続きおよび命名規則を強制します。
++
++### 3.1 規範的 ID フォーマット
++```text
++ODR-G1-D1-<YYYYMMDD>-<PACKAGE_REV>-<DEC_ID>-<STAGE_OR_NA>-<SEQUENCE>
++```
++- **例1**: `ODR-G1-D1-20261026-R1.2-DEC03-STAGE0-01`
++- **例2**: `ODR-G1-D1-20261026-R1.2-DEC01A-NA-01`
++- **例3**: `ODR-G1-D1-20261026-R1.2-DEC07-STAGE3-01`
++
++### 3.2 ID 発行および重複防止の 7 原則
++1. **個別 ID の一意性**: 発行されるすべての判断記録は、システム全体で完全に一意な ID を持たなければならない。
++2. **追加判断時の別 ID 付与**: 同一の DEC に対して再判断・追加指示を行う場合、連番（`SEQUENCE`）をインクリメントし、必ず異なる ID を発行する。
++3. **Stage ごとの ID 完全分離**: 対象 Stage が異なる場合、同一の ID を共用することは禁止し、必ず Stage 名を含めた個別 ID を発行する。
++4. **再発行・改訂時の新 ID 必須**: 承認の失効、取消、または条件変更により再発行する場合、過去の ID を再利用してはならず、必ず新しい ID を発行する。
++5. **ID 再利用の永久禁止**: いかなる理由があっても、過去に使用された判断記録 ID を再利用（リサイクル）してはならない。
++6. **監査台帳による一意性追跡**: 連番の割当主体（Human Owner または記録管理システム）は、発行済み ID、対象パッケージ、対象 Stage、発行日時を監査台帳で一元管理し、発行前に重複がないことを静的に検証する。
++7. **重複検知時のフェイルクローズ**: 万一、同一 ID の重複や衝突が検知された場合、当該 ID に関連するすべての実行権限は無効（`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT`）となる。
+ 
+ ---
+ 
+-## 4. 各意思決定項目の個別判断テンプレート
++## 4. 各意思決定項目の単一入力判断テンプレート
+ 
+ ### DEC-01A: オフライン依存キャッシュインベントリ検査
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC01A-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
+-- **許可範囲**: 指定パスの読み取り専用走査、ロックファイル照合、不足特定、マニフェスト案作成。
+-- **禁止範囲**: パッケージ転送、インストール、テスト実行、ホスト変更、外部通信。
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **Approval Method**: `[未記入]` (推奨: `METHOD_A_STAGE_BY_STAGE`)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `NOT_APPLICABLE` (固定)
++- **Authorized Operation**: `[未記入]` (走査・照合・マニフェスト案作成のみ)
++- **Forbidden Operation**: パッケージ転送、インストール、テスト実行、ホスト変更、外部通信。
+ - **Owner 指示・付帯条件**:
+   ```text
+   
+@@ -103,13 +142,15 @@
+ ---
+ 
+ ### DEC-01B: オフライン不足依存パッケージ限定転送
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC01B-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **審査証跡 ID**: `[                                  ]` (01A マニフェスト)
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
+-- **前提条件**: DEC-01A 完了および不足集合マニフェストの独立照合完了。
+-- **許可範囲**: 承認済みパッケージのみの内容アドレス抽出・SHA-512照合転送・VM内ハッシュ再検証。
+-- **禁止範囲**: `npm ci` / `npm install` 実行、テスト実行、未承認ファイル持ち込み、外部通信。
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **審査証跡 ID**: `[未記入]` (01A マニフェストIDおよびハッシュ)
++- **Approval Method**: `[未記入]` (推奨: `METHOD_A_STAGE_BY_STAGE`)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `NOT_APPLICABLE` (固定)
++- **Authorized Operation**: `[未記入]` (特定パッケージの抽出・転送・VM内ハッシュ再検証のみ)
++- **Forbidden Operation**: `npm ci` / `npm install` 実行、テスト実行、未承認ファイル持ち込み、外部通信。
+ - **Owner 指示・付帯条件**:
+   ```text
+   
+@@ -119,12 +160,14 @@
+ ---
+ 
+ ### DEC-02: 独立ローカルGit環境配備
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC02-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
+-- **前提条件**: 固定HEAD・tree・blob整合性、追跡ファイル一致、Git hooks無効化、ホスト非共有。
+-- **許可範囲**: VM内への独立ローカルGitメタデータ配備および照合検証。
+-- **禁止範囲**: ホスト `.git` 共有、リモート接続、ソース改変、テスト実行。
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **Approval Method**: `[未記入]` (推奨: `METHOD_A_STAGE_BY_STAGE`)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `NOT_APPLICABLE` (固定)
++- **Authorized Operation**: `[未記入]` (Gitメタデータ配備および照合検証のみ)
++- **Forbidden Operation**: ホスト `.git` 共有、リモート接続、ソース改変、テスト実行。
+ - **Owner 指示・付帯条件**:
+   ```text
+   
+@@ -133,26 +176,22 @@
+ 
+ ---
+ 
+-### DEC-03: 再試験実行権限およびリソース上限付与（FND-ODP-001是正）
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC03-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **承認方式の選択**:
+-  - `[  ] METHOD_A_STAGE_BY_STAGE` (推奨: Stageごとに結果確認後、次を承認)
+-  - `[  ] METHOD_B_CONDITIONAL_PROGRESSION` (条件付き段階進行)
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
+-- **承認許可Stage（単一または個別指定）**:
+-  - `[  ] Stage 0 のみ承認（初回推奨）`
+-  - `[  ] Stage 1（npm ci 実行）承認` ※前提: Stage 0 PASS, DEC-01B完了
+-  - `[  ] Stage 2（Group A）承認` ※前提: Stage 1 PASS
+-  - `[  ] Stage 3（Group B）承認` ※前提: Stage 0 PASS, DEC-02完了
+-  - `[  ] Stage 4（Group C）承認` ※前提: Stage 0 PASS
+-  - `[  ] Stage 5（全体回帰）承認` ※前提: Stage 2, 3, 4 すべて PASS, DEC-04合意
+-- **許容実行回数**: `[  ] 1回のみ   /   [  ] その他: _______ 回`
+-- **リソース候補値の指定**:
+-  - メモリ上限: `[  ] 512 MiB 承認   /   [  ] 変更: _______ MiB`
+-  - PID上限: `[  ] 128 承認   /   [  ] 変更: _______`
+-  - 外側タイムアウト: `[  ] 60秒 承認   /   [  ] 変更: _______ 秒`
+-  - テストファイル並列度: `[  ] --test-concurrency=1 固定承認`
++### DEC-03: 再試験実行権限およびリソース上限付与（FND-ODP-001是正: 単一Stage入力）
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **Approval Method**: `[未記入]` (選択: `METHOD_A_STAGE_BY_STAGE` / `METHOD_B_CONDITIONAL_PROGRESSION`)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `[単一Stage識別子のみ記入・未記入]` (例: `Stage 0`)
++  - ※**重要**: 複数Stageの併記、範囲指定（例: `Stage 0-3`）、ワイルドカード（例: `ALL`）は**無効**です。1つの判断記録につき必ず単一の Stage のみを記入してください。
++- **Authorized Operation**: `[未記入]` (指定単一Stageの実行のみ)
++- **Execution Count Limit**: `[未記入]` (通常: 1回)
++- **Required Previous-stage Evidence**: `[未記入]` (前提StageのPASSログIDおよびハッシュ)
++- **Resource Limits**:
++  - メモリ上限: `[未記入]` (初期候補: 512 MiB)
++  - PID上限: `[未記入]` (初期候補: 128)
++  - 外側タイムアウト: `[未記入]` (初期候補: 60秒)
++  - テスト並列度: `--test-concurrency=1` 固定
+ - **Owner 指示・付帯条件**:
+   ```text
+   
+@@ -162,8 +201,11 @@
+ ---
+ 
+ ### DEC-04: 全体回帰範囲（全39ファイル）およびGate審査基準合意
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC04-01`
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **Approval Method**: `[未記入]` (推奨: `METHOD_A_STAGE_BY_STAGE`)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `Stage 5` (Gate基準としての合意)
+ - **多面的合格契約の承認**:
+   - `[  ] EXPECTED_TEST_SCOPE_ACCOUNTED_FOR (全39ファイル)`
+   - `[  ] NO_UNEXPLAINED_TEST_OMISSIONS`
+@@ -180,10 +222,12 @@
+ ---
+ 
+ ### DEC-05: Group B 診断実験（Gitモック注入）承認
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC05-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **審査証跡 ID**: `[                                  ]` (Stage 3 Primary 失敗ログ)
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **審査証跡 ID**: `[未記入]` (Stage 3 Primary 失敗ログIDおよびハッシュ)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `Stage 3` (診断実験スコープ)
+ - **適用要件**: Stage 3 Primary 失敗確認後、実験前明示承認としてのみ有効。
+ - **許可範囲**: テストフィクスチャへのGitモック注入実験、診断ログ分離記録。
+ - **禁止範囲**: 本番コード改変、無条件事前包括承認、正規PASS偽装。
+@@ -196,10 +240,12 @@
+ ---
+ 
+ ### DEC-06: Group C 診断実験（フィクスチャ改善）承認
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC06-01`
+-- **対象VM識別子**: `[                                  ]`
+-- **審査証跡 ID**: `[                                  ]` (Stage 4 Primary 失敗ログ)
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
++- **審査証跡 ID**: `[未記入]` (Stage 4 Primary 失敗ログIDおよびハッシュ)
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `Stage 4` (診断実験スコープ)
+ - **適用要件**: Stage 4 Primary 失敗確認後、実験前明示承認としてのみ有効。
+ - **許可範囲**: TEST-14 非同期クリーンアップ明示フィクスチャ実験、診断ログ分離記録。
+ - **禁止範囲**: 本番コード改変、外側例外送出の合格扱い、無条件事前包括承認。
+@@ -211,14 +257,15 @@
+ 
+ ---
+ 
+-### DEC-07: STOP発生後の個別ステージ再開承認（FND-ODP-008是正）
+-- **Decision Record ID**: `ODR-G1-D1-20261026-R1.1-DEC07-01`
+-- **対象STOP識別子**: `[                                  ]`
+-- **対象VM識別子**: `[                                  ]`
++### DEC-07: STOP発生後の個別ステージ再開承認
++- **Decision Record ID**: `[未記入・発行規則に準拠]`
++- **Record Revision**: `[未記入]` / **Sequence**: `[未記入]`
++- **対象STOP識別子**: `[未記入]`
++- **対象VM識別子**: `[未記入]`
+ - **Phase A 前提条件確認**: `[  ] Phase A 全9条件充足を客観的証跡により確認済み`
+-- **判断選択**: `[  ] APPROVE   /   [  ] CONDITIONAL_APPROVE   /   [  ] HOLD   /   [  ] REJECT`
+-- **再開対象Stage**: `Stage [  ]` （単一実行限定）
+-- **許容回数**: `[  ] 1回のみ`
++- **Decision Disposition**: `[未記入]` (選択: `APPROVE` / `CONDITIONAL_APPROVE` / `HOLD` / `REJECT`)
++- **Authorized Stage**: `[単一Stage識別子のみ記入・未記入]` （単一実行限定）
++- **Execution Count Limit**: `1` 回のみ
+ - **Owner 指示・付帯条件**:
+   ```text
+   
+@@ -227,28 +274,32 @@
+ 
+ ---
+ 
+-## 5. 版の失効条件と実行資格評価契約
+-
+-### 5.1 版の自動失効条件
+-以下の事象が発生した場合、旧承認記録は直ちに失効し、新たな改訂パッケージおよび独立レビュー結果に基づく再確認・再承認が必要となります：
+-1. 固定HEAD（`6b08251170265c444ce8957377e6bfca23b21fd7`）からの作業ツリーの逸脱。
+-2. 承認パッケージの確定 SHA-256 不一致。
+-3. 実行範囲、テスト対象ファイル（39ファイル）、セキュリティ境界（ネットワーク・Socket隔離）の変更。
+-4. 対象 VM 環境の変更。
+-5. 承認された許容実行回数の超過。
+-6. STOP 条件への抵触（STOP 後は DEC-07 による個別再開承認が必要）。
++## 5. 発効条件と失効契約（FND-ODP-007是正）
+ 
+-### 5.2 実行資格判定（Authorization Eligibility Assessment）
+-テスト実行プロセスの開始直前に、以下の論理積（AND）がすべて成立していることを静的に検証します：
++### 5.1 発効条件（Effective Conditions）
++承認記録が実行資格として有効に発効するためには、実行プロセスの開始直前に以下の全論理積が静的に検証されなければなりません：
+ ```text
+-Package Identity Validated
+-  AND Independent Review Identity Validated
+-  AND Authentic Owner Decision Recorded
+-  AND Authorized Environment Matched
+-  AND Authorized Operation Matched
+-  AND Authorized Stage Matched
+-  AND Execution Limits Respected
+-  AND Satisfied Preconditions Verified
+-  AND No Revocation Condition Met
++    PACKAGE_IDENTITY_MATCH (パッケージ名・SHA-256・サイズが完全一致)
++AND FIXED_HEAD_MATCH (固定HEAD 6b082511... に作業ツリーが完全一致)
++AND INDEPENDENT_REVIEW_BINDING_VALID (審査合格レビュー結果IDが有効)
++AND OWNER_RECORD_AUTHENTIC (真正なOwner署名・タイムスタンプが確認可能)
++AND DECISION_SCOPE_MATCH (実行対象操作が承認範囲と厳密一致)
++AND ENVIRONMENT_MATCH (対象VM識別子および境界設定が完全一致)
++AND EVIDENCE_BINDING_VALID (前提証跡IDおよびハッシュが1対1で整合)
++AND PRECONDITIONS_SATISFIED (必須前提条件がすべて充足)
++AND EXECUTION_LIMIT_NOT_EXCEEDED (許容実行回数を超過していない)
++AND NOT_REVOKED (取消・無効化されていない)
++AND NOT_EXPIRED (有効期限が切れていない)
+ ```
+-1つでも不一致または未検証がある場合は、**`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT`** として実行を遮断します。
++1つでも不一致または未検証がある場合、**`AUTHORIZATION_INCOMPLETE / NO_EXECUTION_GRANT`** となり、実行権限は発生しません。
++
++### 5.2 失効条件（Revocation Conditions）
++以下のいずれかの事象が発生した場合、当該判断記録は直ちに効力を失い（`EXPIRED` または `REVOKED`）、自動的に無効化されます：
++1. 固定HEAD（`6b08251170265c444ce8957377e6bfca23b21fd7`）からのソースツリーの逸脱。
++2. 対象パッケージの確定 SHA-256 不一致。
++3. 実行範囲、テスト対象ファイル（39ファイル）、セキュリティ境界（ネットワーク・Socket隔離）の変更。
++4. 対象 VM 環境の変更。
++5. 承認された許容実行回数の到達（1回の実行完了をもって失効）。
++6. STOP 条件への抵触（STOP 発生時点で既存の承認はすべて執行停止）。
++7. 有効期限（`expires_at`）の到来。
++8. Human Owner による明示的な取消（Revocation）。
+--- g1_d1_owner_decision_package_r1_1/11_INDEPENDENT_REVIEW_HANDOFF_R1_1.md	2026-10-26 03:04:18.749974131 +0900
++++ g1_d1_owner_decision_package_r1_2/11_INDEPENDENT_REVIEW_HANDOFF_R1_2.md	2026-10-26 03:20:29.332011454 +0900
+@@ -1,15 +1,14 @@
+-# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.1）
++# 11. 独立再レビューハンドオフ（Independent Re-review Handoff R1.2）
+ 
+ ## 1. 独立再レビューの目的とスコープ
+ 
+-本ハンドオフ文書は、限定是正された「**G1-D1 Human Owner Decision Package (R1.1)**」について、独立した技術レビュアーが R1 再レビューで検出された 3 件の残存 Finding（FND-ODP-001, FND-ODP-007, FND-ODP-008）の解消状況、および既存 5 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
++本ハンドオフ文書は、限定是正された「**G1-D1 Human Owner Decision Package (R1.2)**」について、独立した技術レビュアーが R1.1 再レビューで検出された 2 件の残存 Finding（FND-ODP-001, FND-ODP-007）の解消状況、および既存 6 件の解決済み Finding に対する非退行性を検証し、Human Owner に提示可能な品質であることを保証するためのレビュー依頼仕様書です。
+ 
+ ### レビュアーの責務
+-- FND-ODP-001, 007, 008 の是正が完全であり、新たな不整合や権限拡大が生じていないかの検証。
+-- 解決済み Finding（FND-ODP-002〜006）に対する非退行性の検証。
++- FND-ODP-001（Method A 単一 Stage 承認の強制）の是正が完全であるかの検証。
++- FND-ODP-007（外部 Owner Decision Record 共通必須スキーマ・一意 ID 発行規則・結合規則）の是正が完全であるかの検証。
++- 解決済み Finding（FND-ODP-002〜006, FND-ODP-008）に対する非退行性の検証。
+ - AI 推奨値と Owner 決定値が完全に分離され、決定欄が白紙・未承認であることの検証。
+-- パッケージ自身の自己参照ハッシュ循環が排除され、外部判断記録方式となっていることの確認。
+-- STOP 再開 Gate が Phase A/B/C の非循環設計となっていることの確認。
+ - アーカイブ構造および内部ハッシュの完全性検証。
+ 
+ ---
+@@ -18,15 +17,14 @@
+ 
+ 独立レビュアーは、以下の各 Finding について個別に判定を実施してください：
+ 
+-### 2.1 残存3件の是正判定（Mandatory Findings）
++### 2.1 残存2件の是正判定（Mandatory Findings）
+ 
+ | Finding ID | 重要度 | 重点審査内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+-| **FND-ODP-001** | Major | `01_DECISION_MATRIX_R1_1.csv` において、`recommended_*` 列と `owner_*` 列が分離され、Owner 決定欄がすべて未記入であり、未指定時は `NO_EXECUTION_GRANT` となるか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-007** | Major | パッケージ自身の自己参照ハッシュが排除され、外部判断記録方式として Package Revision, SHA-256, Fixed HEAD, 証跡 ID, 対象 VM, 実行回数, 失効条件に結合されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+-| **FND-ODP-008** | Moderate | STOP 再開 Gate において、Pre-approval（Phase A）、Owner Decision（Phase B）、Post-approval Eligibility（Phase C）が分離され、承認前に承認済みを要求する循環が解消されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
++| **FND-ODP-001** | Major | `04_DEC_03_EXECUTION_RESOURCES_R1_2.md` および `10_OWNER_DECISION_RECORD_TEMPLATE_R1_2.md` において、Method A の単一 Stage 契約（1 Record = 1 Stage）が規範化され、複数指定・範囲指定・ワイルドカードが無効化され、次 Stage に新たな独立記録が必要となっているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
++| **FND-ODP-007** | Major | `10_OWNER_DECISION_RECORD_TEMPLATE_R1_2.md` において、7 つの論理ブロックから成る共通必須スキーマ、ID 発行 7 原則・フォーマット、Package/HEAD/VM/Evidence/Scope 結合規則、および発効・失効条件が完全かつ非循環に定義されているか。 | `RESOLVED` / `PARTIAL` / `OPEN` / `REGRESSION` |
+ 
+-### 2.2 既存解決済み5件の非退行性判定（Mandatory Non-regression）
++### 2.2 既存解決済み6件の非退行性判定（Mandatory Non-regression）
+ 
+ | Finding ID | 重要度 | 検証内容 | 判定基準 |
+ | :--- | :--- | :--- | :--- |
+@@ -35,25 +33,26 @@
+ | **FND-ODP-004** | Moderate | `--test-concurrency=1` が「同時実行テストファイル数上限」として正確に定義され、cgroup PID や非同期処理と分離されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-005** | Moderate | 診断実験（DEC-05/06）において、「無条件事前包括承認の禁止」と「実験開始前の Owner 明示承認必須」が矛盾なく定義されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ | **FND-ODP-006** | Moderate | 過剰なゼロリスク断定がなく、DEC-01A 読取リスクが明記され、ホスト固有内部絶対パスが排除されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
++| **FND-ODP-008** | Moderate | STOP 再開 Gate において、Pre-approval（Phase A）、Owner Decision（Phase B）、Post-approval Eligibility（Phase C）の非循環 3 段階が維持されているか。 | `NON_REGRESSION_PASS` / `REGRESSION` |
+ 
+ ---
+ 
+ ## 3. 重点審査領域（Focus Areas）
+ 
+-### 3.1 Approval Integrity（承認の完全性）
+-- AI 推奨値が Human Owner の決定値として解釈されないこと。
+-- Decision Record Template が完全な白紙・未記入であること。
+-- パッケージ本体の不変性が保たれ、外部判断記録により承認が管理されること。
+-
+-### 3.2 STOP Resume Safety（STOP再開の安全性）
+-- Phase A（事前検証）完了前に Owner 判断が行われないこと。
+-- Phase B（Owner承認）成立後、Phase C（直前適格性確認）を経て初めて単一Stageの再実行が認められること。
+-- 条件付き承認において、条件未充足時は `CONDITION_PENDING / EXECUTION_BLOCKED` が維持されること。
++### 3.1 Stage Authorization Integrity（Stage 承認の完全性）
++- 1つの判断記録が複数の Stage に効力を持たないこと。
++- 前提 Stage の PASS が、次 Stage への実行権限を自動生成しないこと。
++- 複数 Stage 指定、範囲指定、ワイルドカード指定がすべてフェイルクローズ（実行遮断）となること。
++
++### 3.2 Owner Record Schema & Identity（判断記録スキーマと一意性）
++- 発行規則に従い、ID が一意であり過去 ID の再利用が禁止されていること。
++- 外部判断記録が、確定 Package SHA-256、Fixed HEAD、対象 VM、1対1対応の証跡 ID/SHA-256 に厳格に結合されていること。
++- 真正性未確認時や条件未充足時に実行不可となること。
+ 
+-### 3.3 Authority & Security Boundary（権限・セキュリティ境界）
++### 3.3 Gate & Authority Separation（権限と Gate の分離）
+ - 全 8 項目が `NOT_APPROVED` であること。
+-- 外部ネットワーク完全遮断、ホスト Docker Socket 非共有、ホスト 26 コンテナ無停止保護が維持されていること。
+-- G1-D1 正式 Gate が未承認（`BLOCKED`）のままであること。
++- 未解決 19 件の再試験は未実行であること。
++- G1-D1 正式 Gate は未承認（`BLOCKED`）のままであること。
+ 
+ ---
+ 
+@@ -61,7 +60,7 @@
+ 
+ 独立レビュアーは、検証完了後に以下のいずれかのステータスを返却してください：
+ 
+-1. **`OWNER_DECISION_PACKAGE_R1_1_REVIEW_PASS / READY_FOR_OWNER_DECISION`**:
+-   - 3件の Finding がすべて `RESOLVED` であり、既存5件の非退行性が確認され、Human Owner の個別意思決定資料として提出を推奨する。
++1. **`OWNER_DECISION_PACKAGE_R1_2_REVIEW_PASS / READY_FOR_OWNER_DECISION`**:
++   - 2件の Finding がすべて `RESOLVED` であり、既存6件の非退行性が確認され、Human Owner の個別意思決定資料として提出を推奨する。
+ 2. **`PACKAGE_DEFECT_DETECTED / REVISION_REQUIRED`**:
+    - 未解決の Finding または新たな不整合が存在し、再修正を求める。
+--- g1_d1_owner_decision_package_r1_1/12_INPUT_PROVENANCE_R1_1.md	2026-10-26 03:04:44.568921915 +0900
++++ g1_d1_owner_decision_package_r1_2/12_INPUT_PROVENANCE_R1_2.md	2026-10-26 03:20:38.143993623 +0900
+@@ -1,23 +1,23 @@
+-# 12. 入力原本来歴と照合記録（Input Provenance R1.1）
++# 12. 入力原本来歴と照合記録（Input Provenance R1.2）
+ 
+ ## 1. 入力原本の完全性検証結果
+ 
+-本 R1.1 限定是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
++本 R1.2 最小限是正パッケージ作成において使用された公式入力ファイルおよび先行成果物について、静的検証（ハッシュ、サイズ、内部完全性）を実施しました。
+ 
+-### 1.1 R1 意思決定パッケージ（直接の是正対象）
++### 1.1 R1.1 意思決定パッケージ（直接の是正対象）
++- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_1_2026-10-26.tar.gz`
++- **期待 SHA-256**: `ef9bce3c68d2eb074840d6498dc84a1debcd5e30cf58859e4368ce9321cf93d7`
++- **実測 SHA-256**: `ef9bce3c68d2eb074840d6498dc84a1debcd5e30cf58859e4368ce9321cf93d7`
++- **期待バイトサイズ**: `46,293 bytes`
++- **実測バイトサイズ**: `46,293 bytes`
++- **検証ステータス**: **`MATCH (完全一致検証 PASS)`**
++- **内部完全性**: 内部 `SHA256SUMS.txt` 16 項目全件一致検証 PASS
++
++### 1.2 R1 意思決定パッケージ（比較用原本）
+ - **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R1_2026-10-26.tar.gz`
+-- **期待 SHA-256**: `2dd85610753240e002502f64bc022a16708703d5c3c56208120b465cf06ce872`
+ - **実測 SHA-256**: `2dd85610753240e002502f64bc022a16708703d5c3c56208120b465cf06ce872`
+-- **期待バイトサイズ**: `59,313 bytes`
+ - **実測バイトサイズ**: `59,313 bytes`
+-- **検証ステータス**: **`MATCH (完全一致検証 PASS)`**
+-- **内部完全性**: 内部 `SHA256SUMS.txt` 15項目全件一致検証 PASS
+-
+-### 1.2 R0 意思決定パッケージ（先行比較用原本）
+-- **外側アーカイブ名**: `OCR_APP_G1_D1_OWNER_DECISION_PACKAGE_R0_2026-10-26.tar.gz`
+-- **実測 SHA-256**: `e7ea337bc7c4ec3c2ec6d44bab15cf690f9694062d6af7883d75af979f89bbf6`
+-- **実測バイトサイズ**: `23,663 bytes`
+-- **R0 内部 13 個別ファイルのハッシュ検証**: 13/13 ファイル一致 PASS
++- **検証ステータス**: 完全一致確認 PASS
+ 
+ ### 1.3 上位の再試験計画 R1.3
+ - **ファイル名**: `OCR_APP_G1_D1_UNRESOLVED_19_RETEST_PLAN_R1_3_2026-10-26.tar.gz`
+@@ -31,7 +31,7 @@
+ 
+ - **Repository**: `https://github.com/yohi/ocr-app`
+ - **Branch**: `fix/shadow-graphql-post-scope-guards`
+-- **固定HEADコミットハッシュ**: `6b08251170265c444ce8957377e6bfca23b21fd7`（Git 40桁 SHA-1 オブジェクト識別子）
++- **Fixed HEAD コミットハッシュ**: `6b08251170265c444ce8957377e6bfca23b21fd7`（Git 40桁 SHA-1 オブジェクト識別子）
+ - **Git作業ツリー状態**:
+   - `git rev-parse HEAD` 出力: `6b08251170265c444ce8957377e6bfca23b21fd7`（完全一致）
+   - 追跡ファイル変更: なし（クリーン）

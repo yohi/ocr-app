@@ -1,0 +1,9 @@
+decision_id,title,scope,recommended_approval_method,recommended_disposition,recommendation_rationale,current_status,owner_selected_approval_method,owner_decision_disposition,owner_authorized_stage,owner_authorized_scope,owner_decision_record_id,owner_decision_date,owner_signature
+DEC-01A,オフライン依存キャッシュインベントリ検査,VM内キャッシュ走査およびホスト側読取専用調査,METHOD_A_STAGE_BY_STAGE,APPROVE,読み取り専用調査であり不足パッケージ集合を安全に特定するために不可欠,NOT_APPROVED,,,,,,,
+DEC-01B,オフライン不足依存パッケージ限定転送,01A確定パッケージのVM限定転送,METHOD_A_STAGE_BY_STAGE,HOLD,DEC-01Aのインベントリ検査結果および不足集合マニフェスト確定まで保留すべき,NOT_APPROVED,,,,,,,
+DEC-02,独立ローカルGit環境配備,テストVM内Gitメタデータ配備,METHOD_A_STAGE_BY_STAGE,APPROVE,固定HEAD整合性およびhooks無効化等10要件を満たす独立Git配備はGroup B検証に不可欠,NOT_APPROVED,,,,,,,
+DEC-03,再試験実行権限およびリソース上限付与,Stage 0〜5 実行権限およびcgroup上限枠,METHOD_A_STAGE_BY_STAGE,APPROVE,"Method Aに基づき1レコード＝1Stage（初回はStage 0のみ）の実行承認を推奨（複数Stage指定・範囲指定・ワイルドカードは無効）",NOT_APPROVED,,,,,,,
+DEC-04,全体回帰対象範囲（全39ファイル）およびGate審査基準合意,Stage 5 全体回帰範囲および合格基準,METHOD_A_STAGE_BY_STAGE,APPROVE,固定HEAD全39テストファイルの回帰範囲および多面的合格契約の合意として承認推奨,NOT_APPROVED,,,,,,,
+DEC-05,Group B 診断実験（Gitモック注入）承認,Stage 3 失敗時診断実験,METHOD_A_STAGE_BY_STAGE,HOLD,Stage 3 Primary再試験の結果確認および実験前個別承認要件成立まで保留すべき,NOT_APPROVED,,,,,,,
+DEC-06,Group C 診断実験（フィクスチャ改善）承認,Stage 4 失敗時診断実験,METHOD_A_STAGE_BY_STAGE,HOLD,Stage 4 Primary再試験の結果確認および実験前個別承認要件成立まで保留すべき,NOT_APPROVED,,,,,,,
+DEC-07,STOP発生後の個別ステージ再開承認,STOP発生時の特定単一Stage再開,METHOD_A_STAGE_BY_STAGE,HOLD,STOP事象発生後の調査・修復およびPhase A検証完了まで包括事前承認は保留すべき,NOT_APPROVED,,,,,,,
