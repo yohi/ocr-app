@@ -314,33 +314,25 @@ function validateReviewThreadPage(reviewThreads) {
   for (const thread of reviewThreads.nodes) validateReviewThread(thread);
 }
 
-export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphql = executeGraphQLQuery, strictFailure = false }) {
+async function fetchAllOpenThreadsStrict({ owner, name, prNumber, token, graphql }) {
   const openThreads = [];
   let cursor = null;
   let pageCount = 0;
   const seenCursors = new Set();
 
   while (true) {
-    if (strictFailure && pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
+    if (pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
     const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
-    const response = strictFailure
-      ? await graphql(token, query, { strict: true })
-      : await graphql(token, query);
+    const response = await graphql(token, query, { strict: true });
     pageCount++;
 
-    if (strictFailure && !isPlainRecord(response)) throw new Error('THREAD_FETCH_FAILED');
-    if (hasGraphqlErrors(response, strictFailure)) {
-      if (strictFailure) throw new Error('THREAD_FETCH_FAILED');
-      console.error('GraphQL Query Errors:', JSON.stringify(response.errors));
-      break;
+    if (!isPlainRecord(response)) throw new Error('THREAD_FETCH_FAILED');
+    if (hasGraphqlErrors(response, true)) {
+      throw new Error('THREAD_FETCH_FAILED');
     }
 
     const reviewThreads = response.data?.repository?.pullRequest?.reviewThreads;
-    if (strictFailure) {
-      validateReviewThreadPage(reviewThreads);
-    } else if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
-      break;
-    }
+    validateReviewThreadPage(reviewThreads);
 
     for (const thread of reviewThreads.nodes) {
       if (!thread.isResolved && isOcrThread(thread)) {
@@ -353,13 +345,45 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphq
       }
     }
 
-    if (strictFailure) {
-      if (!reviewThreads.pageInfo.hasNextPage) break;
-      const nextCursor = reviewThreads.pageInfo.endCursor;
-      if (seenCursors.has(nextCursor) || pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
-      seenCursors.add(nextCursor);
-      cursor = nextCursor;
-      continue;
+    if (!reviewThreads.pageInfo.hasNextPage) break;
+    const nextCursor = reviewThreads.pageInfo.endCursor;
+    if (seenCursors.has(nextCursor) || pageCount >= 200) throw new Error('THREAD_FETCH_FAILED');
+    seenCursors.add(nextCursor);
+    cursor = nextCursor;
+  }
+
+  return openThreads;
+}
+
+export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphql = executeGraphQLQuery, strictFailure = false }) {
+  if (strictFailure) {
+    return fetchAllOpenThreadsStrict({ owner, name, prNumber, token, graphql });
+  }
+
+  const openThreads = [];
+  let cursor = null;
+  while (true) {
+    const query = buildFetchThreadsQuery({ owner, name, prNumber, cursor });
+    const response = await graphql(token, query);
+    if (hasGraphqlErrors(response, false)) {
+      console.error('GraphQL Query Errors:', JSON.stringify(response.errors));
+      break;
+    }
+
+    const reviewThreads = response.data?.repository?.pullRequest?.reviewThreads;
+    if (!reviewThreads || !Array.isArray(reviewThreads.nodes)) {
+      break;
+    }
+
+    for (const thread of reviewThreads.nodes) {
+      if (!thread.isResolved && isOcrThread(thread)) {
+        openThreads.push({
+          id: thread.id,
+          path: thread.path,
+          line: thread.line || thread.originalLine,
+          comments: thread.comments?.nodes || [],
+        });
+      }
     }
 
     if (reviewThreads.pageInfo?.hasNextPage && reviewThreads.pageInfo?.endCursor) {

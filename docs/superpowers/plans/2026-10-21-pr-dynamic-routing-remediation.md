@@ -177,6 +177,17 @@ by this follow-up. The per-effect freshness/TOCTOU and already-running Host limi
 
 These exceptions are limited to the two source files, their offline tests, and this documentation follow-up. The original exclusions remain effective for all other files and behavior. In particular, no Worker, workflow, result schema, authorization registry, runtime grant, Check Run API behavior, retry policy, or deployment behavior is authorized to change. Tests must use stubs/mocks; no real GitHub/API/Host operation is permitted. Candidate status is at most `CORRECTED_IN_CANDIDATE / INDEPENDENT_REVIEW_REQUIRED`; this amendment is not independent acceptance or G1/G2/G3/G4 approval.
 
+### 2026-10-26 Owner-limited HEAD revalidation exception
+
+**Status: implementation scope explicitly authorized by the Human Owner in this task conversation for this candidate only; independent review and operational gates remain open.** The Owner directed implementation, commit, and push of the FND-100-R1-002 remediation and approved the bounded design presented immediately before implementation. This record applies only to the scope below; it does not retroactively establish approval for unrelated workflow changes or authorize activation, GitHub API writes, Actions execution, merge, or gate release.
+
+**C — `FND-100-R1-002`, limited HEAD revalidation exception:**
+
+- Permit only the `.github/workflows/ocr-engine.yml` step that revalidates the current PR HEAD immediately before fixed-thread resolution, its trusted `EXPECTED_SHA` wiring, and the condition that skips thread resolution unless that step succeeds. This is the bounded workflow change documented in `docs/superpowers/evidence/2026-10-26-r1-findings-remediation.md`.
+- Permit the directly related `resolve-threads.mjs` checks that revalidate `EXPECTED_SHA` immediately before each reply/resolve mutation and abort further mutations on mismatch or validation failure.
+- Keep the exception limited to those changes and their offline regression tests. All other workflow changes remain prohibited; do not change Check Run behavior, deployment behavior, model execution policy, or thread mutation semantics beyond fail-closed HEAD verification. Tests must use stubs/mocks; no live GitHub/API/Host operation is authorized.
+- This task's explicit authorization to commit and push covers only the resulting limited candidate patch. It does not establish independent review, G1/G2/G3/G4 approval, or operational activation.
+
 ## Proposed contracts for the Task 1 specification
 
 These proposed implementation contracts are explicit so workers do not invent security policy. Task 1 freezes
