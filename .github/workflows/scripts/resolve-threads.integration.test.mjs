@@ -95,10 +95,13 @@ test('actual resolver CLI denial fails the Check despite a successful main revie
         res.emit('data', JSON.stringify({ data: { repository: { pullRequest: { reviewThreads: {
           nodes: [{
             id: 'thread-1', isResolved: false, isOutdated: false, path: 'changed.js', line: 1, originalLine: null,
-            comments: { nodes: [{
-              id: 'comment-1', body: 'Fix this', createdAt: '2026-10-25T00:00:00Z',
-              author: { login: 'opencodereview-app' },
-            }] },
+            comments: {
+              pageInfo: { hasNextPage: false },
+              nodes: [{
+                id: 'comment-1', body: 'Fix this', createdAt: '2026-10-25T00:00:00Z',
+                author: { login: 'opencodereview-app' },
+              }],
+            },
           }],
           pageInfo: { hasNextPage: false, endCursor: null }
         } } } } }));

@@ -16,6 +16,7 @@ import https from 'node:https';
 import { pathToFileURL } from 'node:url';
 import { runThreadHost } from './antigravity-host.mjs';
 import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs';
+import { fetchCurrentHead } from './check-pr-head.mjs';
 
 export class CliError extends Error {}
 
@@ -138,6 +139,9 @@ export function buildFetchThreadsQuery({ owner, name, prNumber, cursor = null })
             line
             originalLine
             comments(first: 50) {
+              pageInfo {
+                hasNextPage
+              }
               nodes {
                 id
                 body
@@ -285,6 +289,12 @@ function validateReviewThread(thread) {
   if (!isPlainRecord(thread.comments) || !Array.isArray(thread.comments.nodes)) {
     throw new Error('THREAD_FETCH_FAILED');
   }
+  if (!isPlainRecord(thread.comments.pageInfo) || typeof thread.comments.pageInfo.hasNextPage !== 'boolean') {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
+  if (thread.comments.pageInfo.hasNextPage) {
+    throw new Error('THREAD_FETCH_FAILED');
+  }
   for (const comment of thread.comments.nodes) validateReviewComment(comment);
 }
 
@@ -363,7 +373,8 @@ export async function fetchAllOpenThreads({ owner, name, prNumber, token, graphq
 export async function run({ args = process.argv.slice(2), token = process.env.GITHUB_TOKEN, threadHost = runThreadHost,
   env = process.env, authorizeBeforeHost = () => reauthorizeRoutingMutation({ env }),
   authorizeBeforeMutation = () => reauthorizeRoutingMutation({ env }),
-  fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery } = {}) {
+  fetchOpenThreads = fetchAllOpenThreads, graphql = executeGraphQLQuery,
+  checkHead = fetchCurrentHead } = {}) {
   let config;
   try {
     config = createConfig(args, token);
@@ -431,6 +442,28 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
     if (strictGraphqlFailure) authorizationDenied = true;
     return false;
   };
+
+  const verifyHead = async () => {
+    if (!env.EXPECTED_SHA) return;
+    const shaPattern = /^[0-9a-f]{40}$/i;
+    if (typeof env.EXPECTED_SHA !== 'string' || !shaPattern.test(env.EXPECTED_SHA)) {
+      throw new Error('HEAD_VALIDATION_FAILED');
+    }
+    let actualHead;
+    try {
+      actualHead = await checkHead({
+        token: config.token,
+        targetRepo: config.repo,
+        prNumber: config.prNumber,
+      });
+    } catch {
+      throw new Error('HEAD_VALIDATION_FAILED');
+    }
+    if (typeof actualHead !== 'string' || !shaPattern.test(actualHead) || actualHead.toLowerCase() !== env.EXPECTED_SHA.toLowerCase()) {
+      throw new Error('HEAD_MISMATCH');
+    }
+  };
+
   for (const thread of openThreads) {
     const codeSnippet = extractCodeContext(config.targetDir, thread.path);
     if (!codeSnippet) {
@@ -462,6 +495,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
           authorizationDenied = true;
           break;
         }
+        await verifyHead();
         const replyQuery = buildReplyMutation(thread.id, replyBody);
         const replyResult = strictGraphqlFailure
           ? await graphql(config.token, replyQuery, { strict: true })
@@ -482,6 +516,7 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
             authorizationDenied = true;
             break;
           }
+          await verifyHead();
           const resolveQuery = buildResolveMutation(thread.id);
           const resolveResult = strictGraphqlFailure
             ? await graphql(config.token, resolveQuery, { strict: true })
@@ -500,6 +535,11 @@ export async function run({ args = process.argv.slice(2), token = process.env.GI
       } catch (err) {
         if (strictGraphqlFailure && authorizationDenied) {
           console.error('ROUTING_ACTIVATION_DENIED');
+          break;
+        }
+        if (err.message === 'HEAD_VALIDATION_FAILED' || err.message === 'HEAD_MISMATCH') {
+          operationFailed = true;
+          console.error(err.message);
           break;
         }
         if (strictGraphqlFailure) {
