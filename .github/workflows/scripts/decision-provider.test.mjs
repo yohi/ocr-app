@@ -23,7 +23,7 @@ test('missing key denies without a request', async () => {
   assert.equal(result.status, 'decision_unavailable');
 });
 
-for (const [label, changes] of [
+for (const [label, changes, expected] of [
   ['denied grant', { grant: { ...grant, allowed: false } }],
   ['stale run ID', { grant: { ...grant, workflow_run_id: '124' } }],
   ['wrong run ID type', { grant: { ...grant, workflow_run_id: 123 } }],
@@ -31,7 +31,9 @@ for (const [label, changes] of [
   ['swapped attempt', { grant: { ...grant, run_attempt: 3 } }],
   ['swapped HEAD', { grant: { ...grant, head_sha: 'b'.repeat(40) } }],
   ['wrong grant schema version', { grant: { ...grant, schema_version: '2' } }],
+  ['wrong grant destination', { grant: { ...grant, destination: 'unauthorized-destination' } }, { status: 'egress_denied', reason: 'egress_denied' }],
   ['extra state key', { decisionState: { ...state, unexpected: true } }],
+  ['wrong state schema version', { decisionState: { ...state, schema_version: '2' } }, { status: 'decision_unavailable', reason: 'invalid_input' }],
   ['invalid state enum', { decisionState: { ...state, change_size: 'huge' } }],
 ]) {
   test(`${label} is rejected before HTTP`, async () => {
@@ -39,6 +41,8 @@ for (const [label, changes] of [
     const result = await invoke(changes, async () => { calls++; return response(); });
     assert.equal(calls, 0);
     assert.ok(['egress_denied', 'decision_unavailable'].includes(result.status));
+    if (expected?.status) assert.equal(result.status, expected.status);
+    if (expected?.reason) assert.equal(result.reason, expected.reason);
     assert.equal(result.choice, null);
   });
 }
