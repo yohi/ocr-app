@@ -91,6 +91,7 @@ jobs:
           test "$actual_tree" = "$EXPECTED_TREE"
           git -C "$EVALUATION_DIR" status --porcelain=v1 | tee "$EVIDENCE_DIR/evaluation-status.txt"
           test -z "$(git -C "$EVALUATION_DIR" status --porcelain=v1)"
+          chmod 0755 "$EVALUATION_DIR"
 
       - name: Prepare pinned Node image and locked dependencies (network enabled)
         shell: bash
@@ -166,8 +167,8 @@ jobs:
           set -e
           sudo chown -R "$(id -u):$(id -g)" "$NODE_OUTPUT_DIR"
           sudo chmod -R u+rwX,go+rX "$NODE_OUTPUT_DIR"
-          test -r "$NODE_OUTPUT_DIR/node-test-files.txt"
           printf '%s\n' "$result" > "$EVIDENCE_DIR/node-tests.exit-code"
+          test -r "$NODE_OUTPUT_DIR/node-test-files.txt"
           test "$result" -eq 0
 
       - name: Run Worker tests offline in restricted container
