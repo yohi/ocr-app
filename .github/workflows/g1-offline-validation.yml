@@ -121,10 +121,10 @@ jobs:
           set -euo pipefail
           ACTIONLINT_VERSION=1.7.7
           ACTIONLINT_ARCHIVE="$RUNNER_TEMP/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl --fail --location --silent --show-error \
+          curl --proto '=https' --fail --location --silent --show-error \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
             --output "$ACTIONLINT_ARCHIVE"
-          curl --fail --location --silent --show-error \
+          curl --proto '=https' --fail --location --silent --show-error \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" \
             --output "$RUNNER_TEMP/actionlint_checksums.txt"
           checksum_line="$(awk -v f="$(basename "$ACTIONLINT_ARCHIVE")" '$2 == f {print}' "$RUNNER_TEMP/actionlint_checksums.txt")"
