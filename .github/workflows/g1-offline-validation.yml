@@ -1,0 +1,267 @@
+name: G1 Offline Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: g1-offline-validation-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
+
+jobs:
+  offline-validation:
+    name: Fixed-commit offline validation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      EVALUATION_COMMIT: 6eea267dccc56c76021cf1d4739b47ccd1465940
+      EXPECTED_TREE: 61fcff8936a748d184b1ef9f70bbd0ea5386d63f
+      EVIDENCE_DIR: ${{ github.workspace }}/g1-evidence
+      NODE_OUTPUT_DIR: ${{ github.workspace }}/g1-evidence/node-output
+      WORKER_OUTPUT_DIR: ${{ github.workspace }}/g1-evidence/worker-output
+      STATIC_OUTPUT_DIR: ${{ github.workspace }}/g1-evidence/static-output
+      EVALUATION_DIR: ${{ github.workspace }}/g1-evaluation
+      WORKFLOW_SOURCE_DIR: ${{ github.workspace }}/workflow-source
+      CANDIDATE_WORKFLOW: ${{ github.workspace }}/workflow-source/.github/workflows/g1-offline-validation.yml
+      NODE_IMAGE: node:20.19.5-bookworm
+    steps:
+      - name: Record workflow identity and initialize evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 022
+          mkdir -m 0750 -p "$EVIDENCE_DIR" "$EVALUATION_DIR"
+          {
+            printf 'workflow_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'workflow_run_attempt=%s\n' "$GITHUB_RUN_ATTEMPT"
+            printf 'workflow_ref=%s\n' "$GITHUB_WORKFLOW_REF"
+            printf 'workflow_sha=%s\n' "$GITHUB_SHA"
+            printf 'evaluation_commit=%s\n' "$EVALUATION_COMMIT"
+            printf 'expected_tree=%s\n' "$EXPECTED_TREE"
+          } | tee "$EVIDENCE_DIR/identity.txt"
+
+      - name: Prepare isolated container output directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install -d -o 10001 -g 10001 -m 0755 \
+            "$NODE_OUTPUT_DIR" "$WORKER_OUTPUT_DIR" "$STATIC_OUTPUT_DIR"
+
+      - name: Checkout fixed evaluation commit
+        uses: actions/checkout@v4
+        with:
+          ref: 6eea267dccc56c76021cf1d4739b47ccd1465940
+          path: g1-evaluation
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Checkout workflow source identity
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: workflow-source
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Verify workflow source identity and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow_source_commit="$(git -C "$WORKFLOW_SOURCE_DIR" rev-parse HEAD)"
+          test "$workflow_source_commit" = "$GITHUB_SHA"
+          test -f "$CANDIDATE_WORKFLOW"
+          candidate_sha256="$(sha256sum "$CANDIDATE_WORKFLOW" | cut -d ' ' -f 1)"
+          {
+            printf 'workflow_source_commit=%s\n' "$workflow_source_commit"
+            printf 'candidate_workflow_path=%s\n' "$CANDIDATE_WORKFLOW"
+            printf 'candidate_workflow_sha256=%s\n' "$candidate_sha256"
+          } | tee "$EVIDENCE_DIR/workflow-source-identity.txt"
+
+      - name: Verify evaluation identity and source baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_commit="$(git -C "$EVALUATION_DIR" rev-parse HEAD)"
+          actual_tree="$(git -C "$EVALUATION_DIR" rev-parse 'HEAD^{tree}')"
+          printf 'actual_evaluation_commit=%s\nactual_evaluation_tree=%s\n' \
+            "$actual_commit" "$actual_tree" | tee "$EVIDENCE_DIR/evaluation-identity.txt"
+          test "$actual_commit" = "$EVALUATION_COMMIT"
+          test "$actual_tree" = "$EXPECTED_TREE"
+          git -C "$EVALUATION_DIR" status --porcelain=v1 | tee "$EVIDENCE_DIR/evaluation-status.txt"
+          test -z "$(git -C "$EVALUATION_DIR" status --porcelain=v1)"
+
+      - name: Prepare pinned Node image and locked dependencies (network enabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker pull "$NODE_IMAGE" | tee "$EVIDENCE_DIR/docker-pull.log"
+          docker image inspect "$NODE_IMAGE" \
+            --format 'image={{index .RepoDigests 0}} image_id={{.Id}}' \
+            | tee "$EVIDENCE_DIR/docker-image-identity.txt"
+          test -s "$EVIDENCE_DIR/docker-image-identity.txt"
+          docker run --rm --network bridge \
+            --memory 2g --cpus 2 --pids-limit 256 --user 0:0 \
+            --mount "type=bind,src=$EVALUATION_DIR,dst=/evaluation" \
+            "$NODE_IMAGE" bash -euc '
+              node --version
+              npm --version
+              npm ci --ignore-scripts --prefix /evaluation/.github/workflows
+              npm ci --ignore-scripts --prefix /evaluation/cloudflare-worker
+            ' 2>&1 | tee "$EVIDENCE_DIR/dependency-preparation.log"
+          printf 'dependency_install_mode=npm ci --ignore-scripts with committed package-lock.json files\n' \
+            | tee "$EVIDENCE_DIR/dependency-policy.txt"
+          docker run --rm --network bridge --entrypoint sh "$NODE_IMAGE" -c \
+            'node --version; npm --version' | tee "$EVIDENCE_DIR/node-tool-versions.txt"
+
+      - name: Prepare versioned actionlint binary (network enabled)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTIONLINT_VERSION=1.7.7
+          ACTIONLINT_ARCHIVE="$RUNNER_TEMP/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl --proto '=https' --fail --location --silent --show-error \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            --output "$ACTIONLINT_ARCHIVE"
+          curl --proto '=https' --fail --location --silent --show-error \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_checksums.txt" \
+            --output "$RUNNER_TEMP/actionlint_checksums.txt"
+          checksum_line="$(awk -v f="$(basename "$ACTIONLINT_ARCHIVE")" '$2 == f {print}' "$RUNNER_TEMP/actionlint_checksums.txt")"
+          test -n "$checksum_line"
+          test "$(printf '%s\n' "$checksum_line" | wc -l)" -eq 1
+          (cd "$RUNNER_TEMP" && printf '%s\n' "$checksum_line" | sha256sum --check --status)
+          mkdir -p "$RUNNER_TEMP/actionlint-bin"
+          tar -xzf "$ACTIONLINT_ARCHIVE" -C "$RUNNER_TEMP/actionlint-bin" actionlint
+          "$RUNNER_TEMP/actionlint-bin/actionlint" -version \
+            | tee "$EVIDENCE_DIR/actionlint-version.txt"
+
+      - name: Run Node tests offline in restricted container
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout --signal=TERM --kill-after=10s 10m docker run --rm \
+            --network none --read-only --memory 2g --cpus 2 --pids-limit 256 \
+            --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,uid=10001,gid=10001 \
+            --mount "type=bind,src=$EVALUATION_DIR,dst=/evaluation,readonly" \
+            --mount "type=bind,src=$NODE_OUTPUT_DIR,dst=/output" \
+            --workdir /evaluation \
+            --env GIT_CONFIG_COUNT=1 \
+            --env GIT_CONFIG_KEY_0=safe.directory \
+            --env GIT_CONFIG_VALUE_0=/evaluation \
+            "$NODE_IMAGE" bash -euc '
+              shopt -s nullglob
+              test_files=(.github/workflows/scripts/*.test.mjs)
+              if [ "${#test_files[@]}" -eq 0 ]; then
+                printf "No Node test files matched the required glob\n" >&2
+                exit 1
+              fi
+              printf "%s\n" "${test_files[@]}" | tee /output/node-test-files.txt
+              node --test "${test_files[@]}"
+            ' \
+            2>&1 | tee "$EVIDENCE_DIR/node-tests.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          sudo chown -R "$(id -u):$(id -g)" "$NODE_OUTPUT_DIR"
+          sudo chmod -R u+rwX,go+rX "$NODE_OUTPUT_DIR"
+          test -r "$NODE_OUTPUT_DIR/node-test-files.txt"
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/node-tests.exit-code"
+          test "$result" -eq 0
+
+      - name: Run Worker tests offline in restricted container
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout --signal=TERM --kill-after=10s 10m docker run --rm \
+            --network none --read-only --memory 2g --cpus 2 --pids-limit 256 \
+            --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=512m,uid=10001,gid=10001 \
+            --mount "type=bind,src=$EVALUATION_DIR,dst=/evaluation,readonly" \
+            --mount "type=bind,src=$WORKER_OUTPUT_DIR,dst=/output" \
+            --env GIT_CONFIG_COUNT=1 \
+            --env GIT_CONFIG_KEY_0=safe.directory \
+            --env GIT_CONFIG_VALUE_0=/evaluation \
+            --workdir /evaluation/cloudflare-worker \
+            "$NODE_IMAGE" bash -euc 'npm test; printf "worker-test-command-completed\n" > /output/worker-test-execution.txt' \
+            2>&1 | tee "$EVIDENCE_DIR/worker-tests.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          sudo chown -R "$(id -u):$(id -g)" "$WORKER_OUTPUT_DIR"
+          sudo chmod -R u+rwX,go+rX "$WORKER_OUTPUT_DIR"
+          if [ "$result" -eq 0 ]; then
+            test -r "$WORKER_OUTPUT_DIR/worker-test-execution.txt"
+          fi
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/worker-tests.exit-code"
+          test "$result" -eq 0
+
+      - name: Run actionlint and fixed-commit whitespace checks offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          timeout --signal=TERM --kill-after=10s 5m docker run --rm \
+            --network none --read-only --memory 1g --cpus 1 --pids-limit 128 \
+            --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev,size=256m,uid=10001,gid=10001 \
+            --mount "type=bind,src=$EVALUATION_DIR,dst=/evaluation,readonly" \
+            --mount "type=bind,src=$STATIC_OUTPUT_DIR,dst=/output" \
+            --mount "type=bind,src=$RUNNER_TEMP/actionlint-bin/actionlint,dst=/usr/local/bin/actionlint,readonly" \
+            --mount "type=bind,src=$CANDIDATE_WORKFLOW,dst=/candidate/g1-offline-validation.yml,readonly" \
+            --env GIT_CONFIG_COUNT=1 \
+            --env GIT_CONFIG_KEY_0=safe.directory \
+            --env GIT_CONFIG_VALUE_0=/evaluation \
+            --workdir /evaluation \
+            "$NODE_IMAGE" bash -euc '
+              git --version | tee /output/git-version.txt
+              actionlint -version | tee /output/actionlint-version.txt
+              actionlint -color=false .github/workflows/*.yml /candidate/g1-offline-validation.yml
+              git show --check --oneline HEAD
+              candidate_diff_output="$(git diff --no-index --check -- /dev/null /candidate/g1-offline-validation.yml 2>&1)" || candidate_diff_status=$?
+              if [ -n "$candidate_diff_output" ] || [ "${candidate_diff_status:-0}" -gt 1 ]; then
+                printf "%s\n" "$candidate_diff_output" >&2
+                exit 1
+              fi
+              printf "candidate_workflow_diff_check=clean\n" | tee /output/candidate-workflow-diff-check.txt
+              printf "BASELINE_NOT_BOUND\n" | tee /output/baseline-diff-status.txt
+              git diff --check
+            ' 2>&1 | tee "$EVIDENCE_DIR/static-checks.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          sudo chown -R "$(id -u):$(id -g)" "$STATIC_OUTPUT_DIR"
+          sudo chmod -R u+rwX,go+rX "$STATIC_OUTPUT_DIR"
+          test -r "$STATIC_OUTPUT_DIR/git-version.txt"
+          test -r "$STATIC_OUTPUT_DIR/actionlint-version.txt"
+          test -r "$STATIC_OUTPUT_DIR/candidate-workflow-diff-check.txt"
+          test -r "$STATIC_OUTPUT_DIR/baseline-diff-status.txt"
+          printf '%s\n' "$result" > "$EVIDENCE_DIR/static-checks.exit-code"
+          test "$result" -eq 0
+
+      - name: Record test scope and evidence manifest
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            printf 'node_test_glob=.github/workflows/scripts/*.test.mjs\n'
+            printf 'worker_test_command=npm test --prefix cloudflare-worker\n'
+            printf 'actionlint_scope=.github/workflows/*.yml plus checked-out candidate workflow\n'
+            printf 'commit_whitespace_check=git show --check --oneline HEAD\n'
+            printf 'baseline_diff_check=BASELINE_NOT_BOUND; clean checkout git diff --check is empty\n'
+            printf 'traceability_file=.github/workflows/config/routing-traceability.json\n'
+            printf 'traceability_contract=T-017; status is not mutated by this workflow\n'
+            printf 'dependency_install=npm ci --ignore-scripts; lifecycle dependencies need runtime verification\n'
+          } > "$EVIDENCE_DIR/scope-and-traceability.txt"
+          find "$EVIDENCE_DIR" -type f -printf '%P\n' | sort \
+            > "$EVIDENCE_DIR/evidence-file-list.txt"
+
+      - name: Upload G1 offline validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g1-offline-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/g1-evidence/
+          if-no-files-found: error
+          retention-days: 30
