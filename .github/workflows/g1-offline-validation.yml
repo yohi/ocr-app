@@ -55,7 +55,7 @@ jobs:
           ref: 6eea267dccc56c76021cf1d4739b47ccd1465940
           path: g1-evaluation
           persist-credentials: false
-          fetch-depth: 1
+          fetch-depth: 2
 
       - name: Checkout workflow source identity
         uses: actions/checkout@v4
@@ -435,30 +435,188 @@ jobs:
             --env GIT_CONFIG_COUNT=1 \
             --env GIT_CONFIG_KEY_0=safe.directory \
             --env GIT_CONFIG_VALUE_0=/evaluation \
+            --env EVALUATION_COMMIT="$EVALUATION_COMMIT" \
+            --env EXPECTED_TREE="$EXPECTED_TREE" \
+            --env EXPECTED_FIRST_PARENT=2001131ef22fde061d944358705f72d0f9415274 \
             --workdir /evaluation \
             "$NODE_IMAGE" bash -euc '
+              set -uo pipefail
+              set +e
+              evidence_result=0
+              overall_result=0
+
               git --version | tee /output/git-version.txt
-              actionlint -version | tee /output/actionlint-version.txt
-              actionlint -color=false .github/workflows/*.yml /candidate/g1-offline-validation.yml
-              git show --check --oneline HEAD
-              candidate_diff_output="$(git diff --no-index --check -- /dev/null /candidate/g1-offline-validation.yml 2>&1)" || candidate_diff_status=$?
-              if [ -n "$candidate_diff_output" ] || [ "${candidate_diff_status:-0}" -gt 1 ]; then
-                printf "%s\n" "$candidate_diff_output" >&2
-                exit 1
+              git_version_pipeline=("${PIPESTATUS[@]}")
+              git_version_result="${git_version_pipeline[0]:-125}"
+              git_version_tee_result="${git_version_pipeline[1]:-125}"
+              if [ "$git_version_result" -ne 0 ] || [ "$git_version_tee_result" -ne 0 ]; then
+                evidence_result=1
               fi
-              printf "candidate_workflow_diff_check=clean\n" | tee /output/candidate-workflow-diff-check.txt
+
+              actionlint -version | tee /output/actionlint-version.txt
+              actionlint_version_pipeline=("${PIPESTATUS[@]}")
+              actionlint_version_result="${actionlint_version_pipeline[0]:-125}"
+              actionlint_version_tee_result="${actionlint_version_pipeline[1]:-125}"
+              if [ "$actionlint_version_result" -ne 0 ] || [ "$actionlint_version_tee_result" -ne 0 ]; then
+                evidence_result=1
+              fi
+
+              actionlint -color=false .github/workflows/*.yml /candidate/g1-offline-validation.yml
+              actionlint_result=$?
+
+              actual_commit="$(git rev-parse HEAD 2>&1)"
+              actual_commit_result=$?
+              actual_tree="$(git rev-parse "HEAD^{tree}" 2>&1)"
+              actual_tree_result=$?
+              actual_first_parent="$(git rev-parse --verify "HEAD^1" 2>&1)"
+              actual_first_parent_result=$?
+              expected_first_parent_object_result=0
+              git cat-file -e "${EXPECTED_FIRST_PARENT}^{commit}" 2>/dev/null
+              expected_first_parent_object_result=$?
+              actual_first_parent_object_result=0
+              if [ "$actual_first_parent_result" -eq 0 ]; then
+                git cat-file -e "${actual_first_parent}^{commit}" 2>/dev/null
+                actual_first_parent_object_result=$?
+              fi
+              parent_identity_result=0
+              if [ "$actual_commit_result" -ne 0 ] || [ "$actual_tree_result" -ne 0 ] || \
+                 [ "$actual_first_parent_result" -ne 0 ] || \
+                 [ "$expected_first_parent_object_result" -ne 0 ] || \
+                 [ "$actual_first_parent_object_result" -ne 0 ] || \
+                 [ "$actual_commit" != "$EVALUATION_COMMIT" ] || \
+                 [ "$actual_tree" != "$EXPECTED_TREE" ] || \
+                 [ "$actual_first_parent" != "$EXPECTED_FIRST_PARENT" ]; then
+                parent_identity_result=1
+              fi
+              {
+                printf "evaluation_commit=%s\n" "$actual_commit"
+                printf "expected_evaluation_commit=%s\n" "$EVALUATION_COMMIT"
+                printf "evaluation_tree=%s\n" "$actual_tree"
+                printf "expected_evaluation_tree=%s\n" "$EXPECTED_TREE"
+                printf "actual_first_parent=%s\n" "$actual_first_parent"
+                printf "expected_first_parent=%s\n" "$EXPECTED_FIRST_PARENT"
+                printf "expected_first_parent_object_result=%s\n" "$expected_first_parent_object_result"
+                printf "actual_first_parent_object_result=%s\n" "$actual_first_parent_object_result"
+                printf "parent_identity_result=%s\n" "$parent_identity_result"
+              } | tee /output/fixed-commit-parent-identity.txt
+              parent_identity_pipeline=("${PIPESTATUS[@]}")
+              if [ "${parent_identity_pipeline[1]:-125}" -ne 0 ]; then
+                evidence_result=1
+              fi
+
+              fixed_delta_result=125
+              fixed_delta_log_result=0
+              if [ "$parent_identity_result" -eq 0 ]; then
+                git diff --check "HEAD^1" HEAD 2>&1 | tee /output/fixed-commit-delta-whitespace.log
+                fixed_delta_pipeline=("${PIPESTATUS[@]}")
+                fixed_delta_result="${fixed_delta_pipeline[0]:-125}"
+                fixed_delta_log_result="${fixed_delta_pipeline[1]:-125}"
+              else
+                printf "%s\n" "First-parent delta check not run: fixed Evaluation Commit, Tree, or First Parent identity/object verification failed." \
+                  | tee /output/fixed-commit-delta-whitespace.log
+                fixed_delta_pipeline=("${PIPESTATUS[@]}")
+                fixed_delta_log_result="${fixed_delta_pipeline[1]:-125}"
+              fi
+              if ! printf "%s\n" "$fixed_delta_result" > /output/fixed-commit-delta-whitespace.exit-code; then
+                evidence_result=1
+              fi
+              if [ "$parent_identity_result" -ne 0 ] || [ "$fixed_delta_result" -ne 0 ] || \
+                 [ "$fixed_delta_log_result" -ne 0 ]; then
+                overall_result=1
+              fi
+
+              candidate_diff_status=125
+              candidate_result=1
+              if [ -s /candidate/g1-offline-validation.yml ]; then
+                candidate_diff_output="$(git diff --no-index --check -- /dev/null /candidate/g1-offline-validation.yml 2>&1)"
+                candidate_diff_status=$?
+                if [ -z "$candidate_diff_output" ] && \
+                   { [ "$candidate_diff_status" -eq 0 ] || [ "$candidate_diff_status" -eq 1 ]; }; then
+                  candidate_result=0
+                fi
+              else
+                candidate_diff_output="Candidate Workflow is missing or empty."
+              fi
+              {
+                printf "candidate_workflow_diff_check_exit_code=%s\n" "$candidate_diff_status"
+                printf "candidate_workflow_diff_check_result=%s\n" "$candidate_result"
+                if [ "$candidate_result" -eq 0 ]; then
+                  printf "candidate_workflow_diff_check=clean\n"
+                else
+                  printf "candidate_workflow_diff_check=failed\n"
+                  printf "%s\n" "$candidate_diff_output"
+                fi
+              } | tee /output/candidate-workflow-diff-check.txt
+              candidate_pipeline=("${PIPESTATUS[@]}")
+              if [ "${candidate_pipeline[1]:-125}" -ne 0 ]; then
+                evidence_result=1
+              fi
+              if [ "$candidate_result" -ne 0 ]; then
+                overall_result=1
+              fi
+              if ! printf "%s\n" "$candidate_diff_status" > /output/candidate-workflow-diff-check.exit-code; then
+                evidence_result=1
+              fi
+
+              git diff --check > /output/clean-checkout-diff.log 2>&1
+              clean_checkout_result=$?
+              if ! printf "%s\n" "$clean_checkout_result" > /output/clean-checkout-diff.exit-code; then
+                evidence_result=1
+              fi
+              if [ "$clean_checkout_result" -ne 0 ]; then
+                overall_result=1
+              fi
               printf "BASELINE_NOT_BOUND\n" | tee /output/baseline-diff-status.txt
-              git diff --check
+              baseline_pipeline=("${PIPESTATUS[@]}")
+              if [ "${baseline_pipeline[1]:-125}" -ne 0 ]; then
+                evidence_result=1
+              fi
+
+              if [ "$git_version_result" -ne 0 ] || [ "$git_version_tee_result" -ne 0 ] || \
+                 [ "$actionlint_version_result" -ne 0 ] || [ "$actionlint_version_tee_result" -ne 0 ] || \
+                 [ "$actionlint_result" -ne 0 ] || [ "$evidence_result" -ne 0 ]; then
+                overall_result=1
+              fi
+              exit "$overall_result"
             ' 2>&1 | tee "$EVIDENCE_DIR/static-checks.log"
-          result=${PIPESTATUS[0]}
+          static_pipeline_status=("${PIPESTATUS[@]}")
+          container_result="${static_pipeline_status[0]:-125}"
+          static_log_result="${static_pipeline_status[1]:-125}"
+          result="$container_result"
+          if [ "$static_log_result" -ne 0 ]; then
+            result=1
+          fi
+          if ! printf '%s\n' "$container_result" > "$EVIDENCE_DIR/static-checks-container.exit-code"; then
+            result=1
+          fi
+          if ! sudo chown -R "$(id -u):$(id -g)" "$STATIC_OUTPUT_DIR"; then
+            result=1
+          fi
+          if ! sudo chmod -R u+rwX,go+rX "$STATIC_OUTPUT_DIR"; then
+            result=1
+          fi
+          for required_evidence in \
+            git-version.txt \
+            actionlint-version.txt \
+            fixed-commit-parent-identity.txt \
+            fixed-commit-delta-whitespace.log \
+            fixed-commit-delta-whitespace.exit-code \
+            candidate-workflow-diff-check.txt \
+            candidate-workflow-diff-check.exit-code \
+            clean-checkout-diff.log \
+            clean-checkout-diff.exit-code \
+            baseline-diff-status.txt; do
+            if [ ! -r "$STATIC_OUTPUT_DIR/$required_evidence" ]; then
+              result=1
+            fi
+          done
+          if [ ! -r "$EVIDENCE_DIR/static-checks.log" ]; then
+            result=1
+          fi
+          if ! printf '%s\n' "$result" > "$EVIDENCE_DIR/static-checks.exit-code"; then
+            result=1
+          fi
           set -e
-          sudo chown -R "$(id -u):$(id -g)" "$STATIC_OUTPUT_DIR"
-          sudo chmod -R u+rwX,go+rX "$STATIC_OUTPUT_DIR"
-          test -r "$STATIC_OUTPUT_DIR/git-version.txt"
-          test -r "$STATIC_OUTPUT_DIR/actionlint-version.txt"
-          test -r "$STATIC_OUTPUT_DIR/candidate-workflow-diff-check.txt"
-          test -r "$STATIC_OUTPUT_DIR/baseline-diff-status.txt"
-          printf '%s\n' "$result" > "$EVIDENCE_DIR/static-checks.exit-code"
           test "$result" -eq 0
 
       - name: Record test scope and evidence manifest
@@ -476,8 +634,10 @@ jobs:
             printf 'node_test_count_policy=record TAP tests/pass/fail/cancelled/skipped/todo per group; historical 650+17 is diagnostic, not a hard-coded pass gate\n'
             printf 'worker_test_command=npm test --prefix cloudflare-worker\n'
             printf 'actionlint_scope=.github/workflows/*.yml plus checked-out candidate workflow\n'
-            printf 'commit_whitespace_check=git show --check --oneline HEAD\n'
-            printf 'baseline_diff_check=BASELINE_NOT_BOUND; clean checkout git diff --check is empty\n'
+            printf 'fixed_commit_delta_whitespace_check=git diff --check HEAD^1 HEAD after exact Evaluation and First Parent identity/object verification\n'
+            printf 'fixed_commit_parent_evidence=static-output/fixed-commit-parent-identity.txt,static-output/fixed-commit-delta-whitespace.log,static-output/fixed-commit-delta-whitespace.exit-code\n'
+            printf 'historical_whitespace_reference=third CI Run 41574377041 and its existing Artifact; preserved, not substituted for the current delta check\n'
+            printf 'baseline_diff_check=BASELINE_NOT_BOUND; clean checkout git diff --check result is recorded separately and does not bind the full baseline\n'
             printf 'traceability_file=.github/workflows/config/routing-traceability.json\n'
             printf 'traceability_contract=T-017; status is not mutated by this workflow\n'
             printf 'dependency_install=npm ci --ignore-scripts; lifecycle dependencies need runtime verification\n'
