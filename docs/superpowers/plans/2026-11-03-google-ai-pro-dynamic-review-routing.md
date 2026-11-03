@@ -1,130 +1,223 @@
 # OCR App — Google AI Pro Dynamic Code Review Routing Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Human Owner's anti-review-loop policy overrides any automatic reviewer dispatch: do not start any implementation, review, GitHub write, activation, or follow-on task without explicit authorization for that action.**
+> **For agentic workers (future, after Human Owner approval):** If implementation is separately authorized, use `superpowers:executing-plans` or an expressly approved equivalent. Steps use `- [ ]` for future tracking. **Do not automatically start implementation, subagent reviews, GitHub writes, CI, tests, external API calls, or activation.** The current R1 task is **DOCUMENT_ONLY targeted remediation**.
 
-**Goal:** OCR Appの既存OpenCodeReview Delegation + Antigravity CLIによるコードレビューで、要求精度を維持し、Google AI Proのモデル利用枠を高リスクPRへ優先配分する。
+**Document status:** `R1_TARGETED_REMEDIATION_CANDIDATE / NOT_ADOPTED / NOT_EXECUTED`（2026-11-03 JST）  
+**Repository / intended target:** `yohi/ocr-app` / `feature/ocr-google-ai-pro-dynamic-review-plan-20261103` / `docs/superpowers/plans/2026-11-03-google-ai-pro-dynamic-review-routing.md`  
+**Fixed source baseline:** `master @ 49cd3978d638b0236d1d396ca1c101cac04e2726`。本訂正は**GitHubのファイルを変更していない**。  
+**Goal:** OpenCodeReview Delegation + Antigravity CLIによるコードレビュー精度を維持し、Google AI Proの利用枠を高リスクPRへ優先配分する。  
+**Deliverable:** 既存機構を再利用し、実装者が新たな設計選択をせずに実施できる**最小限の実装計画**。  
+**Architecture:** 現行の`fast/deep`、決定的なrisk floor、Mercury Decideのadvisory、認定済みモデルCatalog、同等以上TierのHost Fallback、既存Audit/Publish Gateを維持する。**コードfastは空の例外allowlistから開始**し、明示された非上書き安全条件・モデル品質認定・Owner承認がそろう場合にのみ許容する。`agy`のQuotaを予測する新規サービスは追加しない。  
+**Tech Stack:** GitHub Actions / Node.js 20 ESM / `node:test` / Alibaba OpenCodeReview Delegation (`ocr`) / Antigravity CLI (`agy`) / Google AI Pro / OpenRouter Decisions API（現行 Mercury Decide）。
 
-**Architecture:** 既存の`fast`/`deep`リスク下限、Mercury Decideによる助言、認定済みモデルカタログ、Antigravity Hostの1モデル選択・品質を下げないFallbackを再利用する。信頼済みポリシーが限定許可した低リスクのコード変更だけを`fast`候補に加える。枠情報が確実に得られない場合は予測システムを作らず、既存の実行エラー検知とFallbackを用い、適格モデルがなければレビューを不成立にする。
+## 0. Authority and Scope — 本改訂で確定すること・しないこと
 
-**Tech Stack:** GitHub Actions / Node.js 20 ESM / `node:test` / OpenCodeReview Delegation (`ocr`) / Antigravity CLI (`agy`) / OpenRouter Decisions API（現行Mercury Decide）/ GitHub App / Cloudflare Worker。
+- **Current work authority:** `DOCUMENT_ONLY / READ_ONLY SOURCE INVESTIGATION`。**禁止**: source modification、実装、テスト実行、GitHub書込み、Activation、外部API呼び出し、自動follow-up。本文中のシェルコマンドは**将来Ownerが許可した実行環境向け**であり、今回実行していない。
+- **R4とR0の優先関係（F-001）:** 既存R4 `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md` の「通常コードは `unclassified_code → deep`」が現時点の規範。本書は**2026-11-03最小差分設計R0の限定例外案**を具体化するが、R0承認原本は今回未検証。**R0がR4全体を上書きしたと扱わない。** Human Ownerが本書の§2「コードfast限定規範差分」を採用した時に限り、**その限定事項のみ**R4の通常コードdeep規則に優先する。採用前は従来の `deep` を維持し、実装を開始しない。その他のR4契約（全変更集合による危険検知・External Stateの最小化・Gateなど）は維持。
+- **実効承認の区別:** 本書の採用、実装開始、モデル認定、G1〜G4、実効Activation、外部送信、`off/shadow`動作変更は**別の権限**。Ownerが本書を採択しても、Model CertificationやActivationは成立しない。既存のApproval/Activation/Model Certificationは未成立として扱う。
+- **事実と未検証:** 実環境の認証済み`agy models`、Quota、モデル品質、R0承認原本、最新実行環境のCLI identityは**未確認**。今回の実行結果やPASSを主張しない。
+- **Non-goals:** 新しいサービス、Registry、ベンチマーク基盤、独自Quota予測、複数モデルの並列レビュー、自動再レビュー、OCR対象選別の再定義、認定の自動付与、Safety Hold解除、既存CI/公開Gate変更。
 
-**Spec:** `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`（既存R4設計の参照元）と、2026-11-03のHuman Owner承認済み最小差分設計R0。本計画は後者を優先する**候補**であり、既存のGate／実行権限を置換しない。
+## 1. 現行境界と維持すべき契約
 
-**Baseline:** `yohi/ocr-app`, `master` commit `49cd3978d638b0236d1d396ca1c101cac04e2726`。実装開始前にはHEADを読み直し、差分のある対象だけ再確認する。
-
-## Global Constraints
-
-- **Google AI Pro前提。** ただし非トライアル契約かどうか、実際のモデル一覧、残Quotaは未検証。公式Proモデル表ではGemini 4 Argon、Gemini 3.8 Flash、Claude Sonnet/Opus 5.5（Claude 5.5は有料・非トライアル限定）が候補。実際のCLI `model_id` は認証済み `agy models --output-format json` で確定する。
-- **1レビューTaskにつき1レビューLLMモデルを基本**とする。容量エラーによる適格モデルへの再実行は許すが、アンサンブルや品質比較のための二重レビューはしない。
-- レビュー精度最優先。重大・未知・不完全・スコープギャップのある変更は勝手に`fast`へ下げない。Decision応答はadvisoryのみ。
-- 認定証拠がないモデルを`certified`に変更しない。モデル名、製品Tier、利用可能性は精度認定を意味しない。
-- 認定モデルや実効権限が不足すれば**Fail Closed**。成功・PASS・レビュー完了を偽装しない。既存の失敗通知／Check Runを用い、新しいPending状態機械は作らない。
-- `off`/`shadow`/`enforce`を維持。`enforce`の有効化、承認Registry編集、Secret、OAuth、外部送信Allowlist、CI実行、PRコメント投稿は今回の文書作成では許可しない。
-- 新規ベンチマーク基盤、過去PR全件評価サービス、Quota予測デーモン、複数モデル照合、新規Registry、無制限Retryは作らない。AI Creditsの自動超過課金設定も変更しない。
-- Markdownの`include`はOCR標準フィルタの既定除外を上書きするもので、コードレビューのホワイトリストではない。既存の`ocr delegate preview/rule`とMarkdown追加設定を変更しない。
-
-## Current Code and Boundaries
-
-| Responsibility | Existing file | Planned handling |
+| 対象 | 既存資産 | 本計画の扱い |
 |---|---|---|
-| GitHub Actions | `.github/workflows/ocr-engine.yml` | 現行のトリガー・Gateを維持。モデルIDを確定した後に古い既定Fallbackの扱いのみ限定検討 |
-| OCR対象選別 | `.github/workflows/scripts/prepare-ocr-review-context.mjs` | 変更しない |
-| 安全リスク分類 | `.github/workflows/scripts/classify-pr-review-risk.mjs` | 限定的な低リスクコード許可条件を追加 |
-| 安全ポリシー | `.github/workflows/config/review-risk-policy.json` | `fast_code_allow_paths`など、明示的な空初期値を導入する場合に限定変更 |
-| Decision状態 | `.github/workflows/scripts/build-decision-state.mjs` | 新たな分類値が不可欠なら既存列挙値を同期（後述）。不必要なフィールドを増やさない |
-| Decision API | `.github/workflows/scripts/decision-provider.mjs` | `fast`が「文書のみ」という条件文を低リスク認定コードにも対応させる |
-| モデル選択 | `.github/workflows/scripts/select-review-model.mjs` | 原則再利用。最低Tier・confidence/margin不確実時deep維持 |
-| モデルカタログ | `.github/workflows/config/review-model-catalog.json` | 実在するProモデルIDに更新する候補。ただし未認定は`pending`維持 |
-| 監査 | `.github/workflows/scripts/ocr-routing-audit.mjs` | 新分類値が必要なときのみ列挙を同期。記録形式の拡張はしない |
-| Host/Fallback | `.github/workflows/scripts/antigravity-host.mjs` | 既存の同等以上TierでのFallbackと監査を再利用 |
-| 認定 | `.github/workflows/config/review-certification-index.json` | Owner認定までは空維持。単なるモデル掲載を認定にしない |
+| 入口/レビュー文脈 | `cloudflare-worker/src/index.ts`, `.github/workflows/ocr-engine.yml`, `prepare-ocr-review-context.mjs`, `markdown-review-rules.json` | Webhook・PR diff・OCR Delegate・Markdown例外は変更しない |
+| Risk features | `extract-pr-review-features.mjs`, `classify-pr-review-risk.mjs`, `review-risk-policy.json` | **全変更集合**を見て、限定コード例外のrisk floorだけ拡張 |
+| External Decision | `build-decision-state.mjs`, `decision-provider.mjs` | PR本文・raw diff・file paths・Secretsを送らず、既存15-keyバケット化Stateのみ |
+| 選択 | `select-review-model.mjs` | 決定的下限優先、`confidence`非使用、probability+marginの既存判定を再利用 |
+| Catalog/認定 | `review-model-catalog.json`, `review-certification-index.json`, `validate-review-model-catalog.mjs` | 認証済みinventoryと**全Catalog登録モデル**の整合を必須とする |
+| Host/Audit/Publish | `antigravity-host.mjs`, `ocr-routing-audit.mjs`, `run-routing-review.mjs`, `evaluate-routing-publish.mjs` | 同等以上TierのみFallback、attempt audit、HEAD検証、失敗時publish拒否を維持 |
 
-## Review Focus (one bounded self-check, not an extra review task)
+**OCR `include` semantics:** `markdown-review-rules.json`の`include`はMarkdownの既定除外を上書きするための追加規則で、コードレビュー対象をMarkdownに限定するホワイトリストではない。コードreviewable集合と、risk判定の全変更集合を混同しない。
 
-1. 未認定モデル、偽のCLIモデルID、CLI inventory不明 → `enforce`実行前に失敗する。
-2. セキュリティ・認証・migration・CI・未知状態・rename・binary・mode変更・scope gap → `deep`下限を維持する。
-3. Decision APIの`fast`助言がローカル下限`deep`に反する → 降格せず`deep`。
-4. 主モデルのQuota不足でFallbackを試すとき → 認定済み・同等以上のTierのみに限定し、他は失敗してレビューを公開しない。
-5. Model/Quota取得不可、認証失敗、モデル廃止 → 利用可能・品質認定済みと誤認しない。Secret・生エラー・差分を監査に漏らさない。
+## 2. コードfast限定規範差分（F-001/F-002）
 
----
+### 2.1 契約・バージョン・互換性
 
-### Task 1: Google AI Pro対応モデルの入力を確定する（READ_ONLY準備）
+1. **新分類値:** `classification_status = "allowlisted_low_risk_code"` を新設する。`allowlisted_docs_only`をコードへ流用しない。`unclassified_code`は引き続き**常に`deep`**。分類値追加は`InternalPRFeatures/v3`、`DecisionState/v1`、Routing Decision/Auditのそれぞれの**既存キー・型構造を変えずに、列挙値だけ拡張**する限定契約変更である。
+2. **バージョン処理の固定方針:** JSONの`schema_version`は**現行値を維持**する（Internal features=`"3"`、Decision State=`"1"`、Routing Decision/Audit=`"1"`）。ただしこれは**新enumに対する旧validatorの互換性を意味しない**。分類値の宣言・受理・serialize・validateを**同一の原子的ソース変更**で同期し、古い実行中ワークフローへ新値を渡さない。別の新規version系列や移行サービスを作らない。
+3. **変更する列挙値受理点:** `classify-pr-review-risk.mjs`、`build-decision-state.mjs`の`CLASSIFICATION`、`ocr-routing-audit.mjs`の`CLASSIFICATIONS`、その他**現行の同じenumを閉じて検証する既存箇所**（該当するvalidator/fixtureに限る）。Decision Stateの**15 keys**、監査のrecord keys、`fast/deep`の文字列値、`selectReviewRoute`の戻り値契約は変更しない。
+4. **信頼済みRisk Policy:** 既存`review-risk-policy.json`に`fast_code_allow_paths: []`を追加する（存在するschema/validatorのunknown-key拒否を同じTaskで更新）。値は**重複のないrepo-relative glob文字列の配列**、初期値は**必ず空**。古いPolicy読込みではキー欠落を**空配列**として扱う（fail-openしない）。`policy_version`は現行形式の規則に従い**一回だけ改訂**し、改訂版の内容ハッシュを既存Authorizationと再照合する。これに伴い現行承認を流用して`enforce`に進むことを禁止。
+5. **実装・承認の境界:** この例外の**規範採用はOwner判断待ち**。将来許可パターンを空から非空にする行為も別のRisk Policy変更・品質証拠確認・Owner承認を要する。今回の計画は許可パターンを**1件も提案・登録しない**。
 
-**Files:** 既存参照 `.github/workflows/config/review-model-catalog.json`, `.github/workflows/config/review-certification-index.json`, `.github/workflows/scripts/load-review-certification.mjs`, `.github/workflows/scripts/validate-review-model-catalog.mjs`; 本Taskでコード編集なし。
+### 2.2 決定的な評価順序
 
-**Interfaces:** `agy models --output-format json`が認証済みCLIから返す`model_id`と、既存認定・CLI inventory証拠を照合する。`agy -p '/quota' --output-format json`は読取り専用の参考情報とし、安定したJSON構造を確認するまでルーティングの必須入力にしない。
+以下は**PR全体**に適用する。最初に一致した行で判定を確定し、後段で上書きしない。
 
-- [ ] Step 1: Human Ownerが許可した環境で `agy --version` と `agy models --output-format json` を実行し、CLIバージョン、JSON、モデルslugを**秘密情報なしで**保存する。現チャットでは実行しない。
-- [ ] Step 2: 実一覧と公式Pro候補（Gemini 3.8 Flash、Gemini 4 Argon、Claude 5.5系）を照合し、存在しない旧 `claude-opus-4-6-thinking` を利用可能と仮定しない。非トライアル契約の必要条件を区別する。
-- [ ] Step 3: 既存認定根拠の有無を照合する。未認定なら`pending`維持。モデルの性能序列・Fallback適格性を**名前から自動決定しない**。
-- [ ] Step 4: 入力が不十分ならModel Certificationを保留し、`off`/`shadow`を無断で変更しない。これは後続設計の証拠不足として記録するだけで、独立レビューTaskを増やさない。
+| 順位 | 条件 | `classification_status` / `risk_floor` |
+|---|---|---|
+| 1 | 入力欠損、Git解析不完全、未知status、trusted policy不正・欠落の危険情報、`features_incomplete=true` | `incomplete` / `deep` |
+| 2 | `review_scope_gap=true`、OCR reviewable範囲外にコード・高影響ファイルを含む、reviewableの集合がPR全変更集合に一致しない | 該当既存分類（不明は`incomplete`） / `deep` |
+| 3 | security/auth/authorization/IAM/credential/secret/token/crypto/payment/migration/deploy/permission/policy、CI・Workflow・保護設定・認証境界に該当するpath/areaまたは既存risk signalがある | `high_risk_metadata`（該当時） / `deep` |
+| 4 | **コード変更に限り**、rename/copy/delete、binary、symlink、submodule、file mode/executable bit変更、`A/M`以外の状態、テスト・fixture・生成物、未対応拡張子 | 既存の`unclassified_code`/`unclassified_other` / `deep` |
+| 5 | **コード変更に限り**、コード以外を含むmixed PR、`change_size !== "small"`、`all_changed_file_count`が1〜5の範囲外、`security_signal`または`migration_signal`が`metadata_not_observed`でない | `unclassified_code`（コードを含む場合） / `deep` |
+| 6 | **コード変更に限り**、`fast_code_allow_paths`が空、**または**変更したコードの全pathが明示allowlistに一致しない | `unclassified_code` / `deep` |
+| 7 | 1〜6のいずれにも該当せず、全変更が既知の通常`A/M`の**コードのみ**で、全ファイルがreviewable、信頼済みallowlist一致 | **`allowlisted_low_risk_code` / `fast`（下限のみ）** |
+| 8 | 従来の非実行文書条件をすべて満たすPR | `allowlisted_docs_only` / `fast`（従来動作） |
+| 9 | その他すべて | 既存の保守的分類 / `deep` |
 
-**Acceptance:** Pro契約向けの候補モデルIDの由来と認定状態が分離されている。実アカウントの一覧が取れない場合は未確認と明記する。
+**分類優先順位の実装上の意味:** 文書のみのPRは1〜3に該当しなければ8の既存docs-only判定を用いる。4〜7はコードを含むPRにだけ適用する。非上書き危険条件は、`change_areas`内の`ci/auth/iam/secret/crypto/migration/deploy/payment/unknown`、既存の非安全risk signal、`.github/`配下、および任意の変更pathのsegment/filename tokenに`security/auth/authentication/authorization/iam/secret/secrets/credential/credentials/token/crypto/permission/permissions/policy/policies/migration/migrations/deploy/deployment/payment/payments/workflow/workflows`がある場合とする。tokenは`/`、`.`, `_`, `-`で分割した小文字単語を基本とし、path先頭が`.github/`であることは別に検出する。既存の危険判定がこれより広い場合は**既存判定を優先**する。新allowlistはこれらを上書きしない。まず旧来の`deny_paths`を**非上書きハード禁止**と**普通のコードをdeepとする包括既定規則**に分けて扱う。`src/**`, `lib/**`, 一般コード拡張子のような包括規則は**例外成立前のdeep既定**であり、例外判定では単純なハード拒否として使わない。一方、テスト、CI、auth/security/secret/migrationなどを検出する既存の高影響条件は**必ず非上書き**。新allowlistを旧denylistより無条件優先するのは禁止。既存のdeny ruleそのものを削除せず、例外にのみ影響する**ローカル判定順**を変更する。既存path分類とpolicyのpattern matcherを再利用し、新規汎用ルールエンジンは作らない。
 
-### Task 2: 認定済み低リスクコードだけにfast候補を許す
+**信頼境界:** 「path/メタデータ上で危険シグナルが観測されない」は**コード本文の安全性を証明しない**。`allowlisted_low_risk_code`はHuman Ownerが特定した限定パスの**ルーティング候補**であって、セキュアコード証明でも品質認定でもない。将来の`fast`実行には**対象の軽量モデル自体のModel Certification**が別途必須。
 
-**Files:**
-- Modify: `.github/workflows/config/review-risk-policy.json`
-- Modify: `.github/workflows/scripts/classify-pr-review-risk.mjs`
-- Modify: `.github/workflows/scripts/build-decision-state.mjs`（分類値追加時）
-- Modify: `.github/workflows/scripts/ocr-routing-audit.mjs`（分類値追加時）
-- Modify: `.github/workflows/scripts/decision-provider.mjs`（fast候補の意味を一致させる）
-- Test: 対応する既存 `.test.mjs` ファイル
+**Mixed PR:** たとえ全コードパスがallowlist一致でも、README/設定/テスト/CI/他言語などが混在すれば**deep**。Markdownのみの既存docs-only fastは変えない。Decision APIが不達・429・不正応答の場合、**コード例外候補はdeep**（§3）、docs-onlyは旧local floor経路を維持。
 
-**Interfaces:** `classifyPRRisk(features, trustedRiskPolicy) -> {...features, classification_status, risk_floor}`。既存`InternalPRFeatures/v3`、`DecisionState/v1`、`fast/deep`、`selectReviewRoute`を維持する。
+### 2.3 Fixture（現時点では未実行の将来テスト入力）
 
-**Design decision:** 新規ファイルの作成なし。既存の`allowlisted_docs_only`をコードに流用せず、必要なら意味が正しい`allowlisted_low_risk_code`分類値を既存の内部／外部状態・監査列挙に同期する。信頼済みポリシーのコードパス許可リストは**既定で空**とし、許可候補が承認・根拠確認されるまでコードは`deep`。
+| case | all-changed / state（テストの`fast_code_allow_paths=["src/safe/**"]`のみ仮使用） | 期待 |
+|---|---|---|
+| C01 | `src/safe/parser.ts` 1件・`M`・small・all reviewable・危険シグナルなし | `allowlisted_low_risk_code` / floor `fast` |
+| C02 | 同じpathだが**初期空allowlist** | `unclassified_code` / floor `deep` |
+| C03 | `src/safe/parser.ts` + `README.md` | `unclassified_code` / floor `deep` |
+| C04 | `src/safe/auth/token.ts`（allow内だがauth/secret） | `high_risk_metadata` / floor `deep` |
+| C05 | `.github/workflows/ci.yml` または`src/safe/migrations/001.ts` | `deep` |
+| C06 | `src/safe/parser.ts` のrename / binary / executable-mode変更 / delete | `deep` |
+| C07 | `src/safe/parser.ts` だが`review_scope_gap=true` / `features_incomplete=true` / signal=`unassessable` | `deep` |
+| C08 | `src/safe/parser.test.ts` または`tests/safe.py` | `deep` |
+| C09 | READMEのみ、既存docs-only条件すべて成立 | **従来どおり**`allowlisted_docs_only` / `fast` |
+| C10 | C01だがDecision不達、429、低probability、狭いmargin、不正応答 | **実効戦略**`deep`、`fast`実行なし |
+| C11 | C01でDecisionが有効かつfast・既存probability/margin条件を通過 | **選択可能**`fast`（モデル認定・実効Activationが別途必要） |
+| C12 | C01でも認定済みfastモデル0件 | `enforce`は**HOLD/失敗**、未認定モデルへ降格しない |
 
-- [ ] Step 1 (RED): `classify-pr-review-risk.test.mjs`に、明示許可した通常のコードファイルにのみ`fast`候補を返す例を追加。混在PR・auth/secret・CI・rename・binary・mode変更・未知/不完全・scope gapは`deep`を検証する。
-- [ ] Step 2 (RED): `build-decision-state.test.mjs`（該当する既存テスト）、`ocr-routing-audit.test.mjs`に分類列挙の整合性を確認するケースを追加。既存の`docs-only fast`ケースは維持。
-- [ ] Step 3: `node --test .github/workflows/scripts/classify-pr-review-risk.test.mjs .github/workflows/scripts/select-review-model.test.mjs` を実行し、追加テストの期待どおりの失敗を確認する（実行には別途Owner許可が必要）。
-- [ ] Step 4 (GREEN): 例外条件を決定的に判定し、分類・risk_floor・監査値を整合させる**最小限の変更**のみ実装する。`decision-provider.mjs`のtrusted `criteria.fast`を低リスク認定コードにも対応させ、Decision APIの送信内容は従来のバケット化メタデータに限定する。
-- [ ] Step 5: 変更した関連テストを`node --test ...`で実行しPASSを確認する。既存の`deep`下限を一件も黙示降格させない。
+## 3. Decisionとモデル選択の限定変更（F-003）
 
-**Acceptance:** 既定（許可リスト空）では今までどおり通常コードは`deep`。明示的・安全条件の揃ったコードだけを`fast`候補とする。`fast`の実行には別途Model Certificationが必要であり、本Taskだけで実行可能とはしない。
+- **`confidence`を選択判定に使用しない。** `normalizedDecision`が`confidence`を伝達しない現行実装に合わせる。`null` / 欠落 / 低`confidence`によって別の新しい分岐を作らない。新thresholdも追加しない。
+- `strategyFor`の**既存probabilitiesとmarginの閾値・検証ロジックを変更しない**。有効な`fast`選択と解釈する条件は既存の`strategyFor`が`fast`を返した場合に限る。曖昧/無効なDecisionは既存ロジックが`deep`に倒す。
+- **コード例外だけの追加ガード:** `features.classification_status === "allowlisted_low_risk_code"`のとき、Decision状態が既存列挙の`"succeeded"`で、既存`strategyFor`が`fast`と確定した場合だけ実効`fast`を許可する。それ以外（Decision未実行、不達、429、invalid、`deep`提案）は**実効`deep`**にする。実際の`decisionStatus`列挙は既存ソースから参照し、文字列`"succeeded"`を使う（新しい状態名を導入しない）。このguardは`select-review-model.mjs`の**現行選択関数内に1か所だけ**置く。`allowlisted_docs_only`および`off/shadow`の旧動作を変更しない。
+- `decision-provider.mjs`の固定trusted question/criteriaは「`fast`は文書専用」と解釈されないよう`allowlisted_low_risk_code`も選択候補であると記述を調整するのみ。引き続き`DecisionState/v1`の**15キーだけ**を送信し、raw diff、paths、PR title、Secretsを決して含めない。外部レスポンスのParserやHTTP再試行は拡張しない。
+- `risk_floor=deep`に対する`fast`助言は従来どおり拒否。`fast`モデルの認定が不明なら`deep`モデルを勝手に選ばず、既存の`resolveCertifiedModels` / `enforce`Fail Closedを維持する。
 
-### Task 3: Proモデルカタログと能力を下げないFallbackを整合する
+## 4. Google AI Proモデル・Catalog・Fallback（F-004/F-005）
 
-**Files:**
-- Modify: `.github/workflows/config/review-model-catalog.json`（実モデルIDを確定した場合のみ）
-- Possibly modify: `.github/workflows/ocr-engine.yml`（実際に廃止された既定Fallbackの参照を置き換える必要がある場合のみ）
-- Test: `.github/workflows/scripts/validate-review-model-catalog.test.mjs`, `select-review-model.test.mjs`, `antigravity-host.test.mjs`、既存Workflow関連テスト
+1. **入力取得は今は未実行。** Ownerが別途許可した環境でのみ次を実行する。CLI引数順が異なる版を想定し、**先頭側**の`--output-format`を採用する。
 
-**Interfaces:** 既存Catalog schema v1と`resolveCertifiedModels(catalog, strategy, evidence)`を利用。`runHost({ model, fallbackModels, modelCatalog, routingMode: 'enforce' })`を維持。
+   ```bash
+   agy --version
+   agy --output-format json models
+   ```
 
-- [ ] Step 1 (RED): 認定済みでないProモデル、CLI inventoryにないモデル、劣格Fallback、空Fallback時に主モデル容量エラーが起きた場合に、適切にFail Closedになる既存テストを確認し、必要な不足テストだけ追加。
-- [ ] Step 2: Task 1で実証された**正確なslug**だけをCatalog候補にする。実証されないモデルは加えない。ステータスは認定根拠がなければ`pending`、既存`certification_reference`を捏造しない。
-- [ ] Step 3: 既存の高性能主モデル/代替モデルは、精度Tierの根拠が揃う場合だけ並べる。`fast → deep`へFallbackは許可できるが、`deep → fast`は絶対に許可しない。
-- [ ] Step 4: Quota・容量不足は既存の `isFallbackError` / attempts audit を利用。データが得られたからといって独立したQuota監視・予測サービスを追加しない。Fallbackが1回失敗した場合に再レビューを連鎖させない。
-- [ ] Step 5: `node --test .github/workflows/scripts/validate-review-model-catalog.test.mjs .github/workflows/scripts/select-review-model.test.mjs .github/workflows/scripts/antigravity-host.test.mjs`を実行してPASS。実モデルでの有償/枠消費テストを自動起動しない。
+   期待する契約: 実際のCLI出力で`status`が成功、`command.data.models`が配列、各モデルIDが**文字列 `command.data.models[].id`**。形式・コマンド失敗・モデル未掲載時は`NOT_VERIFIED`として止める。正規化したModel IDは、出力原本をハッシュ記録したうえで照合する。CLIの版と認証アカウントのPro・非トライアル条件は別に確認する。実API、quota取得、`agy -p`はこのTaskの必要条件にしない。
+2. **Catalogは全登録モデルを検証する。** `validateCatalogSemantics`は`pending`を含む**全`models[]`**にCLI inventory上の存在を要求する。したがって不在の旧`claude-opus-4-6-thinking`を`pending`で残す方式は**禁止**。実inventoryにないIDはCatalogから**削除または実在IDへ置換**し、`strategies.fast/deep.preferred_model_id`、各`allowed_fallbacks`を**同じ変更で整合**させる。
+3. **更新対象は`enforce`候補Catalogだけ。** `OCR_LLM_MODEL`、`ANTIGRAVITY_MODEL`、`ANTIGRAVITY_FALLBACK_MODEL`のLegacy `off/shadow`既定値や`ocr-engine.yml`を暗黙に置換しない。そこに不在IDが残る場合は**Legacy実行上の残余リスク**としてOwnerに提示し、別途明示承認まで保留。
+4. **認定とTierは独立条件。** `capability_tier: fast|deep`は**必要品質を満たしたという証拠ではない**。`certification_status=certified`、ハッシュ一致する`certification_reference`、CLI inventoryに存在すること、`allowed_fallbacks`から参照できること、必要Tier以上であることを**全て**確認する。確認できないPro候補は`pending`、`certification_reference=null`。根拠がないときに`deep`や`certified`を付与しない。
+5. **Fallbackの意味:** `fast→fast/deep`、`deep→deep`のみ（いずれも認定済み）。`deep→fast`禁止。既存`isFallbackError`で`rate limit`/`quota`/capacity等の**観測された実行失敗**を扱う。1レビューTaskの通常実行は1モデル、Fallbackは失敗後の限定代替であり、二重レビューや自動品質再レビューをしない。
+6. **Enforce HOLD:** 適格・認定済みモデルが1件もない、ID不在、認定index空、CLI binary identity不整合、実効Activationなし、audit不完全なら**Fail Closed**。`off/shadow/enforce`や旧Gateを緩めず、`enforce` READYと記載しない。
 
-**Acceptance:** Proモデル候補の出典と実際の`agy`認識名が一致する。品質根拠のないモデルは選択されず、適格モデルがないとレビューが未完了になる。
+## 5. 実装Task（将来のOwner許可後のみ）
 
-### Task 4: 限定静的/オフライン受入とHuman Owner判断
+### Task 1 — Pro CLI inventoryのREAD_ONLY証拠確定（事前条件、**実装Taskではない**）
 
-**Files:** 変更した既存ファイルのみ。新たな文書管理シリーズを作成しない。
+**Consumes:** Google AI Pro認証状態（Owner許可下）、CLI/モデル一覧、現行Catalog、認定Index。  
+**Produces:** `cli_version`、正常にparseした`command.data.models[].id`集合、ID有無の対照表、`NOT_VERIFIED`の理由、証拠のhash。新規Registry不要。  
+**Files to modify:** **なし**（参照のみ: `review-model-catalog.json`、`review-certification-index.json`、`load-review-certification.mjs`、`validate-review-model-catalog.mjs`）。  
+**Functions / Interfaces:** CLI出力を読取り、既存CLI inventory証拠契約に照合。実行コマンドは§4.1。  
+**RED/GREEN:** 読取り専用証拠取得のため**N/A（テストなし）**。`status`不成功、models欠損・非配列・ID重複・未知形式は未検証。  
+**Bounded REFACTOR:** なし。  
+**Commit boundary:** なし。  
+**STOP / Owner approval:** 現時点ではこのCLIを実行しない。将来実行に明示許可が必要。実際の一覧が得られなければ**モデル変更を停止**し、過去の公開モデル一覧を実inventoryと偽らない。
 
-- [ ] Step 1: 許可された範囲のNodeテストを一度実施し、`npm ci`等の副作用を含む実行は個別に承認された環境でのみ実施する。
-- [ ] Step 2: 受入ケースを確認：通常の低リスクコード（条件付きfast）、高リスク/不明コード（deep）、Decision不達（ローカルfloor）、Deep不足で適格Fallbackあり、Fallbackなし・quota exhausted、レビュー対象0件、認定/Activation未成立。
-- [ ] Step 3: テスト結果を「実際にPASS」「未実行」「証拠不足」「観測FAIL」に分けて1回報告する。重要な未解決の権限・データ保全問題はFail Closed。Minor Findingのみを理由にループを作らない。
-- [ ] Step 4: **Human Owner checkpoint**。修正候補の採用・GitHub commit/push・`shadow`/`enforce`起動・外部送信・有償テストは各々別の明示承認を受ける。承認なしでは停止。
+### Task 2 — Risk floor・列挙契約・Decision選択の限定実装
 
-**Definition of Done for this planning task:** 実装者が必要なファイル、制約、最小テストを把握し、実アカウントのモデル一覧と認定が未確認なことを理解できる。本ファイルの作成で実装や有効化が承認されたことにはならない。
+**Consumes:** R4基準とOwner採用済みの本書§2限定差分、`InternalPRFeatures/v3`全変更データ、trusted`review-risk-policy.json`、現行Decision応答。  
+**Produces:** 既存`classifyPRRisk`の戻り値契約に`allowlisted_low_risk_code`のenumのみ追加、`buildDecisionState(features)`で15-key射影、既存Routing Decision/Audit enum同期、コードfastに限るDecision成功ガード。  
+**Files to modify:**
+- `.github/workflows/config/review-risk-policy.json`（`fast_code_allow_paths: []`、現行Policy version規則で1回改訂）
+- `.github/workflows/scripts/classify-pr-review-risk.mjs`
+- `.github/workflows/scripts/build-decision-state.mjs`
+- `.github/workflows/scripts/ocr-routing-audit.mjs`
+- `.github/workflows/scripts/decision-provider.mjs`
+- `.github/workflows/scripts/select-review-model.mjs`
+- Policyのunknown-keyを検査する**既存**validator/schemaが存在する場合は該当ファイルに限り同期
 
-## Known limitations and stop conditions
+**Functions / Types / Interfaces:** `classifyPRRisk(features, trustedRiskPolicy)`（既存公開入口を変更しない）、`buildDecisionState(features) -> DecisionState/v1`、`selectReviewRoute({mode, features, decision, certifiedCatalog, runBinding})`、`strategyFor`（既存probability/margin判定をそのまま呼ぶ）、Decisionの`requestReviewDecision`（既存固定questionのみ変更）、`validateRoutingDecisionRecord`/`validateRoutingAudit`。新しいAPI・Response fieldは追加しない。
 
-- `agy models`は利用可能なモデル名の情報源であり、レビュー品質の認定証拠ではない。Quota情報の取得に失敗した場合にも、存在しない枠を推測しない。
-- Google AI Proには5時間単位の回復と週次上限がある。ユーザーの具体的な残枠は未取得。自動超過課金は想定しないが、実際の既存アカウント設定は未確認。
-- 現行の`routing-authorization.json`はApproval/Activation空、`review-certification-index.json`も空、モデルはpending。従って**いま`enforce`を起動してよいという判断には到達していない**。
-- Source of truthは実アカウントの`agy`出力とOwner認定証拠。公開表のみを根拠にモデルIDを断定しない。
-- OpenCodeReview本体v1.13.1→v1.13.4は独立した互換性更新候補であり、本計画の前提作業として自動追加しない。
+- [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`、高リスク/mixed/不完全は`deep`。期待FAIL: 新enumまたは許可例外が未実装でC01を満たさない。
+- [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record/Auditを追加。期待FAIL: 閉じたenum検証が新値を拒否。
+- [ ] **RED 2-3:** `.github/workflows/scripts/decision-provider.test.mjs`にtrusted questionがdocs-onlyという限定を持たず、送信Bodyが既存15-keyのみである検査を追加。`.github/workflows/scripts/select-review-model.test.mjs`にC10/C11、既存docs-only fast不変、`confidence`有無で選択が変わらない検査を追加。期待FAIL: コードfast例外のDecision失敗時ガードが未実装。
+- [ ] **RED 2-4 実行（将来のみ）:** 
+  ```bash
+  node --test \
+    .github/workflows/scripts/classify-pr-review-risk.test.mjs \
+    .github/workflows/scripts/build-decision-state.test.mjs \
+    .github/workflows/scripts/ocr-routing-audit.test.mjs \
+    .github/workflows/scripts/decision-provider.test.mjs \
+    .github/workflows/scripts/select-review-model.test.mjs
+  ```
+  **Expected:** 新たに追加したケースで失敗する。既存無関係テストの失敗を「意図したRED」とみなさない。
+- [ ] **Minimum GREEN 2-5:** §2.2の順序でrisk floorを判定し、`fast_code_allow_paths`が空なら従来どおり。新enumだけを内部/外部/監査受理点へ同期する。既存Decision質問の記述だけ更新し、§3の**コードfast例外にだけ**`decisionStatus === 'succeeded' && strategyFor(...) === 'fast'`ガードを追加する。低信頼・HTTP失敗などではコードfastを**deep**に戻す。docs-only/off/shadowは変更しない。
+- [ ] **GREEN 2-6 実行（将来のみ）:** **RED 2-4と完全に同一の5ファイルの`node --test`コマンド**。**Expected:** 全PASS、C01〜C11、旧docs-only、既存deep下限、外部データ最小化、監査enum受理がPASS。
+- [ ] **Bounded REFACTOR 2-7:** 既存path/policy matcherの重複した条件整理のみ。変更後にGREEN 2-6を1回再実行。新規判定サービス・新規schemaフィールド追加禁止。
+- [ ] **Commit boundary 2-8:** `git add`は上記Task 2変更ファイルと対応テストのみ。例: `git commit -m "feat(ocr): gate low-risk code routing with deterministic floor"`。本Taskでは実行しない。
 
-## References
+**STOP / Owner approval:** 本書§2のOwner採択がなければTask 2開始禁止。Policy schemaや出力契約がこの確定案と一致しなければ無断で代替方式へ拡張せずOwnerへ報告。変更によるsource-manifest hash差異は既存Activationの再承認対象であり、現行承認を再利用しない。
 
-- Repo: https://github.com/yohi/ocr-app/tree/49cd3978d638b0236d1d396ca1c101cac04e2726
-- Existing design: https://github.com/yohi/ocr-app/blob/49cd3978d638b0236d1d396ca1c101cac04e2726/docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md
-- Google Antigravity Models: https://antigravity.google/docs/models
-- Google Antigravity CLI Headless: https://antigravity.google/docs/cli/headless/
-- Google Antigravity Plans: https://www.antigravity.google/docs/plans
-- Alibaba OpenCodeReview v1.13.4: https://github.com/alibaba/open-code-review/releases/tag/v1.13.4
+### Task 3 — 実在ProモデルでCatalog整合・Fallbackを維持
+
+**Consumes:** Task 1の**実inventory**、現行`TrustedReviewModelCatalog/v1`、実際に認定されたモデル根拠。  
+**Produces:** `models[]`の全IDがCLI inventoryに存在し、2戦略のpreferred modelと全fallback参照が同一Catalog内で整合した**候補**（認定根拠がなければ`pending`）。  
+**Files to modify:** `.github/workflows/config/review-model-catalog.json`（Task 1 verified時のみ）。テスト: `.github/workflows/scripts/validate-review-model-catalog.test.mjs`、`.github/workflows/scripts/select-review-model.test.mjs`、`.github/workflows/scripts/antigravity-host.test.mjs`。**`ocr-engine.yml`/Legacy変数は触らない。**
+
+**Functions / Types / Interfaces:** `validateCatalogSemantics(catalog, evidence)`、`resolveCertifiedModels(catalog, strategy, evidence)`、`runHost({model, fallbackModels, modelCatalog, routingMode:'enforce'})`。新しいHost引数やCatalog schemaは設けない。
+
+- [ ] **RED 3-1:** `validate-review-model-catalog.test.mjs`に`pending`でもCLI inventory不在なら**Catalog全体拒否**、削除した旧IDのpreferred/fallback参照拒否、認定証拠不一致拒否を追加。
+- [ ] **RED 3-2:** `select-review-model.test.mjs`に適格認定モデル不在・`fast→deep`許可・`deep→fast`禁止を追加。`antigravity-host.test.mjs`にQuota/容量失敗→認定済み同等以上fallback、空fallback→失敗を追加。**Expected failure:** 追加テストが旧ID残存Catalog/参照不整合を検出すること。既存テストが既に同じケースを保証する場合は重複を追加しない（既存PASSを証拠に記載）。
+- [ ] **RED 3-3 実行（将来のみ）:**
+  ```bash
+  node --test \
+    .github/workflows/scripts/validate-review-model-catalog.test.mjs \
+    .github/workflows/scripts/select-review-model.test.mjs \
+    .github/workflows/scripts/antigravity-host.test.mjs
+  ```
+  **Expected:** 新規追加された未整合caseはFAIL、重複不要の既存caseは既存仕様どおりPASS。
+- [ ] **Minimum GREEN 3-4:** Task 1の認証済みID一覧と一致しないモデルは**未認定であっても**Catalogから削除・置換する。2つの`preferred_model_id`と全`allowed_fallbacks`を更新する。`certification_status`、`certification_reference`、Tierは裏付けなしに昇格させない。使用可能モデルが1件もなければ**Catalog候補の変更を作らずTask停止**（schemaに偽IDを入れない）。
+- [ ] **GREEN 3-5 実行（将来のみ）:** **RED 3-3と完全に同一の3ファイルの`node --test`コマンド**。**Expected:** 対象全PASS、どのCatalog modelもinventory外にない、劣格fallbackがない、適格0件で`enforce`はFail Closed。
+- [ ] **Bounded REFACTOR 3-6:** 不要。Catalog以外のHost実装やLegacy既定設定を変更しない。
+- [ ] **Commit boundary 3-7:** 実際にCatalog差分と対応テストがある場合だけ`git add`し、例: `git commit -m "chore(ocr): align certified route catalog with Pro CLI inventory"`。Task 1未検証ならコミットを作らない。本Taskでは実行しない。
+
+**STOP / Owner approval:** Model Certification未成立、`review-certification-index.json`空、実CLI identity不明のまま`certified`にしない。Catalog変更だけでは`enforce`を有効化しない。Legacy `off/shadow`既定モデルの変更は別途Owner判断。
+
+### Task 4 — 限定オフライン受入とHuman Owner checkpoint（実装Taskではない）
+
+**Consumes:** Task 2/3の限定差分、Owner許可された実行証拠。  
+**Produces:** **1回**の差分・テスト実績報告と、採用/保留/許可範囲をOwnerが選べる根拠。  
+**Files to modify:** 新規成果物なし。既存テストのみを**許可後**実行。  
+**Functions / Types / Interfaces:** `selectReviewRoute`、`resolveCertifiedModels`、`runHost`の既存契約、既存Audit/Publish Gateに対する回帰を確認。  
+**RED/GREEN:** Task 2・Task 3に記載したコマンドを統合して1回実行し、既存のOCR delegation/HEAD/監査・publish gateの回帰テストを既存テストから対象選別して実行。**本書では未実行**。  
+**Bounded REFACTOR:** なし。  
+**Commit boundary:** なし（Task 2・Task 3の承認済み境界以外でコミットを増やさない）。  
+**STOP / Owner approval:** テスト未実行をPASSとしない。`off/shadow/enforce`、監査、公開Gate、Model Certification、外部送信の権限を緩めない。実装結果が`REVISION_REQUIRED`でも自動訂正→再レビューに入らずOwner checkpointで停止。
+
+## 6. Acceptance / STOP Conditions
+
+**将来の実装受入（いずれもテスト未実行）**
+
+- §2.3 C01〜C12の経路が期待どおり。**初期空allowlistの本番挙動は既存コードdeep下限と同一**。
+- `confidence`を新判定に使わず、既存probability/marginとコード例外ガードだけを使う。Decision不達時のコードfastはdeep、docs-only fast/off/shadowは従来どおり。
+- State 15 keys、Audit既存キー、既存schema string維持、列挙値同期。raw diff/paths/Secretsの外部漏出なし。
+- inventory不在の`pending`モデルもCatalogへ残さない。preferred/fallback参照整合、認定済み・同Tier以上のみ実行。認定0件・適格0件・権限なしは**Fail Closed**。
+- 既存OCR Preview/Rule・Markdown追加レビュー・HEAD再検証・attempt audit・公開Gate・Check Runに副作用のある変更なし。
+- 実証できないCLIモデル、Quota、認定、Activationは`NOT_VERIFIED`/`NOT_AUTHORIZED`として区別。未実行、証拠不足、観測された失敗を混同しない。
+
+**このR1文書訂正の完了条件:** F-001〜F-006について、本文の限定スコープ内で実装上の選択肢、コマンド、期待結果、停止条件が確定した**文書候補**を作成すること。新規Findingの有無やレビュー再PASSを完了条件にしない。
+
+**Owner checkpoint:** 本書は**未採択**。Human Ownerが§2の限定規範差分を採択し、実装を別途承認するまでは **IMPLEMENTATION HOLD**。CLI inventory取得、モデル認定、Catalog変更、GitHub commit/push、CI実行、外部API呼び出し、`shadow/enforce`起動はいずれも**自動開始禁止**。この文書訂正Taskはここで終了できる。
+
+## 7. Finding Disposition（本書の限定改訂範囲）
+
+| Finding | 文書訂正箇所 | 現時点の扱い |
+|---|---|---|
+| `OCR-GAIP-RG-R1-F-001` | §0, §2.1, §2.2, Task 2 | R4との限定優先関係・enum同期・Normative Owner gateを明記。**fast品質は未実証** |
+| `OCR-GAIP-RG-R1-F-002` | §2.2, §2.3, Task 2 | deny/default分離・非上書き優先順位・空allowlist・mixed/Fallback fixture |
+| `OCR-GAIP-RG-R1-F-003` | §3, Task 2 | `confidence`非使用とprobability/margin再利用、コード例外に限るDecision成功guard |
+| `OCR-GAIP-RG-R1-F-004` | §4, Task 3 | pending含む全inventory照合、旧ID除外・参照整合・認定HOLD・Legacy非変更 |
+| `OCR-GAIP-RG-R1-F-005` | §4, Task 1 | `agy --output-format json models`、`status`/`command.data.models[].id`、未実証時NOT_VERIFIED |
+| `OCR-GAIP-RG-R1-F-006` | Task 2, Task 3, Task 4 | 5ファイル/3ファイルのRED/GREEN・期待値・Interfaces・commit境界 |
+
+## 8. Source Context（今回の新規実測ではない）
+
+- Existing R4: `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`（過去確認内容／本Taskで再取得・再実行せず）
+- Existing OCR App source context: fixed baseline `49cd3978d638b0236d1d396ca1c101cac04e2726`（先行READ_ONLY調査結果を参照）
+- Review input: `OCR App — Google AI Pro Dynamic Review Routing / Superpowers Review Gate R1`、F-001〜F-006（このTaskの固定入力）
+- OpenCodeReview upstream release（背景、更新作業は範囲外）: https://github.com/alibaba/open-code-review/releases/tag/v1.13.4
+- `agy` CLI JSON引数順の注意（review input由来、未再検証）: https://github.com/google-antigravity/antigravity-cli/issues/777
