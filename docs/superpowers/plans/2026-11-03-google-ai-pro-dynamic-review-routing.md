@@ -4,11 +4,12 @@
 
 **Document status:** `R1_TARGETED_REMEDIATION_CANDIDATE / NOT_ADOPTED / NOT_EXECUTED`（2026-11-03 JST）  
 **Repository / intended target:** `yohi/ocr-app` / `feature/ocr-google-ai-pro-dynamic-review-plan-20261103` / `docs/superpowers/plans/2026-11-03-google-ai-pro-dynamic-review-routing.md`  
-**Fixed source baseline:** `master @ 49cd3978d638b0236d1d396ca1c101cac04e2726`。本訂正は**GitHubのファイルを変更していない**。  
+**Fixed source baseline:** `master @ 49cd3978d638b0236d1d396ca1c101cac04e2726`。R1限定訂正候補は既にfeatureブランチのcommit `4758a9067bc8d9f95eabc408f8a2de5c3a071f20`に記録済み。**記録はOwner採択・実装許可を意味しない。** 今回のwriting-plans作業はその文書を入力にしたローカルの置換候補作成で、GitHubには書き込まない。  
 **Goal:** OpenCodeReview Delegation + Antigravity CLIによるコードレビュー精度を維持し、Google AI Proの利用枠を高リスクPRへ優先配分する。  
 **Deliverable:** 既存機構を再利用し、実装者が新たな設計選択をせずに実施できる**最小限の実装計画**。  
 **Architecture:** 現行の`fast/deep`、決定的なrisk floor、Mercury Decideのadvisory、認定済みモデルCatalog、同等以上TierのHost Fallback、既存Audit/Publish Gateを維持する。**コードfastは空の例外allowlistから開始**し、明示された非上書き安全条件・モデル品質認定・Owner承認がそろう場合にのみ許容する。`agy`のQuotaを予測する新規サービスは追加しない。  
 **Tech Stack:** GitHub Actions / Node.js 20 ESM / `node:test` / Alibaba OpenCodeReview Delegation (`ocr`) / Antigravity CLI (`agy`) / Google AI Pro / OpenRouter Decisions API（現行 Mercury Decide）。
+**Spec:** `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`（既存R4）。本書§2はR4への**限定規範差分の提案**であり、R0正式採択証拠は未確認。§2のHuman Owner採択が成立するまでR4のコードdeep下限を優先する。
 
 ## 0. Authority and Scope — 本改訂で確定すること・しないこと
 
@@ -17,6 +18,26 @@
 - **実効承認の区別:** 本書の採用、実装開始、モデル認定、G1〜G4、実効Activation、外部送信、`off/shadow`動作変更は**別の権限**。Ownerが本書を採択しても、Model CertificationやActivationは成立しない。既存のApproval/Activation/Model Certificationは未成立として扱う。
 - **事実と未検証:** 実環境の認証済み`agy models`、Quota、モデル品質、R0承認原本、最新実行環境のCLI identityは**未確認**。今回の実行結果やPASSを主張しない。
 - **Non-goals:** 新しいサービス、Registry、ベンチマーク基盤、独自Quota予測、複数モデルの並列レビュー、自動再レビュー、OCR対象選別の再定義、認定の自動付与、Safety Hold解除、既存CI/公開Gate変更。
+
+## Global Constraints（全Task共通）
+
+- PR全変更集合でrisk判定、OCR Delegateのreviewable集合だけにFinding。Markdownの`include`は既定除外を解除する例外であり、コードのホワイトリストではない。
+- `off/shadow`既定動作、Google AI Pro認証境界、既存`enforce`、HEAD再検証、Model Certification、audit/publish gateを変更・解除しない。
+- `fast`は明示allowlistの**低リスクコード**と既存docs-onlyに限定し、unknown/incomplete/高影響変更は常にdeep。Decisionのconfidenceは非使用。
+- `DecisionState/v1`の15キーだけを外部へ送信し、raw diff、path、PR title、Secretsの外部送信禁止。
+- 認定済み・CLI inventory掲載・必要Tier以上のモデル以外を実行せず、該当モデル0件またはActivation不成立時はFail Closed。
+- 追加サービス、Registry、Quota予測、大規模ベンチマーク、複数モデルレビュー、レビュー循環を作らない。
+- 本文のRED/GREEN/Commitコマンドは**将来の実装許可後に実行**する指示。今回のwriting-plansでは実行しない。
+
+## Review Focus（既存テストへ限定追加）
+
+1. `fast_code_allow_paths=[]`の初期状態では通常コードは従来どおり`deep`（Task 2 C02）。
+2. allowlist一致でも認証・権限・CI・migration・rename・scope gapは`deep`（Task 2 C04〜C08）。
+3. Decision未実行・HTTP 429・低probability・狭いmarginではコードfastを選択しないがdocs-only fastは変えない（Task 2 C09〜C11）。
+4. Catalogの**pending**旧モデルもCLI inventoryに不在なら全体を拒否し、参照を解消する（Task 3）。
+5. `enforce`で認定済み適格モデルがなく、または監査・公開証拠が不成立ならレビューを公開しない（Task 3・Task 4）。
+
+---
 
 ## 1. 現行境界と維持すべき契約
 
@@ -38,7 +59,7 @@
 1. **新分類値:** `classification_status = "allowlisted_low_risk_code"` を新設する。`allowlisted_docs_only`をコードへ流用しない。`unclassified_code`は引き続き**常に`deep`**。分類値追加は`InternalPRFeatures/v3`、`DecisionState/v1`、Routing Decision/Auditのそれぞれの**既存キー・型構造を変えずに、列挙値だけ拡張**する限定契約変更である。
 2. **バージョン処理の固定方針:** JSONの`schema_version`は**現行値を維持**する（Internal features=`"3"`、Decision State=`"1"`、Routing Decision/Audit=`"1"`）。ただしこれは**新enumに対する旧validatorの互換性を意味しない**。分類値の宣言・受理・serialize・validateを**同一の原子的ソース変更**で同期し、古い実行中ワークフローへ新値を渡さない。別の新規version系列や移行サービスを作らない。
 3. **変更する列挙値受理点:** `classify-pr-review-risk.mjs`、`build-decision-state.mjs`の`CLASSIFICATION`、`ocr-routing-audit.mjs`の`CLASSIFICATIONS`、その他**現行の同じenumを閉じて検証する既存箇所**（該当するvalidator/fixtureに限る）。Decision Stateの**15 keys**、監査のrecord keys、`fast/deep`の文字列値、`selectReviewRoute`の戻り値契約は変更しない。
-4. **信頼済みRisk Policy:** 既存`review-risk-policy.json`に`fast_code_allow_paths: []`を追加する（存在するschema/validatorのunknown-key拒否を同じTaskで更新）。値は**重複のないrepo-relative glob文字列の配列**、初期値は**必ず空**。古いPolicy読込みではキー欠落を**空配列**として扱う（fail-openしない）。`policy_version`は現行形式の規則に従い**一回だけ改訂**し、改訂版の内容ハッシュを既存Authorizationと再照合する。これに伴い現行承認を流用して`enforce`に進むことを禁止。
+4. **信頼済みRisk Policy:** 既存`review-risk-policy.json`に`fast_code_allow_paths: []`を追加する（既存`validPolicy()`に新キーの安全な配列検証を追加）。値は**重複のないrepo-relative path用JavaScript正規表現文字列の配列**（既存`allow_paths`/`deny_paths`と同形式）、初期値は**必ず空**。追加後も`new RegExp(pattern)`と既存`pathsMatch`を使用し、別のglobエンジンは作らない。新キーは`classify-pr-review-risk.mjs`の`validPolicy()`で配列・文字列・長さ最大256・正規表現構文・重複を検証する。キー欠落は互換性のため**空配列**として扱う。不正な値があればfail-closedし、`fast`と解釈しない。**このrisk policyには`policy_version`キーが存在しないため新設・更新しない。** `decision-egress-policy.json.policy_version`も変更しない。既存の`hashRoutingSourceManifest`でrisk policyを含むソースの変更ハッシュを再照合する。実効Activationを流用して`enforce`に進むことは禁止。
 5. **実装・承認の境界:** この例外の**規範採用はOwner判断待ち**。将来許可パターンを空から非空にする行為も別のRisk Policy変更・品質証拠確認・Owner承認を要する。今回の計画は許可パターンを**1件も提案・登録しない**。
 
 ### 2.2 決定的な評価順序
@@ -57,7 +78,7 @@
 | 8 | 従来の非実行文書条件をすべて満たすPR | `allowlisted_docs_only` / `fast`（従来動作） |
 | 9 | その他すべて | 既存の保守的分類 / `deep` |
 
-**分類優先順位の実装上の意味:** 文書のみのPRは1〜3に該当しなければ8の既存docs-only判定を用いる。4〜7はコードを含むPRにだけ適用する。非上書き危険条件は、`change_areas`内の`ci/auth/iam/secret/crypto/migration/deploy/payment/unknown`、既存の非安全risk signal、`.github/`配下、および任意の変更pathのsegment/filename tokenに`security/auth/authentication/authorization/iam/secret/secrets/credential/credentials/token/crypto/permission/permissions/policy/policies/migration/migrations/deploy/deployment/payment/payments/workflow/workflows`がある場合とする。tokenは`/`、`.`, `_`, `-`で分割した小文字単語を基本とし、path先頭が`.github/`であることは別に検出する。既存の危険判定がこれより広い場合は**既存判定を優先**する。新allowlistはこれらを上書きしない。まず旧来の`deny_paths`を**非上書きハード禁止**と**普通のコードをdeepとする包括既定規則**に分けて扱う。`src/**`, `lib/**`, 一般コード拡張子のような包括規則は**例外成立前のdeep既定**であり、例外判定では単純なハード拒否として使わない。一方、テスト、CI、auth/security/secret/migrationなどを検出する既存の高影響条件は**必ず非上書き**。新allowlistを旧denylistより無条件優先するのは禁止。既存のdeny ruleそのものを削除せず、例外にのみ影響する**ローカル判定順**を変更する。既存path分類とpolicyのpattern matcherを再利用し、新規汎用ルールエンジンは作らない。
+**分類優先順位の実装上の意味:** 文書のみのPRは1〜3に該当しなければ8の既存docs-only判定を用いる。4〜7はコードを含むPRにだけ適用する。非上書き危険条件は、`change_areas`内の`ci/auth/iam/secret/crypto/migration/deploy/payment/unknown`、既存の非安全risk signal、`.github/`配下、および任意の変更pathのsegment/filename tokenに`security/auth/authentication/authorization/iam/secret/secrets/credential/credentials/token/crypto/permission/permissions/policy/policies/migration/migrations/deploy/deployment/payment/payments/workflow/workflows`がある場合とする。tokenは`/`、`.`, `_`, `-`で分割した小文字単語を基本とし、path先頭が`.github/`であることは別に検出する。既存の危険判定がこれより広い場合は**既存判定を優先**する。新allowlistはこれらを上書きしない。まず旧来の`deny_paths`を**非上書きハード禁止**と**普通のコードをdeepとする包括既定規則**に分けて扱う。`src/**`, `lib/**`, 一般コード拡張子のような包括規則は**例外成立前のdeep既定**であり、例外判定では単純なハード拒否として使わない。一方、テスト、CI、auth/security/secret/migrationなどを検出する既存の高影響条件は**必ず非上書き**。新allowlistを旧denylistより無条件優先するのは禁止。既存のdeny ruleそのものを削除せず、例外にのみ影響する**ローカル判定順**を変更する。既存path分類と**JavaScript RegExp**によるpolicy matcherを再利用し、新規汎用ルールエンジンは作らない。例えばC01の許可パターンはテスト用に`^src/safe/.*\.(?:ts|js|py)$`という正規表現文字列を使い、`src/safe/`の単なるprefix一致を「安全」と扱わない。
 
 **信頼境界:** 「path/メタデータ上で危険シグナルが観測されない」は**コード本文の安全性を証明しない**。`allowlisted_low_risk_code`はHuman Ownerが特定した限定パスの**ルーティング候補**であって、セキュアコード証明でも品質認定でもない。将来の`fast`実行には**対象の軽量モデル自体のModel Certification**が別途必須。
 
@@ -65,9 +86,9 @@
 
 ### 2.3 Fixture（現時点では未実行の将来テスト入力）
 
-| case | all-changed / state（テストの`fast_code_allow_paths=["src/safe/**"]`のみ仮使用） | 期待 |
+| case | all-changed / state（テストの`fast_code_allow_paths=["^src/safe/.*\\.(?:ts|js|py)$"]`のみ仮使用、JSON上ではバックスラッシュをエスケープ） | 期待 |
 |---|---|---|
-| C01 | `src/safe/parser.ts` 1件・`M`・small・all reviewable・危険シグナルなし | `allowlisted_low_risk_code` / floor `fast` |
+| C01 | `src/safe/parser.ts` 1件・`M`・small・all reviewable・危険シグナルなし（許可パターンはJavaScript正規表現 `^src/safe/.*\.(?:ts|js|py)$`） | `allowlisted_low_risk_code` / floor `fast` |
 | C02 | 同じpathだが**初期空allowlist** | `unclassified_code` / floor `deep` |
 | C03 | `src/safe/parser.ts` + `README.md` | `unclassified_code` / floor `deep` |
 | C04 | `src/safe/auth/token.ts`（allow内だがauth/secret） | `high_risk_metadata` / floor `deep` |
@@ -122,15 +143,15 @@
 **Consumes:** R4基準とOwner採用済みの本書§2限定差分、`InternalPRFeatures/v3`全変更データ、trusted`review-risk-policy.json`、現行Decision応答。  
 **Produces:** 既存`classifyPRRisk`の戻り値契約に`allowlisted_low_risk_code`のenumのみ追加、`buildDecisionState(features)`で15-key射影、既存Routing Decision/Audit enum同期、コードfastに限るDecision成功ガード。  
 **Files to modify:**
-- `.github/workflows/config/review-risk-policy.json`（`fast_code_allow_paths: []`、現行Policy version規則で1回改訂）
+- `.github/workflows/config/review-risk-policy.json`（`fast_code_allow_paths: []`を追加。**versionキーは存在せず、新設しない**）
 - `.github/workflows/scripts/classify-pr-review-risk.mjs`
 - `.github/workflows/scripts/build-decision-state.mjs`
 - `.github/workflows/scripts/ocr-routing-audit.mjs`
 - `.github/workflows/scripts/decision-provider.mjs`
 - `.github/workflows/scripts/select-review-model.mjs`
-- Policyのunknown-keyを検査する**既存**validator/schemaが存在する場合は該当ファイルに限り同期
+- 追加のrisk policy validationは`classify-pr-review-risk.mjs`内の既存`validPolicy()`だけを拡張する。未知のvalidator/schemaを実装対象に含めない
 
-**Functions / Types / Interfaces:** `classifyPRRisk(features, trustedRiskPolicy)`（既存公開入口を変更しない）、`buildDecisionState(features) -> DecisionState/v1`、`selectReviewRoute({mode, features, decision, certifiedCatalog, runBinding})`、`strategyFor`（既存probability/margin判定をそのまま呼ぶ）、Decisionの`requestReviewDecision`（既存固定questionのみ変更）、`validateRoutingDecisionRecord`/`validateRoutingAudit`。新しいAPI・Response fieldは追加しない。
+**Functions / Types / Interfaces:** `classifyPRRisk(features, trustedRiskPolicy)`（既存公開入口を変更しない。内部`validPolicy()`に正規表現配列検証、`decideStatus()`にコードfast限定例外を追加）、`buildDecisionState(features) -> DecisionState/v1`、`selectReviewRoute({mode, features, decision, certifiedCatalog, runBinding})`、`strategyFor`（既存probability/margin判定をそのまま呼ぶ）、Decisionの`requestReviewDecision`（既存固定questionのみ変更）、`validateRoutingDecisionRecord`/`validateRoutingAudit`。新しいAPI・Response fieldは追加しない。
 
 - [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`、高リスク/mixed/不完全は`deep`。期待FAIL: 新enumまたは許可例外が未実装でC01を満たさない。
 - [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record/Auditを追加。期待FAIL: 閉じたenum検証が新値を拒否。
@@ -144,7 +165,7 @@
     .github/workflows/scripts/decision-provider.test.mjs \
     .github/workflows/scripts/select-review-model.test.mjs
   ```
-  **Expected:** 新たに追加したケースで失敗する。既存無関係テストの失敗を「意図したRED」とみなさない。
+  **Expected:** C01は`allowlisted_low_risk_code`非実装のためFAIL、新enumを使うState/Auditテストは`invalid enum`相当でFAIL、Decision失敗時guardのケースは旧`fast`選択が残るためFAIL。実際の失敗箇所を記録し、既存無関係テストの失敗を「意図したRED」とみなさない。
 - [ ] **Minimum GREEN 2-5:** §2.2の順序でrisk floorを判定し、`fast_code_allow_paths`が空なら従来どおり。新enumだけを内部/外部/監査受理点へ同期する。既存Decision質問の記述だけ更新し、§3の**コードfast例外にだけ**`decisionStatus === 'succeeded' && strategyFor(...) === 'fast'`ガードを追加する。低信頼・HTTP失敗などではコードfastを**deep**に戻す。docs-only/off/shadowは変更しない。
 - [ ] **GREEN 2-6 実行（将来のみ）:** **RED 2-4と完全に同一の5ファイルの`node --test`コマンド**。**Expected:** 全PASS、C01〜C11、旧docs-only、既存deep下限、外部データ最小化、監査enum受理がPASS。
 - [ ] **Bounded REFACTOR 2-7:** 既存path/policy matcherの重複した条件整理のみ。変更後にGREEN 2-6を1回再実行。新規判定サービス・新規schemaフィールド追加禁止。
@@ -183,7 +204,27 @@
 **Produces:** **1回**の差分・テスト実績報告と、採用/保留/許可範囲をOwnerが選べる根拠。  
 **Files to modify:** 新規成果物なし。既存テストのみを**許可後**実行。  
 **Functions / Types / Interfaces:** `selectReviewRoute`、`resolveCertifiedModels`、`runHost`の既存契約、既存Audit/Publish Gateに対する回帰を確認。  
-**RED/GREEN:** Task 2・Task 3に記載したコマンドを統合して1回実行し、既存のOCR delegation/HEAD/監査・publish gateの回帰テストを既存テストから対象選別して実行。**本書では未実行**。  
+**RED/GREEN:** Task 2とTask 3の記載コマンドで局所TDDを終えた後、次の**既存テスト**を統合して1回実行する。新たなCIやテスト基盤を作らない。**本書では未実行**。
+
+```bash
+node --test \
+  .github/workflows/scripts/classify-pr-review-risk.test.mjs \
+  .github/workflows/scripts/build-decision-state.test.mjs \
+  .github/workflows/scripts/ocr-routing-audit.test.mjs \
+  .github/workflows/scripts/decision-provider.test.mjs \
+  .github/workflows/scripts/select-review-model.test.mjs \
+  .github/workflows/scripts/validate-review-model-catalog.test.mjs \
+  .github/workflows/scripts/antigravity-host.test.mjs \
+  .github/workflows/scripts/prepare-ocr-review-context.test.mjs \
+  .github/workflows/scripts/prepare-review-routing.test.mjs \
+  .github/workflows/scripts/run-routing-review.test.mjs \
+  .github/workflows/scripts/check-pr-head.test.mjs \
+  .github/workflows/scripts/evaluate-routing-publish.test.mjs \
+  .github/workflows/scripts/publish-routing-review.test.mjs \
+  .github/workflows/scripts/ocr-routing-workflow.test.mjs
+```
+
+**Expected:** すべてPASS。`off/shadow/enforce`、OCR preview/Markdown追加、HEAD、attempt audit、publish/Fail Closedの回帰を確認する。既存テスト自体が失敗した場合は新変更由来か判別して報告し、PASSとは記載しない。  
 **Bounded REFACTOR:** なし。  
 **Commit boundary:** なし（Task 2・Task 3の承認済み境界以外でコミットを増やさない）。  
 **STOP / Owner approval:** テスト未実行をPASSとしない。`off/shadow/enforce`、監査、公開Gate、Model Certification、外部送信の権限を緩めない。実装結果が`REVISION_REQUIRED`でも自動訂正→再レビューに入らずOwner checkpointで停止。
@@ -203,7 +244,15 @@
 
 **Owner checkpoint:** 本書は**未採択**。Human Ownerが§2の限定規範差分を採択し、実装を別途承認するまでは **IMPLEMENTATION HOLD**。CLI inventory取得、モデル認定、Catalog変更、GitHub commit/push、CI実行、外部API呼び出し、`shadow/enforce`起動はいずれも**自動開始禁止**。この文書訂正Taskはここで終了できる。
 
-## 7. Finding Disposition（本書の限定改訂範囲）
+## 7. Writing-Plans限定補正のDisposition
+
+- R1 Finding F-001〜F-006の対応は維持。今回の文書整形はそれらを再レビューするものではない。
+- 現行risk policyの実装はglobではなく`RegExp`。Task 2の条件・Fixtureを実装と揃えた。
+- `review-risk-policy.json`に`policy_version`はなく、実際の`policy_version`は`decision-egress-policy.json`由来。計画から存在しないversionの更新指示を削除した。
+- 受入Task 4のテストファイルを実在パスで固定した。テストは未実行。
+- GitHub上のR1候補はcommit済みだが、Owner採用・Implementation許可は未成立。今回の候補によって権限は変わらない。
+
+## 8. Finding Disposition（先行R1限定改訂範囲）
 
 | Finding | 文書訂正箇所 | 現時点の扱い |
 |---|---|---|
@@ -214,10 +263,11 @@
 | `OCR-GAIP-RG-R1-F-005` | §4, Task 1 | `agy --output-format json models`、`status`/`command.data.models[].id`、未実証時NOT_VERIFIED |
 | `OCR-GAIP-RG-R1-F-006` | Task 2, Task 3, Task 4 | 5ファイル/3ファイルのRED/GREEN・期待値・Interfaces・commit境界 |
 
-## 8. Source Context（今回の新規実測ではない）
+## 9. Source Context（検証範囲を区別）
 
 - Existing R4: `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`（過去確認内容／本Taskで再取得・再実行せず）
-- Existing OCR App source context: fixed baseline `49cd3978d638b0236d1d396ca1c101cac04e2726`（先行READ_ONLY調査結果を参照）
+- Existing OCR App source: fixed baseline `49cd3978d638b0236d1d396ca1c101cac04e2726`（今回のwriting-plansで`classify-pr-review-risk.mjs`, `select-review-model.mjs`, `decision-provider.mjs`, `validate-review-model-catalog.mjs`, `prepare-review-routing.mjs`, `review-risk-policy.json`等の実ソースをGitHub READ_ONLYで再確認）。
+- R1計画のGitHub HEAD: `4758a9067bc8d9f95eabc408f8a2de5c3a071f20`（今回のローカル置換候補は未commit／未push）。
 - Review input: `OCR App — Google AI Pro Dynamic Review Routing / Superpowers Review Gate R1`、F-001〜F-006（このTaskの固定入力）
 - OpenCodeReview upstream release（背景、更新作業は範囲外）: https://github.com/alibaba/open-code-review/releases/tag/v1.13.4
 - `agy` CLI JSON引数順の注意（review input由来、未再検証）: https://github.com/google-antigravity/antigravity-cli/issues/777
