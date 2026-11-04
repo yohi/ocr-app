@@ -182,7 +182,8 @@
 - [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09および**C08a〜C08e**を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`。`test_files_changed=true`、`fixtures`/`__fixtures__`、`generated`/`__generated__`ディレクトリ、`.spec.`/`.test.`などのfile-name tokenは**allowlist一致でもdeep**。高リスク/mixed/不完全も`deep`。期待FAIL: C01の新enum/許可例外が未実装、またはコードfast許可のみ実装して禁止述語が未実装ならC08a〜C08eが`fast`に誤分類される。
 - [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record（`schema_version="1"`）/最終Audit（`"3"`）を追加。`feature_schema_version="3"`・`decision_state_version="1"`も不変と検証する。期待FAIL: 閉じたenum検証が新値を拒否。
 - [ ] **RED 2-3:** `.github/workflows/scripts/decision-provider.test.mjs`にtrusted questionがdocs-onlyという限定を持たず、送信Bodyが既存15-keyのみである検査を追加。`.github/workflows/scripts/select-review-model.test.mjs`にC10/C11、既存docs-only fast不変、`confidence`有無で選択が変わらない検査を追加。期待FAIL: コードfast例外のDecision失敗時ガードが未実装。
-- [ ] **RED 2-4 実行（将来のみ）:** 
+- [ ] **RED 2-4 実行（将来のみ）:**
+
   ```bash
   node --test \
     .github/workflows/scripts/classify-pr-review-risk.test.mjs \
@@ -191,6 +192,7 @@
     .github/workflows/scripts/decision-provider.test.mjs \
     .github/workflows/scripts/select-review-model.test.mjs
   ```
+
   **Expected:** C01は`allowlisted_low_risk_code`非実装のためFAIL、新enumを使うState/Auditテストは`invalid enum`相当でFAIL、Decision失敗時guardのケースは旧`fast`選択が残るためFAIL。実際の失敗箇所を記録し、既存無関係テストの失敗を「意図したRED」とみなさない。
 - [ ] **Minimum GREEN 2-5:** §2.2の順序でrisk floorを判定し、**§2.2の`isNonOverridableTestOrGenerated`を`test_files_changed`と全変更path/oldPathの固定正規表現から既存`classify-pr-review-risk.mjs`内で計算し、allowlist照合より先にdeep固定**する。`fast_code_allow_paths`が空なら従来どおり。新enumだけを内部/外部/監査受理点へ同期する。既存Decision質問の記述だけ更新し、§3の**コードfast例外にだけ**`const candidate = strategyFor(local, normalized)`の**`normalized.status === 'succeeded' && candidate.strategy === 'fast'`**ガードを追加する。偽なら実効`deep`。`candidate.strategy`が`fast`からガードで`deep`へ変更された場合のみ`routeSource='deterministic_fallback'`とし、既存`candidate.source`が正しい`deep`選択の場合はそれを保持する。`decisionStatus=normalized.status`を監査へ伝え、低信頼・HTTP失敗などを成功と偽装しない。docs-onlyと`off/shadow/enforce`の認可境界は変更しない。
 - [ ] **GREEN 2-6 実行（将来のみ）:** **RED 2-4と完全に同一の5ファイルの`node --test`コマンド**。**Expected:** 全PASS、C01〜C11と**C08a〜C08e**（fixture/generated/test・spec・`test_files_changed=true`の非上書き拒否）、旧docs-only、既存deep下限、外部データ最小化、監査enum受理がPASS。
@@ -210,6 +212,7 @@
 - [ ] **RED 3-1:** `validate-review-model-catalog.test.mjs`に、`pending`のinventory不在でもCatalog拒否、旧IDを指すpreferred/fallbackの参照拒否、rootとmodelのversion不一致拒否を追加する。既存の同等テストがあれば新設せず既存を利用する。
 - [ ] **RED 3-2:** `select-review-model.test.mjs`に認定適格0件と`deep→fast`禁止を確認し、`load-review-certification.test.mjs`の**旧Catalog version、inventory raw digest、CLI binary digest不一致、Owner承認欠損**ケース、`run-routing-review.test.mjs`の実行前Identity検査を利用する。`antigravity-host.test.mjs`はenforce時の各spawn/各fallbackにおけるCLI Identity一致、同等以上Tierのfallback失敗動作を確認する。既存PASSで保証される場合は重複テストを書かない。
 - [ ] **RED 3-3 実行（将来のみ）:**
+
   ```bash
   node --test \
     .github/workflows/scripts/validate-review-model-catalog.test.mjs \
@@ -218,6 +221,7 @@
     .github/workflows/scripts/load-review-certification.test.mjs \
     .github/workflows/scripts/run-routing-review.test.mjs
   ```
+
   **Expected:** 新たに追加した不整合caseは意図した拒否が未実装の箇所でFAIL。同等の既存テストがある場合は追加不要として、既存PASSを区別して記録する。未実行はPASSとしない。
 - [ ] **Minimum GREEN 3-4:** Task 1 inventoryに存在しないIDを全`models[]`から除外/実IDへ置換し、`strategies.fast/deep.preferred_model_id`と`allowed_fallbacks`全参照を同期する。**モデルID・tier・preferred・fallbackの構造差分がある場合**、§4.6の規則に従い現在の`catalog_version`のpatchを一度だけ+1し、**全`models[*].catalog_version`をrootに統一**する。schema_versionは`"1"`維持。新versionに結び付く認定・index整合が未成立なら全該当モデルは`pending`/`certification_reference=null`とし、`certified`を捏造しない。適格fast/deepのpreferredが揃わない場合は偽IDを入れずCatalog変更を停止する。
 - [ ] **GREEN 3-5 実行（将来のみ）:** **RED 3-3と同じ5ファイルの`node --test`コマンド**。**Expected:** 全PASS、version/ID/参照の整合、旧認定証拠の拒否、CLI Identity不一致時のFail Closed、`deep→fast`禁止、認定0件ではenforce HOLDを確認。
@@ -247,7 +251,6 @@ node --test \
   .github/workflows/scripts/run-routing-review.test.mjs \
   .github/workflows/scripts/prepare-ocr-review-context.test.mjs \
   .github/workflows/scripts/prepare-review-routing.test.mjs \
-  .github/workflows/scripts/run-routing-review.test.mjs \
   .github/workflows/scripts/check-pr-head.test.mjs \
   .github/workflows/scripts/evaluate-routing-publish.test.mjs \
   .github/workflows/scripts/publish-routing-review.test.mjs \
