@@ -98,7 +98,7 @@ test('C02: empty fast_code_allow_paths keeps normal code as unclassified_code de
 test('C03: mixed docs and code PR remains deep even when code path is allowlisted', () => {
   const result = classifyPRRisk(codeBase('src/safe/parser.ts', {
     all_changed_files: [codeFile('src/safe/parser.ts'), { path: 'README.md', status: 'modified', oldMode: '100644', mode: '100644', additions: 1, deletions: 0, binary: false }],
-    all_changed_file_count: 2, reviewable_file_count: 2, review_scope_gap: true,
+    all_changed_file_count: 2, reviewable_file_count: 2, excluded_file_count: 0, review_scope_gap: false,
   }), fixturePolicy);
   assert.equal(result.classification_status, 'unclassified_code');
   assert.equal(result.risk_floor, 'deep');

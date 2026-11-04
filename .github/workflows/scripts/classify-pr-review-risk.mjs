@@ -47,6 +47,7 @@ function collectFileSummary(files) {
   const paths = [];
   let validRecords = files.length > 0;
   let code = false;
+  let allCode = files.length > 0;
   let known = true;
   let normalText = true;
   for (const file of files) {
@@ -54,12 +55,14 @@ function collectFileSummary(files) {
     paths.push(file.path);
     if (typeof file.oldPath === 'string') paths.push(file.oldPath);
     else if (file.oldPath !== undefined) { validRecords = false; known = false; }
-    code ||= isCodeFile(file);
+    const fileIsCode = isCodeFile(file);
+    code ||= fileIsCode;
+    allCode &&= fileIsCode;
     known &&= isKnownStatus(file.status);
     normalText &&= isNormalTextChange(file);
   }
   const unsafeMode = files.some(file => file && typeof file === 'object' && typeof file.mode === 'string' && typeof file.oldMode === 'string' && (file.mode === '100755' || file.oldMode === '100755' || (file.status !== 'added' && file.oldMode !== file.mode)));
-  return { paths, validRecords, code, known, normalText, unsafeMode };
+  return { paths, validRecords, code, allCode, known, normalText, unsafeMode };
 }
 
 function isIncomplete(features, files, validRecords) {
@@ -92,7 +95,7 @@ function allPathsMatchAllowlist(paths, allowlist) {
 }
 
 
-function decideStatus(features, { paths, code, known, normalText, unsafeMode }, incomplete, trustedRiskPolicy) {
+function decideStatus(features, { paths, code, allCode, known, normalText, unsafeMode }, incomplete, trustedRiskPolicy) {
   const signalsKnown = ['metadata_positive', 'metadata_not_observed', 'unassessable'].includes(features.security_signal) && ['metadata_positive', 'metadata_not_observed', 'unassessable'].includes(features.migration_signal);
   let classification_status;
   if (incomplete) classification_status = 'incomplete';
@@ -100,8 +103,9 @@ function decideStatus(features, { paths, code, known, normalText, unsafeMode }, 
   else if (features.security_signal === 'metadata_positive' || features.migration_signal === 'metadata_positive' || paths.some(path => HIGH_RISK.test(path))) classification_status = 'high_risk_metadata';
   else if (unsafeMode) classification_status = 'unclassified_other';
   else if (code) {
-    if (known && !isNonOverridableTestOrGenerated(features) && normalText && features.change_size === 'small' &&
+    if (allCode && known && !isNonOverridableTestOrGenerated(features) && normalText && features.change_size === 'small' &&
         features.all_changed_file_count >= 1 && features.all_changed_file_count <= 5 &&
+        features.reviewable_file_count === features.all_changed_file_count && features.excluded_file_count === 0 &&
         features.security_signal === 'metadata_not_observed' && features.migration_signal === 'metadata_not_observed' &&
         features.features_incomplete === false && features.review_scope_gap === false &&
         allPathsMatchAllowlist(paths, trustedRiskPolicy.fast_code_allow_paths)) {
