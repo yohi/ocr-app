@@ -410,3 +410,28 @@ test('final audit writer rejects a mismatched run binding', () => {
     assert.throws(() => writeRoutingAudit({ runTemp, record, expectedBinding: { ...binding, runAttempt: 3 } }), { message: 'RUN_BINDING_MISMATCH' });
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
+
+test('decision record v1 accepts allowlisted_low_risk_code and preserves schema versions', () => {
+  const codeFeatures = { classification_status: 'allowlisted_low_risk_code', risk_floor: 'fast', reviewable_file_count: 1, review_scope_gap: false, features_incomplete: false };
+  const codeRoute = { proposedStrategy: 'fast', selectedStrategy: 'fast', routeSource: 'model_decision', decisionStatus: 'succeeded', proposedReviewModel: 'google/gemini-2.5-pro-preview', selectedReviewModel: 'google/gemini-2.5-pro-preview' };
+  const record = createRoutingDecisionRecord({ runBinding: binding, features: codeFeatures, decision: { latencyMs: null, cost: null }, egressStatus: 'allowed', route: codeRoute, policyVersions: versions });
+  assert.equal(record.schema_version, '1');
+  assert.equal(record.feature_schema_version, '3');
+  assert.equal(record.decision_state_version, '1');
+  assert.equal(record.classification_status, 'allowlisted_low_risk_code');
+  assert.equal(record.risk_floor, 'fast');
+  assert.equal(validateRoutingDecisionRecord(record), record);
+  assert.throws(() => validateRoutingDecisionRecord({ ...record, classification_status: 'allowlisted_unknown_code' }), { message: 'AUDIT_SCHEMA_INVALID' });
+});
+
+test('final audit v3 accepts allowlisted_low_risk_code and preserves schema versions', () => {
+  const codeFeatures = { classification_status: 'allowlisted_low_risk_code', risk_floor: 'fast', reviewable_file_count: 0, review_scope_gap: false, features_incomplete: false };
+  const record = createRoutingDecisionRecord({ runBinding: binding, features: codeFeatures, decision: { latencyMs: null, cost: null }, egressStatus: 'allowed', route: { proposedStrategy: null, selectedStrategy: null, routeSource: 'not_requested', decisionStatus: 'not_requested' }, policyVersions: versions });
+  const final = finalizeRoutingAudit({ decision: record, attempts: [], reviewResult: { status: 'skipped' }, validation: { status: 'not_run' }, headCheck: { status: 'not_run' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog });
+  assert.equal(final.schema_version, '3');
+  assert.equal(final.feature_schema_version, '3');
+  assert.equal(final.decision_state_version, '1');
+  assert.equal(final.classification_status, 'allowlisted_low_risk_code');
+  assert.equal(final.risk_floor, 'fast');
+  assert.equal(validateRoutingAudit(final), final);
+});

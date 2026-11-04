@@ -62,3 +62,23 @@ test('validator rejects duplicate or unsorted outbound classification arrays', (
   assert.throws(() => validateDecisionState({ ...expected, language_families: ['yaml', 'typescript'] }));
   assert.throws(() => validateDecisionState({ ...expected, change_areas: ['ci', 'auth'] }));
 });
+
+test('C01: allowlisted_low-risk-code classification projects to exactly 15 DecisionState/v1 keys', () => {
+  const result = buildDecisionState(features({ classification_status: 'allowlisted_low_risk_code', risk_floor: 'fast', security_signal: 'metadata_not_observed', migration_signal: 'metadata_not_observed', change_areas: ['other'], language_families: ['typescript'] }));
+  assert.equal(result.classification_status, 'allowlisted_low_risk_code');
+  assert.equal(result.schema_version, '1');
+  assert.equal(Object.keys(result).length, 15);
+  assert.equal(validateDecisionState(result), undefined);
+});
+
+test('DecisionState/v1 validator accepts the new allowlisted_low_risk_code enum', () => {
+  assert.equal(validateDecisionState({ ...expected, classification_status: 'allowlisted_low_risk_code' }), undefined);
+});
+
+test('DecisionState/v1 never sends raw paths or diff content', () => {
+  const input = features({ classification_status: 'allowlisted_low_risk_code', risk_floor: 'fast' });
+  const result = buildDecisionState(input);
+  for (const forbidden of ['head_sha', 'all_changed_files', 'ocr_reviewable_paths', 'repo_id', 'repo_name', 'additions', 'deletions']) {
+    assert.equal(Object.hasOwn(result, forbidden), false, forbidden);
+  }
+});

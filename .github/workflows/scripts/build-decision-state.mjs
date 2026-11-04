@@ -1,7 +1,7 @@
 const LANGUAGE = new Set(['markdown', 'python', 'typescript', 'javascript', 'json', 'yaml', 'sql', 'shell', 'terraform', 'other', 'unknown']);
 const AREA = new Set(['docs', 'ci', 'auth', 'iam', 'secret', 'crypto', 'migration', 'deploy', 'payment', 'other', 'unknown']);
 const SIGNAL = new Set(['metadata_positive', 'metadata_not_observed', 'unassessable']);
-const CLASSIFICATION = new Set(['allowlisted_docs_only', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete']);
+const CLASSIFICATION = new Set(['allowlisted_docs_only', 'allowlisted_low_risk_code', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete']);
 const SIZE = new Set(['small', 'medium', 'large', 'unknown']);
 const STATE_KEYS = ['schema_version', 'all_changed_file_count_bucket', 'reviewable_file_count_bucket', 'excluded_file_count_bucket', 'additions_bucket', 'deletions_bucket', 'change_size', 'language_families', 'change_areas', 'test_files_changed', 'security_signal', 'migration_signal', 'review_scope_gap', 'features_incomplete', 'classification_status'];
 const FEATURE_KEYS = new Set(['schema_version', 'head_sha', 'all_changed_files', 'ocr_reviewable_paths', 'all_changed_file_count', 'reviewable_file_count', 'excluded_file_count', 'additions', 'deletions', 'change_size', 'language_families', 'change_areas', 'test_files_changed', 'security_signal', 'migration_signal', 'classification_status', 'features_incomplete', 'review_scope_gap', 'risk_floor']);

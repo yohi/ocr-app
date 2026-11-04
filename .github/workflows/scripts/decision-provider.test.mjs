@@ -57,7 +57,7 @@ test('posts the fixed free decision request once and normalizes success', async 
   assert.equal(calls[0].options.headers.Authorization, 'Bearer secret-test-key');
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     model: 'inception/mercury-decide:free', state,
-    questions: { review_strategy: { type: 'choice', instructions: 'Choose code review depth from PR metadata only. Deep is preferred for high impact or uncertainty. This is advisory; application policy may override.', criteria: { fast: 'Low-impact allowlisted documentation changes only', deep: 'Code, security-sensitive, unknown, complex or high-impact changes' } } },
+    questions: { review_strategy: { type: 'choice', instructions: 'Choose code review depth from PR metadata only. Deep is preferred for high impact or uncertainty. Fast is limited to allowlisted low-risk changes. This is advisory; application policy may override.', criteria: { fast: 'Low-impact allowlisted documentation or low-risk code changes', deep: 'Code, security-sensitive, unknown, complex or high-impact changes' } } },
   });
   const body = JSON.parse(calls[0].options.body);
   for (const forbidden of ['apiKey', 'grant', 'expectedBinding']) assert.equal(Object.hasOwn(body, forbidden), false);
@@ -90,3 +90,26 @@ for (const [label, run] of [
     assert.doesNotMatch(result.reason, /secret|body|aborted/i);
   });
 }
+
+test('trusted question describes low-risk code allowlist, not only docs', async () => {
+  const calls = [];
+  await invoke({}, async (url, options) => { calls.push(options); return response(); });
+  const question = JSON.parse(calls[0].body).questions.review_strategy;
+  assert.match(question.instructions, /allowlisted/i);
+  assert.match(question.criteria.fast, /low-risk|allowlisted|code/i);
+});
+
+test('sent body contains only the 15 DecisionState/v1 keys and no raw diff or paths', async () => {
+  const calls = [];
+  const codeState = {
+    ...state, change_areas: ['other'], language_families: ['typescript'], test_files_changed: false,
+  };
+  await invoke({ decisionState: codeState }, async (url, options) => { calls.push(options); return response(); });
+  const body = JSON.parse(calls[0].body);
+  assert.equal(Object.keys(body.state).length, 15);
+  assert.deepEqual(Object.keys(body.state).sort(), Object.keys(state).sort());
+  for (const forbidden of ['all_changed_files', 'ocr_reviewable_paths', 'head_sha', 'diff', 'pr_title', 'raw']) {
+    assert.equal(Object.hasOwn(body.state, forbidden), false, forbidden);
+    assert.equal(Object.hasOwn(body, forbidden), false, forbidden);
+  }
+});

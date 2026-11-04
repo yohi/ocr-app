@@ -117,7 +117,13 @@ export function selectReviewRoute({ mode, features, decision, certifiedCatalog, 
 
   const local = localFloor(features);
   const normalized = normalizedDecision(decision);
-  const { strategy, source } = strategyFor(local, normalized);
+  const candidate = strategyFor(local, normalized);
+  let strategy = candidate.strategy;
+  let source = candidate.source;
+  if (features?.classification_status === 'allowlisted_low_risk_code' && !(normalized.status === 'succeeded' && candidate.strategy === 'fast')) {
+    strategy = 'deep';
+    if (candidate.strategy === 'fast') source = 'deterministic_fallback';
+  }
   return result({
     mode,
     strategy,
