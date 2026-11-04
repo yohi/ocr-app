@@ -32,7 +32,7 @@
 ## Review Focus（既存テストへ限定追加）
 
 1. `fast_code_allow_paths=[]`の初期状態では通常コードは従来どおり`deep`（Task 2 C02）。
-2. allowlist一致でも認証・権限・CI・migration・rename・scope gapは`deep`（Task 2 C04〜C08）。
+2. allowlist一致でも認証・権限・CI・migration・rename・scope gap・テスト/fixture/生成物は`deep`（Task 2 C04〜C08e）。
 3. Decision未実行・HTTP 429・低probability・狭いmarginではコードfastを選択しないがdocs-only fastは変えない（Task 2 C09〜C11）。
 4. Catalogの**pending**旧モデルもCLI inventoryに不在なら全体を拒否し、参照・root/各modelの`catalog_version`を同期する。旧versionの認定は流用しない（Task 3）。
 5. `enforce`でCLIバイナリIdentity・正式inventory・モデル認定・監査・公開証拠が不成立ならレビューを公開しない（Task 1・Task 3・Task 4）。
@@ -71,7 +71,7 @@
 | 1 | 入力欠損、Git解析不完全、未知status、trusted policy不正・欠落の危険情報、`features_incomplete=true` | `incomplete` / `deep` |
 | 2 | `review_scope_gap=true`、OCR reviewable範囲外にコード・高影響ファイルを含む、reviewableの集合がPR全変更集合に一致しない | 該当既存分類（不明は`incomplete`） / `deep` |
 | 3 | security/auth/authorization/IAM/credential/secret/token/crypto/payment/migration/deploy/permission/policy、CI・Workflow・保護設定・認証境界に該当するpath/areaまたは既存risk signalがある | `high_risk_metadata`（該当時） / `deep` |
-| 4 | **コード変更に限り**、rename/copy/delete、binary、symlink、submodule、file mode/executable bit変更、`A/M`以外の状態、テスト・fixture・生成物、未対応拡張子 | 既存の`unclassified_code`/`unclassified_other` / `deep` |
+| 4 | **コード変更に限り**、rename/copy/delete、binary、symlink、submodule、file mode/executable bit変更、`A/M`以外の状態、**後述の`isNonOverridableTestOrGenerated`が真**、未対応拡張子 | 既存の`unclassified_code`/`unclassified_other` / `deep` |
 | 5 | **コード変更に限り**、コード以外を含むmixed PR、`change_size !== "small"`、`all_changed_file_count`が1〜5の範囲外、`security_signal`または`migration_signal`が`metadata_not_observed`でない | `unclassified_code`（コードを含む場合） / `deep` |
 | 6 | **コード変更に限り**、`fast_code_allow_paths`が空、**または**変更したコードの全pathが明示allowlistに一致しない | `unclassified_code` / `deep` |
 | 7 | 1〜6のいずれにも該当せず、全変更が既知の通常`A/M`の**コードのみ**で、全ファイルがreviewable、信頼済みallowlist一致 | **`allowlisted_low_risk_code` / `fast`（下限のみ）** |
@@ -79,6 +79,16 @@
 | 9 | その他すべて | 既存の保守的分類 / `deep` |
 
 **分類優先順位の実装上の意味:** 文書のみのPRは1〜3に該当しなければ8の既存docs-only判定を用いる。4〜7はコードを含むPRにだけ適用する。非上書き危険条件は、`change_areas`内の`ci/auth/iam/secret/crypto/migration/deploy/payment/unknown`、既存の非安全risk signal、`.github/`配下、および任意の変更pathのsegment/filename tokenに`security/auth/authentication/authorization/iam/secret/secrets/credential/credentials/token/crypto/permission/permissions/policy/policies/migration/migrations/deploy/deployment/payment/payments/workflow/workflows`がある場合とする。tokenは`/`、`.`, `_`, `-`で分割した小文字単語を基本とし、path先頭が`.github/`であることは別に検出する。既存の危険判定がこれより広い場合は**既存判定を優先**する。新allowlistはこれらを上書きしない。まず旧来の`deny_paths`を**非上書きハード禁止**と**普通のコードをdeepとする包括既定規則**に分けて扱う。`src/**`, `lib/**`, 一般コード拡張子のような包括規則は**例外成立前のdeep既定**であり、例外判定では単純なハード拒否として使わない。一方、テスト、CI、auth/security/secret/migrationなどを検出する既存の高影響条件は**必ず非上書き**。新allowlistを旧denylistより無条件優先するのは禁止。既存のdeny ruleそのものを削除せず、例外にのみ影響する**ローカル判定順**を変更する。既存path分類と**JavaScript RegExp**によるpolicy matcherを再利用し、新規汎用ルールエンジンは作らない。例えばC01の許可パターンはテスト用に`^src/safe/.*\.(?:ts|js|py)$`という正規表現文字列を使い、`src/safe/`の単なるprefix一致を「安全」と扱わない。
+
+**テスト・fixture・生成物の非上書き禁止述語（F-002、§2.2の順位4／説明用の述語名であり新しい公開APIは不要）:** `classifyPRRisk(features, trustedRiskPolicy)`の既存の`features.all_changed_files`および`features.test_files_changed`のみを用い、**許可正規表現を評価する前**にPR全体について次の順で判定する。既存の高リスク条件が先に成立していれば、その既存分類を優先する。
+
+1. `features.test_files_changed === true`なら`isNonOverridableTestOrGenerated = true`。`test_files_changed`がbooleanでない入力は`incomplete / deep`として扱い、`false`だけを「この信号では拒否しない」と解釈する。
+2. `paths = features.all_changed_files.flatMap(file => [file.path, file.oldPath].filter(path => typeof path === 'string'))`の**いずれか**について、以下のどちらかが真なら`isNonOverridableTestOrGenerated = true`とする。`all_changed_files`やpath等のメタデータが欠損・不正なら、既存の入力完全性検査を優先して`incomplete / deep`にする。
+   - **ディレクトリsegment:** `/(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures|__fixtures__|generated|__generated__)(?:\/|$)/i` にpath全体が一致する。`src/safe/fixtures/data.ts`、`src/safe/generated/client.ts`、二重アンダースコア付きの同名ディレクトリは必ず拒否。
+   - **テスト/specファイル名:** pathの最後の`/`以降（basename）に `/(?:^|[._-])(?:test|tests|spec|specs)(?=[._-]|$)/i` が一致する。例: `src/safe/parser.spec.ts`、`src/safe/parser.test.ts`、`src/safe/test_parser.py`。大文字小文字を区別しない。
+3. 上記1または2が真なら、コード変更を含むPRの`classification_status`は既存の保守的な`unclassified_code`（より高優先順位の危険分類が該当する場合はそれ）、`risk_floor='deep'`。**全pathが`fast_code_allow_paths`に一致しても上書き禁止**。F-002専用の外部Featureキー、Schema version、追加Risk Policyキー、Registryは導入しない。初期`fast_code_allow_paths=[]`は維持する。
+
+**検出限界:** この述語はpathおよびGit metadataの命名規則だけに基づく。別名で格納されたfixture、生成されたソース、コード本文内の高リスク処理を完全に識別できない。`test_files_changed=false`かつ上記正規表現が非一致でも**安全性やfastレビュー品質の証明にはならない**。§2の限定規範差分・許可path・Model Certificationは引き続きOwner承認が必要。
 
 **信頼境界:** 「path/メタデータ上で危険シグナルが観測されない」は**コード本文の安全性を証明しない**。`allowlisted_low_risk_code`はHuman Ownerが特定した限定パスの**ルーティング候補**であって、セキュアコード証明でも品質認定でもない。将来の`fast`実行には**対象の軽量モデル自体のModel Certification**が別途必須。
 
@@ -96,6 +106,11 @@
 | C06 | `src/safe/parser.ts` のrename / binary / executable-mode変更 / delete | `deep` |
 | C07 | `src/safe/parser.ts` だが`review_scope_gap=true` / `features_incomplete=true` / signal=`unassessable` | `deep` |
 | C08 | `src/safe/parser.test.ts` または`tests/safe.py` | `deep` |
+| C08a | `src/safe/fixtures/data.ts`（仮のfast allowlistには一致、ディレクトリsegmentで拒否） | `unclassified_code` / floor `deep` |
+| C08b | `src/safe/generated/client.ts`（同上） | `unclassified_code` / floor `deep` |
+| C08c | `src/safe/parser.spec.ts`（ファイル名tokenで拒否） | `unclassified_code` / floor `deep` |
+| C08d | `src/safe/__fixtures__/data.ts` / `src/safe/__generated__/client.ts`（それぞれ単独のPR） | `unclassified_code` / floor `deep` |
+| C08e | `src/safe/parser.ts`（他のC01条件は維持、`test_files_changed=true`のみ） | `unclassified_code` / floor `deep` |
 | C09 | READMEのみ、既存docs-only条件すべて成立 | **従来どおり**`allowlisted_docs_only` / `fast` |
 | C10 | C01だがDecision不達、429、低probability、狭いmargin、不正応答 | **実効戦略**`deep`、`fast`実行なし |
 | C11 | C01でDecisionが有効かつfast・既存probability/margin条件を通過 | **選択可能**`fast`（モデル認定・実効Activationが別途必要） |
@@ -164,7 +179,7 @@
 
 **Functions / Types / Interfaces:** `classifyPRRisk(features, trustedRiskPolicy)`（既存公開入口を変更しない。内部`validPolicy()`に正規表現配列検証、`decideStatus()`にコードfast限定例外を追加）、`buildDecisionState(features) -> DecisionState/v1`、`selectReviewRoute({mode, features, decision, certifiedCatalog, runBinding})`、`strategyFor`（既存probability/margin判定をそのまま呼ぶ）、Decisionの`requestReviewDecision`（既存固定questionのみ変更）、`validateRoutingDecisionRecord`/`validateRoutingAudit`。新しいAPI・Response fieldは追加しない。
 
-- [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`、高リスク/mixed/不完全は`deep`。期待FAIL: 新enumまたは許可例外が未実装でC01を満たさない。
+- [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09および**C08a〜C08e**を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`。`test_files_changed=true`、`fixtures`/`__fixtures__`、`generated`/`__generated__`ディレクトリ、`.spec.`/`.test.`などのfile-name tokenは**allowlist一致でもdeep**。高リスク/mixed/不完全も`deep`。期待FAIL: C01の新enum/許可例外が未実装、またはコードfast許可のみ実装して禁止述語が未実装ならC08a〜C08eが`fast`に誤分類される。
 - [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record（`schema_version="1"`）/最終Audit（`"3"`）を追加。`feature_schema_version="3"`・`decision_state_version="1"`も不変と検証する。期待FAIL: 閉じたenum検証が新値を拒否。
 - [ ] **RED 2-3:** `.github/workflows/scripts/decision-provider.test.mjs`にtrusted questionがdocs-onlyという限定を持たず、送信Bodyが既存15-keyのみである検査を追加。`.github/workflows/scripts/select-review-model.test.mjs`にC10/C11、既存docs-only fast不変、`confidence`有無で選択が変わらない検査を追加。期待FAIL: コードfast例外のDecision失敗時ガードが未実装。
 - [ ] **RED 2-4 実行（将来のみ）:** 
@@ -177,8 +192,8 @@
     .github/workflows/scripts/select-review-model.test.mjs
   ```
   **Expected:** C01は`allowlisted_low_risk_code`非実装のためFAIL、新enumを使うState/Auditテストは`invalid enum`相当でFAIL、Decision失敗時guardのケースは旧`fast`選択が残るためFAIL。実際の失敗箇所を記録し、既存無関係テストの失敗を「意図したRED」とみなさない。
-- [ ] **Minimum GREEN 2-5:** §2.2の順序でrisk floorを判定し、`fast_code_allow_paths`が空なら従来どおり。新enumだけを内部/外部/監査受理点へ同期する。既存Decision質問の記述だけ更新し、§3の**コードfast例外にだけ**`decisionStatus === 'succeeded' && strategyFor(...) === 'fast'`ガードを追加する。低信頼・HTTP失敗などではコードfastを**deep**に戻す。docs-only/off/shadowは変更しない。
-- [ ] **GREEN 2-6 実行（将来のみ）:** **RED 2-4と完全に同一の5ファイルの`node --test`コマンド**。**Expected:** 全PASS、C01〜C11、旧docs-only、既存deep下限、外部データ最小化、監査enum受理がPASS。
+- [ ] **Minimum GREEN 2-5:** §2.2の順序でrisk floorを判定し、**§2.2の`isNonOverridableTestOrGenerated`を`test_files_changed`と全変更path/oldPathの固定正規表現から既存`classify-pr-review-risk.mjs`内で計算し、allowlist照合より先にdeep固定**する。`fast_code_allow_paths`が空なら従来どおり。新enumだけを内部/外部/監査受理点へ同期する。既存Decision質問の記述だけ更新し、§3の**コードfast例外にだけ**`decisionStatus === 'succeeded' && strategyFor(...) === 'fast'`ガードを追加する。低信頼・HTTP失敗などではコードfastを**deep**に戻す。docs-only/off/shadowは変更しない。
+- [ ] **GREEN 2-6 実行（将来のみ）:** **RED 2-4と完全に同一の5ファイルの`node --test`コマンド**。**Expected:** 全PASS、C01〜C11と**C08a〜C08e**（fixture/generated/test・spec・`test_files_changed=true`の非上書き拒否）、旧docs-only、既存deep下限、外部データ最小化、監査enum受理がPASS。
 - [ ] **Bounded REFACTOR 2-7:** 既存path/policy matcherの重複した条件整理のみ。変更後にGREEN 2-6を1回再実行。新規判定サービス・新規schemaフィールド追加禁止。
 - [ ] **Commit boundary 2-8:** `git add`は上記Task 2変更ファイルと対応テストのみ。例: `git commit -m "feat(ocr): gate low-risk code routing with deterministic floor"`。本Taskでは実行しない。
 
@@ -248,7 +263,7 @@ node --test \
 
 **将来の実装受入（いずれもテスト未実行）**
 
-- §2.3 C01〜C12の経路が期待どおり。**初期空allowlistの本番挙動は既存コードdeep下限と同一**。
+- §2.3 C01〜C12および**C08a〜C08e**の経路が期待どおり。テスト・fixture・生成物の明示的な非上書き禁止述語がallowlistより優先する。**初期空allowlistの本番挙動は既存コードdeep下限と同一**。
 - `confidence`を新判定に使わず、既存probability/marginとコード例外ガードだけを使う。Decision不達時のコードfastはdeep、docs-only fast/off/shadowは従来どおり。
 - State 15 keys、Decision Record v1とRouting Audit v3（`schema_version="1"`/`"3"`）、両者の既存キー・`feature_schema_version="3"`/`decision_state_version="1"`、列挙値のみ同期。raw diff/paths/Secretsの外部漏出なし。
 - inventory不在の`pending`モデルもCatalogへ残さない。モデルID/tier/preferred/fallback変更時にはpatch versionを1回更新しroot/全model一致、旧versionのcertification不流用。`readInstalledCliIdentity`とinventoryの`cli_binary_sha256`一致、正式`index.cli_inventory`/Owner承認と同Tier以上の認定が必要。認定0件・適格0件・権限なしは**Fail Closed**。
@@ -265,7 +280,7 @@ node --test \
 - 現行risk policyの実装はglobではなく`RegExp`。Task 2の条件・Fixtureを実装と揃えた。
 - `review-risk-policy.json`に`policy_version`はなく、実際の`policy_version`は`decision-egress-policy.json`由来。計画から存在しないversionの更新指示を削除した。
 - 受入Task 4のテストファイルを実在パスで固定した。テストは未実行。
-- GitHub上のR1候補、後続F-001/F-004/F-005文書訂正およびF-007履歴訂正はcommit済み（2026-11-04 READ_ONLY照合時HEAD `3954235faafa728db05cee819cc2a216c3863f01`）。**本Provenance限定置換候補自体は未反映**。いずれの記録もOwner採択・Implementation/Activation許可を意味せず、権限は変わらない。
+- GitHub上のR1候補、後続F-001/F-004/F-005文書訂正、および**F-007 Provenance限定置換候補はすべて記録済み**（F-007記録commit・今回のReviewed HEAD: `27c1200d660d7d3fa274809a000b87378409fd64`）。過去のREAD_ONLY照合時HEAD `3954235faafa728db05cee819cc2a216c3863f01`は履歴として維持する。**GitHub記録済みとHuman Owner採択済みは別**であり、Owner採択・Implementation/Activation許可は未成立、権限は変わらない。
 
 ## 8. Finding Disposition（先行R1限定改訂範囲）
 
