@@ -2,9 +2,9 @@
 
 > **For agentic workers (future, after Human Owner approval):** If implementation is separately authorized, use `superpowers:executing-plans` or an expressly approved equivalent. Steps use `- [ ]` for future tracking. **Do not automatically start implementation, subagent reviews, GitHub writes, CI, tests, external API calls, or activation.** The current R1 task is **DOCUMENT_ONLY targeted remediation**.
 
-**Document status:** `F001_F004_F005_TARGETED_DOCUMENTARY_REMEDIATION_CANDIDATE / NOT_ADOPTED / NOT_EXECUTED`（2026-11-04 JST）  
+**Document status:** `F001_F004_F005_TARGETED_DOCUMENTARY_REMEDIATION_CANDIDATE / F007_HISTORY_CORRECTED / NOT_ADOPTED / NOT_EXECUTED`（2026-11-04 JST）。文書記録済み・Owner未採択、Implementation/Activation HOLD。  
 **Repository / intended target:** `yohi/ocr-app` / `feature/ocr-google-ai-pro-dynamic-review-plan-20261103` / `docs/superpowers/plans/2026-11-03-google-ai-pro-dynamic-review-routing.md`  
-**Fixed source baseline:** `master @ 49cd3978d638b0236d1d396ca1c101cac04e2726`。**Reviewed HEAD:** feature branch `013fc33b10a5622717d1a46cc6020a3d0805b7aa`（対象文書 blob `0eb0e89a36cdcb9adcfdc9904e6cf63e1763a1e0`）。**今回の成果物はその文書に対するローカル置換候補であり、GitHub未反映・Owner未採択。** 過去のcommit記録は実装許可を意味しない。  
+**Fixed source baseline:** `master @ 49cd3978d638b0236d1d396ca1c101cac04e2726`（不変）。**Historical Reviewed HEAD:** `013fc33b10a5622717d1a46cc6020a3d0805b7aa`（当時の文書blob `0eb0e89a36cdcb9adcfdc9904e6cf63e1763a1e0`）。**Earlier R1 correction commit:** `4758a9067bc8d9f95eabc408f8a2de5c3a071f20`。**F-001/F-004/F-005文書訂正commit・本F-007訂正の基点:** `10db62e6be0eca4db6e766264e4eb1067ef2253e`。このSHAは本訂正前の基点であり、反映後の最新HEADとは区別する。文書のGitHub記録はOwner採択・実装/Activation許可を意味しない。  
 **Goal:** OpenCodeReview Delegation + Antigravity CLIによるコードレビュー精度を維持し、Google AI Proの利用枠を高リスクPRへ優先配分する。  
 **Deliverable:** 既存機構を再利用し、実装者が新たな設計選択をせずに実施できる**最小限の実装計画**。  
 **Architecture:** 現行の`fast/deep`、決定的なrisk floor、Mercury Decideのadvisory、認定済みモデルCatalog、同等以上TierのHost Fallback、既存Audit/Publish Gateを維持する。**コードfastは空の例外allowlistから開始**し、明示された非上書き安全条件・モデル品質認定・Owner承認がそろう場合にのみ許容する。`agy`のQuotaを予測する新規サービスは追加しない。  
@@ -165,7 +165,7 @@
 **Functions / Types / Interfaces:** `classifyPRRisk(features, trustedRiskPolicy)`（既存公開入口を変更しない。内部`validPolicy()`に正規表現配列検証、`decideStatus()`にコードfast限定例外を追加）、`buildDecisionState(features) -> DecisionState/v1`、`selectReviewRoute({mode, features, decision, certifiedCatalog, runBinding})`、`strategyFor`（既存probability/margin判定をそのまま呼ぶ）、Decisionの`requestReviewDecision`（既存固定questionのみ変更）、`validateRoutingDecisionRecord`/`validateRoutingAudit`。新しいAPI・Response fieldは追加しない。
 
 - [ ] **RED 2-1:** `.github/workflows/scripts/classify-pr-review-risk.test.mjs`に§2.3 C01〜C09を追加する。既定空allowlistで普通コードは`deep`、一時fixture allowlistでC01だけ`fast`、高リスク/mixed/不完全は`deep`。期待FAIL: 新enumまたは許可例外が未実装でC01を満たさない。
-- [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record（`schema_version="1"`）/最終Audit（`"3"`）を追加。`feature_schema_version="3"`・`decision_state_version="1"`も不変と検証する。期待FAIL: 閉じたenum検証が新値を拒否。
+- [ ] **RED 2-2:** `.github/workflows/scripts/build-decision-state.test.mjs`にC01の15-key射影、厳密enum受理、paths/diff非送信を追加。`.github/workflows/scripts/ocr-routing-audit.test.mjs`に新enumのDecision Record（`schema_version="1"`）/最終Audit（`"3"`）を追加し、誤った**Decision v3 / Audit v1の拒否**も回帰テストで固定する。`feature_schema_version="3"`・`decision_state_version="1"`は不変。期待FAIL: 閉じたenum検証が新値を拒否。既存schema versionを変更してGREENにしてはならない。
 - [ ] **RED 2-3:** `.github/workflows/scripts/decision-provider.test.mjs`にtrusted questionがdocs-onlyという限定を持たず、送信Bodyが既存15-keyのみである検査を追加。`.github/workflows/scripts/select-review-model.test.mjs`にC10/C11、既存docs-only fast不変、`confidence`有無で選択が変わらない検査を追加。期待FAIL: コードfast例外のDecision失敗時ガードが未実装。
 - [ ] **RED 2-4 実行（将来のみ）:** 
   ```bash
@@ -265,7 +265,7 @@ node --test \
 - 現行risk policyの実装はglobではなく`RegExp`。Task 2の条件・Fixtureを実装と揃えた。
 - `review-risk-policy.json`に`policy_version`はなく、実際の`policy_version`は`decision-egress-policy.json`由来。計画から存在しないversionの更新指示を削除した。
 - 受入Task 4のテストファイルを実在パスで固定した。テストは未実行。
-- GitHub上のR1候補はcommit済みだが、Owner採用・Implementation許可は未成立。本限定訂正候補によって権限は変わらない。
+- GitHub上のR1候補および後続F-001/F-004/F-005文書訂正はcommit済み。F-007のHEAD・履歴表記訂正を追加記録しても、Owner採択・Implementation/Activation許可は未成立であり、権限は変わらない。
 
 ## 8. Finding Disposition（先行R1限定改訂範囲）
 
@@ -282,7 +282,7 @@ node --test \
 
 - Existing R4: `docs/superpowers/specs/2026-10-20-pr-dynamic-llm-routing-design.md`（過去確認内容／本Taskで再取得・再実行せず）
 - Existing OCR App source: fixed baseline `49cd3978d638b0236d1d396ca1c101cac04e2726`（今回のwriting-plansで`classify-pr-review-risk.mjs`, `select-review-model.mjs`, `decision-provider.mjs`, `validate-review-model-catalog.mjs`, `prepare-review-routing.mjs`, `review-risk-policy.json`等の実ソースをGitHub READ_ONLYで再確認）。
-- Reviewed feature branch HEAD: `013fc33b10a5622717d1a46cc6020a3d0805b7aa`。本対象文書のblob SHAは`0eb0e89a36cdcb9adcfdc9904e6cf63e1763a1e0`（今回のローカル置換候補は**GitHub未反映**）。
+- **固定master baseline:** `49cd3978d638b0236d1d396ca1c101cac04e2726`。**Historical Reviewed HEAD:** `013fc33b10a5622717d1a46cc6020a3d0805b7aa`（当時の文書blob `0eb0e89a36cdcb9adcfdc9904e6cf63e1763a1e0`）。**過去のR1訂正commit:** `4758a9067bc8d9f95eabc408f8a2de5c3a071f20`。**本F-007訂正の基点HEAD:** `10db62e6be0eca4db6e766264e4eb1067ef2253e`（文書blob `feeb2ea3d340459019d546f3e8c1419db34ba23d`）。基点を反映後のブランチ最新HEADや未commit状態と混同しない。
 - 先行Review input: `OCR App — Google AI Pro Dynamic Review Routing / Superpowers Review Gate R1`、F-001〜F-006（既存記録）。今回の固定入力はReviewed HEAD `013fc33b...`への**F-001 Audit schema / F-004 Catalog version / F-005 CLI inventory Identity**の3件のみ。
 - OpenCodeReview upstream release（背景、更新作業は範囲外）: https://github.com/alibaba/open-code-review/releases/tag/v1.13.4
 - `agy` CLI JSON引数順の注意（review input由来、未再検証）: https://github.com/google-antigravity/antigravity-cli/issues/777
