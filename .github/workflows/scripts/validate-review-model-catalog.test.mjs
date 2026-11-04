@@ -171,3 +171,30 @@ test('keeps pending models unavailable even when catalog and CLI names match', (
     return true;
   });
 });
+
+test('RED 3-1: rejects a pending model missing from the CLI inventory', () => {
+  assert.throws(() => validateCatalogSemantics(catalog, {
+    ...evidence,
+    cliAvailableModels: [],
+  }), /model_unavailable/);
+});
+
+test('RED 3-1: rejects a catalog when the CLI inventory reports model IDs not in the catalog', () => {
+  const extraInventory = {
+    ...evidence,
+    cliAvailableModels: [...evidence.cliAvailableModels, 'gemini-3.8-flash-legacy'],
+  };
+  assert.throws(() => validateCatalogSemantics(catalog, extraInventory), /cli_inventory_mismatch/);
+});
+
+test('RED 3-1: rejects a root/model catalog_version mismatch', () => {
+  const mismatched = structuredClone(catalog);
+  mismatched.catalog_version = '1.0.1';
+  assert.throws(() => validateCatalogSemantics(mismatched, evidence), /catalog_version_mismatch/);
+});
+
+test('RED 3-1: rejects preferred/fallback references to a model with a mismatched catalog_version', () => {
+  const oldRef = structuredClone(catalog);
+  oldRef.models[1].catalog_version = '0.9.0';
+  assert.throws(() => validateCatalogSemantics(oldRef, evidence), /catalog_version_mismatch/);
+});

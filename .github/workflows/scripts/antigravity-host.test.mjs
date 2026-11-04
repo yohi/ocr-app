@@ -1084,3 +1084,54 @@ test('runHost invokes agy in a sandbox with non-interactive command approval', a
   assert.ok(capturedArgs.includes('--disable-slash-commands'));
   assert.ok(!capturedArgs.includes('--dangerously-skip-permissions'));
 });
+
+test('RED 3-2: enforce rejects a lower-tier fallback and fails closed on equal-tier fallback failure', async () => {
+  const seenModels = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: (_command, args) => {
+      const actual = args[args.indexOf('--model') + 1];
+      seenModels.push(actual);
+      return childFor(JSON.stringify({ error: 'UNAVAILABLE (code 503): No capacity available' }));
+    },
+  });
+  assert.deepEqual(seenModels, ['cert-primary', 'cert-fallback-a']);
+  assert.equal(result.status, 'failed');
+});
+
+test('RED 3-2: enforce equal-tier fallback success is allowed', async () => {
+  const seenModels = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: (_command, args) => {
+      const actual = args[args.indexOf('--model') + 1];
+      seenModels.push(actual);
+      return childFor(seenModels.length === 1
+        ? JSON.stringify({ error: 'No capacity available' })
+        : JSON.stringify(validReview));
+    },
+  });
+  assert.deepEqual(seenModels, ['cert-primary', 'cert-fallback-a']);
+  assert.equal(result.status, 'success');
+});
+
+test('RED 3-2: enforce uses the attested executable for every spawn including fallbacks', async () => {
+  const commands = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: command => {
+      commands.push(command);
+      return childFor(commands.length === 1
+        ? JSON.stringify({ error: 'No capacity available' })
+        : JSON.stringify(validReview));
+    },
+  });
+  assert.ok(commands.every(cmd => cmd === '/attested/agy'));
+  assert.equal(result.status, 'success');
+});

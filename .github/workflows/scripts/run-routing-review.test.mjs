@@ -398,3 +398,18 @@ test('off runs in a clean process with routing dependencies unavailable', () => 
       if(result.status!=='success') process.exit(1);`], { encoding: 'utf8' });
   assert.equal(child.status, 0, child.stderr);
 });
+
+test('RED 3-2: enforce checks CLI identity before reading route or decision', async () => {
+  const order = [];
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+    fetchCurrentAuthorization: async () => { order.push('auth'); return { registry: {}, operationalDossiers: {} }; },
+    evaluateStartup: () => { order.push('startup'); return { authorized: true }; },
+    readInstalledCliIdentity: async () => { order.push('identity'); throw new Error('REVIEW_CLI_UNAVAILABLE'); },
+    readRoute: async () => { order.push('route'); return { selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: [], reviewable_file_count: 2, status: 'prepared' }; },
+    readDecision: async () => { order.push('decision'); return fixture.decision; },
+  });
+  const result = await runRoutingReview(fixture.args);
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+  assert.deepEqual(order, ['auth', 'startup', 'identity']);
+});
