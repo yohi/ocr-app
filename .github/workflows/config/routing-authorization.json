@@ -414,40 +414,103 @@
       "subject_sha256": "sha256:99ce2fd5015dd15314e45d42bfcc7daa2e0873ab782bfe1b53a607d80e1130c9",
       "issued_at": "2026-11-05T15:30:14.000Z",
       "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-OPERATION-20261106",
+      "kind": "owner_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:8bc4505029c83cc156b7839940620a6b898b40e93c060634842b15462fbb6739",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-SECURITY-20261106",
+      "kind": "security",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:8adbe6d8191f60f1a6c11085fa52de17b97b96d199c7ff4398ea96e27f13270f",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-AUDIT-20261106",
+      "kind": "audit_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:606f2dca163178fc65f1048f7237931dcd1c842e1b681b52101d1bc27b21a70d",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-G1-20261106",
+      "kind": "g1",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:ac1745d37cd3ef9e96fda4e9031746237923e18c530f87c8013a345e56679a43",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-G2-20261106",
+      "kind": "g2",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:ac1745d37cd3ef9e96fda4e9031746237923e18c530f87c8013a345e56679a43",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-G3-20261106",
+      "kind": "g3",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:ac1745d37cd3ef9e96fda4e9031746237923e18c530f87c8013a345e56679a43",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-OCR-136-SUMMARY-G4-20261106",
+      "kind": "g4",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:ac1745d37cd3ef9e96fda4e9031746237923e18c530f87c8013a345e56679a43",
+      "issued_at": "2026-11-05T16:55:08.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
     }
   ],
   "activations": [
     {
       "repo_id": 1318645969,
       "full_name": "yohi/ocr-app",
-      "issued_at": "2026-11-05T15:30:14.000Z",
+      "issued_at": "2026-11-05T16:55:08.000Z",
       "expires_at": "2026-11-12T11:03:17.989Z",
       "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
       "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
       "mode": "shadow",
       "approval_refs": [
-        "OWNER-ROUTE-OCR-136-OPERATION-20261106",
-        "OWNER-ROUTE-OCR-136-SECURITY-20261106",
-        "OWNER-ROUTE-OCR-136-AUDIT-20261106",
-        "OWNER-ROUTE-OCR-136-G1-20261106"
+        "OWNER-ROUTE-OCR-136-SUMMARY-OPERATION-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-SECURITY-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-AUDIT-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-G1-20261106"
       ]
     },
     {
       "repo_id": 1318645969,
       "full_name": "yohi/ocr-app",
-      "issued_at": "2026-11-05T15:30:14.000Z",
+      "issued_at": "2026-11-05T16:55:08.000Z",
       "expires_at": "2026-11-12T11:03:17.989Z",
       "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
       "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
       "mode": "enforce",
       "approval_refs": [
-        "OWNER-ROUTE-OCR-136-OPERATION-20261106",
-        "OWNER-ROUTE-OCR-136-SECURITY-20261106",
-        "OWNER-ROUTE-OCR-136-AUDIT-20261106",
-        "OWNER-ROUTE-OCR-136-G1-20261106",
-        "OWNER-ROUTE-OCR-136-G2-20261106",
-        "OWNER-ROUTE-OCR-136-G3-20261106",
-        "OWNER-ROUTE-OCR-136-G4-20261106"
+        "OWNER-ROUTE-OCR-136-SUMMARY-OPERATION-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-SECURITY-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-AUDIT-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-G1-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-G2-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-G3-20261106",
+        "OWNER-ROUTE-OCR-136-SUMMARY-G4-20261106"
       ]
     }
   ],
