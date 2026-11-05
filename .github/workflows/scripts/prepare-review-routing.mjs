@@ -178,8 +178,9 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       index: JSON.parse(readTrusted('.github/workflows/config/review-certification-index.json')),
       catalog, riskPolicy, egressPolicy,
       readEvidence: path => {
-        const root = resolve(trustedRoot, '.github/workflows/config/routing-evidence');
-        const file = resolve(root, path);
+        const configRoot = resolve(trustedRoot, '.github/workflows/config');
+        const root = resolve(configRoot, 'routing-evidence');
+        const file = resolve(configRoot, path);
         const rel = relative(root, file);
         if (!path || isAbsolute(path) || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('REVIEW_CERTIFICATION_INVALID');
         const stat = fileSystem.lstatSync(file);
