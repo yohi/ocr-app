@@ -49,21 +49,31 @@ export async function authorizeRoutingStart({
   fetchCurrentAuthorization = fetchCurrentRoutingAuthorization,
   now = () => new Date().toISOString(),
   writeOutput = value => writeGithubOutput(env, value),
+  log = message => console.error(message),
 } = {}) {
   const mode = env.DECISION_ROUTING_MODE;
   if (mode === 'off') return;
-  if (mode !== 'shadow' && mode !== 'enforce') throw new Error(ERROR_DENIED);
+  if (mode !== 'shadow' && mode !== 'enforce') {
+    log(JSON.stringify({ event: 'routing_start_denied', stage: 'mode_validation', reason: 'invalid_mode' }));
+    throw new Error(ERROR_DENIED);
+  }
 
   let authorized = false;
+  let stage = 'trusted_config_read';
   try {
     const config = await readTrustedConfig(env);
+    stage = 'repository_identity_validation';
     const central = repoParts(config.centralRepo);
     const target = repoParts(env.TARGET_REPO);
     const checkedAt = now();
+    stage = 'credentials_validation';
     if (config.protectedRef !== 'master' || typeof env.GITHUB_TOKEN !== 'string' || !env.GITHUB_TOKEN
       || typeof env.TARGET_TOKEN !== 'string' || !env.TARGET_TOKEN) throw new Error(ERROR_DENIED);
+    stage = 'central_repository_identity_fetch';
     const centralIdentity = await fetchRepoIdentity({ ...central, token: env.GITHUB_TOKEN });
+    stage = 'target_repository_identity_fetch';
     const repoIdentity = await fetchRepoIdentity({ ...target, token: env.TARGET_TOKEN });
+    stage = 'trusted_source_integrity_check';
     const root = resolve(env.SELF_REPO_PATH || 'self-repo');
     const fileSystem = { readFileSync: path => readFileSync(resolve(root, path)) };
     const sourceManifestSha256 = hashRoutingSourceManifest({
@@ -75,6 +85,7 @@ export async function authorizeRoutingStart({
     });
     const policySha256 = sha256File(resolve(root, '.github/workflows/config/decision-egress-policy.json'));
     const catalogSha256 = sha256File(resolve(root, '.github/workflows/config/review-model-catalog.json'));
+    stage = 'authorization_fetch';
     const authority = await fetchCurrentAuthorization({
       centralRepoId: centralIdentity.id,
       centralRepoFullName: centralIdentity.full_name,
@@ -83,6 +94,14 @@ export async function authorizeRoutingStart({
       fetchImpl: fetch,
       now: checkedAt,
     });
+    if (!authority?.registry) {
+      log(JSON.stringify({
+        event: 'routing_start_denied',
+        stage: 'authorization_registry_unavailable',
+        reason: authority?.reason ?? 'registry_missing',
+      }));
+    }
+    stage = 'authorization_evaluation';
     if (authority?.registry) {
       authorized = evaluateRoutingStartup({
         mode,
@@ -93,11 +112,18 @@ export async function authorizeRoutingStart({
         catalogSha256,
         sourceManifestSha256,
         now: checkedAt,
-      }).authorized;
+      }, diagnostic => log(JSON.stringify({
+        event: 'routing_start_denied',
+        stage: 'authorization_evaluation',
+        reason: diagnostic,
+      }))).authorized;
     }
-  } catch {
+  } catch (error) {
     authorized = false;
+    const errorType = error instanceof Error ? error.name : 'UnknownError';
+    log(JSON.stringify({ event: 'routing_start_denied', stage: `${stage}_failed`, error_type: errorType }));
   }
+  if (!authorized) log(JSON.stringify({ event: 'routing_start_denied', stage: 'authorization_evaluation_denied', reason: 'ROUTING_ACTIVATION_DENIED' }));
   writeOutput(authorized ? 'true' : 'false');
   if (!authorized) throw new Error(ERROR_DENIED);
 }
