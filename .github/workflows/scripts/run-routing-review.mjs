@@ -109,6 +109,14 @@ export async function runRoutingReview({
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
       return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
     }
+    let cliIdentity = null;
+    if (mode === 'enforce' && route.reviewable_file_count > 0) {
+      cliIdentity = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
+      if (typeof cliIdentity?.resolvedPath !== 'string' || !cliIdentity.resolvedPath
+        || typeof cliIdentity.binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(cliIdentity.binarySha256)) {
+        denied('ROUTING_ACTIVATION_DENIED');
+      }
+    }
     const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     let decision;
@@ -121,9 +129,7 @@ export async function runRoutingReview({
       denied('RUN_BINDING_INVALID');
     }
     let certification = null;
-    let cliIdentity = null;
     if (mode === 'enforce' && route.reviewable_file_count > 0) {
-      cliIdentity = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
       const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
         trustedInputs: { ...freshInputs, needsModel: true }, repoIdentity, now: now(),
         cliBinarySha256: cliIdentity.binarySha256 });

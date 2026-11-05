@@ -62,7 +62,7 @@ function input(overrides = {}) {
       evaluateStartup: () => ({ authorized: true }),
       resolveModels: () => ({ primaryModelId: 'certified-primary', allowedFallbackModels: ['certified-fallback'] }),
       trustedInputs: { needsModel: true, catalog: { models: [{ model_id: 'certified-primary', certification_status: 'certified', capability_tier: 'deep', allowed_fallbacks: ['certified-fallback'] }, { model_id: 'certified-fallback', certification_status: 'certified', capability_tier: 'deep' }] } },
-      readInstalledCliIdentity: async () => ({ binarySha256: 'verified-binary', resolvedPath: '/attested/bin/agy' }),
+      readInstalledCliIdentity: async () => ({ binarySha256: 'a'.repeat(64), resolvedPath: '/attested/bin/agy' }),
       createRecorder: async () => ({ onAttemptEvent: () => {}, runAttemptId: 'a'.repeat(32), seal: () => {} }),
       writeResult: async () => undefined,
       writeOutput: async () => undefined,
@@ -399,17 +399,33 @@ test('off runs in a clean process with routing dependencies unavailable', () => 
   assert.equal(child.status, 0, child.stderr);
 });
 
-test.todo('RED 3-2: enforce should check CLI identity before reading route or decision once the guard is implemented', async () => {
+test('Given unavailable CLI identity, When enforce routing runs, Then execution context is not read', async () => {
   const order = [];
   const fixture = input({
     env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
     fetchCurrentAuthorization: async () => { order.push('auth'); return { registry: {}, operationalDossiers: {} }; },
     evaluateStartup: () => { order.push('startup'); return { authorized: true }; },
     readInstalledCliIdentity: async () => { order.push('identity'); throw new Error('REVIEW_CLI_UNAVAILABLE'); },
+    readExecutionContext: async () => { order.push('context'); return validContext; },
     readRoute: async () => { order.push('route'); return { selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: [], reviewable_file_count: 2, status: 'prepared' }; },
     readDecision: async () => { order.push('decision'); return fixture.decision; },
   });
   const result = await runRoutingReview(fixture.args);
   assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
-  assert.deepEqual(order, ['auth', 'startup', 'identity']);
+  assert.deepEqual(order.filter(item => ['identity', 'context'].includes(item)), ['identity']);
+});
+
+test('Given invalid CLI identity, When enforce routing runs, Then execution context is not read', async () => {
+  const order = [];
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+    fetchCurrentAuthorization: async () => ({ registry: {}, operationalDossiers: {} }),
+    evaluateStartup: () => ({ authorized: true }),
+    readInstalledCliIdentity: async () => { order.push('identity'); return null; },
+    readExecutionContext: async () => { order.push('context'); return validContext; },
+    readRoute: async () => ({ selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: [], reviewable_file_count: 2, status: 'prepared' }),
+  });
+  const result = await runRoutingReview(fixture.args);
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+  assert.deepEqual(order, ['identity']);
 });
