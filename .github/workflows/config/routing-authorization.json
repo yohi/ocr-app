@@ -99,8 +99,60 @@
       "subject_sha256": "sha256:0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
       "issued_at": "2026-11-05T12:20:00.000Z",
       "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-SHADOW-OPERATION-20261105",
+      "kind": "owner_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:8069c07c0bc1940538a4ed3ff401db07d216e05672eaa8ca0bd84d5670ad6a7f",
+      "issued_at": "2026-11-05T12:37:21.465Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-SHADOW-SECURITY-20261105",
+      "kind": "security",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:7b14eec478942a7a76e71e8978e506169eef1f98818f1e0a109a566bf16ccfc5",
+      "issued_at": "2026-11-05T12:37:21.465Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-SHADOW-AUDIT-20261105",
+      "kind": "audit_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:2c85c80d9f278b5bec325d1d9bca020ec65dddabc63fbb1045fcf5f659a59e50",
+      "issued_at": "2026-11-05T12:37:21.465Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-SHADOW-G1-20261105",
+      "kind": "g1",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:47b78b29ae17e1428fd7a1ae30a9eda56b00c1076038e7b9e211a73e6d29e46c",
+      "issued_at": "2026-11-05T12:37:21.465Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
     }
   ],
-  "activations": [],
+  "activations": [
+    {
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "mode": "shadow",
+      "issued_at": "2026-11-05T12:37:21.465Z",
+      "expires_at": "2026-11-12T11:03:17.989Z",
+      "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
+      "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
+      "approval_refs": [
+        "OWNER-SHADOW-OPERATION-20261105",
+        "OWNER-SHADOW-SECURITY-20261105",
+        "OWNER-SHADOW-AUDIT-20261105",
+        "OWNER-SHADOW-G1-20261105"
+      ]
+    }
+  ],
   "revoked_refs": []
 }
