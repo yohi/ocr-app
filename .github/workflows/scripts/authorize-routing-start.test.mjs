@@ -98,10 +98,30 @@ function baseInput(overrides = {}) {
 
 test('startup step denies absent approvals and writes the exact false output', async () => {
   const { input, outputs, calls } = baseInput();
+  const logs = [];
+  input.log = message => logs.push(message);
   await assert.rejects(authorizeRoutingStart(input), { message: 'ROUTING_ACTIVATION_DENIED' });
   assert.deepEqual(outputs, ['ROUTING_START_AUTHORIZED=false']);
   assert.equal(calls.filter(([kind]) => kind === 'authorization').length, 1);
   assert.equal(calls.find(([kind]) => kind === 'authorization')[1].token, 'central-token');
+  assert.ok(logs.some(message => JSON.parse(message).stage === 'authorization_evaluation_denied'));
+  assert.ok(logs.some(message => JSON.parse(message).reason === 'ROUTING_ACTIVATION_DENIED'));
+  assert.ok(logs.some(message => JSON.parse(message).reason === 'activation_missing_or_expired'));
+});
+
+test('startup logs a safe stage and error category when authorization retrieval throws', async () => {
+  const { input, outputs } = baseInput({
+    fetchCurrentAuthorization: async () => { throw new Error('sensitive response body'); },
+  });
+  const logs = [];
+  input.log = message => logs.push(message);
+
+  await assert.rejects(authorizeRoutingStart(input), { message: 'ROUTING_ACTIVATION_DENIED' });
+
+  assert.deepEqual(outputs, ['ROUTING_START_AUTHORIZED=false']);
+  assert.ok(logs.some(message => JSON.parse(message).stage === 'authorization_fetch_failed'));
+  assert.ok(logs.some(message => JSON.parse(message).error_type === 'Error'));
+  assert.ok(logs.every(message => !message.includes('sensitive response body')));
 });
 
 test('shadow and enforce startup authorize populated registries and write true exactly', async () => {

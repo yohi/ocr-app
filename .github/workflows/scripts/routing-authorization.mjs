@@ -93,7 +93,11 @@ function validDossier(dossier, approval, activation, input, now) {
   return approval.subject_sha256 === `sha256:${sha256(bytes)}`;
 }
 
-export function evaluateRoutingStartup(input) {
+export function evaluateRoutingStartup(input, onDenied = () => {}) {
+  const deny = reason => {
+    onDenied(reason);
+    return DENIED();
+  };
   try {
     if (!exactObject(input, ['mode', 'repoIdentity', 'registry', 'operationalDossiers', 'policySha256', 'catalogSha256', 'sourceManifestSha256', 'now'])
       || !['shadow', 'enforce'].includes(input.mode) || !exactObject(input.repoIdentity, ['repo_id', 'full_name'])
@@ -101,28 +105,29 @@ export function evaluateRoutingStartup(input) {
       || typeof input.repoIdentity.full_name !== 'string' || !REPO_FULL_NAME.test(input.repoIdentity.full_name)
       || !HASH.test(input.policySha256) || !HASH.test(input.catalogSha256) || !HASH.test(input.sourceManifestSha256)
       || !validDate(input.now) || !input.operationalDossiers || typeof input.operationalDossiers !== 'object'
-      || Array.isArray(input.operationalDossiers) || Object.getPrototypeOf(input.operationalDossiers) !== Object.prototype) return DENIED();
+      || Array.isArray(input.operationalDossiers) || Object.getPrototypeOf(input.operationalDossiers) !== Object.prototype) return deny('startup_input_invalid');
     const registry = parseRegistry(input.registry);
-    if (!registry) return DENIED();
+    if (!registry) return deny('registry_invalid');
     const activation = registry.activations.find((entry) => entry.mode === input.mode
       && entry.repo_id === input.repoIdentity.repo_id && entry.full_name === input.repoIdentity.full_name
       && entry.policy_sha256 === input.policySha256 && entry.catalog_sha256 === input.catalogSha256 && activeWindow(entry, input.now));
-    if (!activation || !uniqueStrings(activation.approval_refs)) return DENIED();
+    if (!activation) return deny('activation_missing_or_expired');
+    if (!uniqueStrings(activation.approval_refs)) return deny('activation_approval_refs_invalid');
     const needed = STAGE_KINDS[input.mode];
     const selected = activation.approval_refs.map((ref) => registry.approvals.find((item) => item.ref === ref));
     if (selected.some((item) => !item) || selected.length !== needed.length
       || needed.some((kind) => selected.filter((approval) => approval.kind === kind).length !== 1)
-      || selected.some((approval) => !needed.includes(approval.kind) || approval.repo_id !== activation.repo_id
-        || approval.full_name !== activation.full_name || registry.revoked_refs.includes(approval.ref) || !activeWindow(approval, input.now))) return DENIED();
+        || selected.some((approval) => !needed.includes(approval.kind) || approval.repo_id !== activation.repo_id
+        || approval.full_name !== activation.full_name || registry.revoked_refs.includes(approval.ref) || !activeWindow(approval, input.now))) return deny('approval_missing_invalid_expired_or_revoked');
     for (const approval of selected) {
       if (OPERATIONAL_KINDS.has(approval.kind)) {
         const dossier = input.operationalDossiers[approval.ref];
-        if (!validDossier(dossier, approval, activation, input, input.now)) return DENIED();
-      } else if (approval.kind === 'basic_policy_approved' || (/^g[1-4]$/.test(approval.kind) && approval.subject_sha256 !== input.sourceManifestSha256)) return DENIED();
+        if (!validDossier(dossier, approval, activation, input, input.now)) return deny('operational_dossier_invalid');
+      } else if (approval.kind === 'basic_policy_approved' || (/^g[1-4]$/.test(approval.kind) && approval.subject_sha256 !== input.sourceManifestSha256)) return deny('source_approval_mismatch');
     }
     return { authorized: true, reason: 'ROUTING_ACTIVATION_AUTHORIZED', approvalRefs: activation.approval_refs.slice() };
   } catch {
-    return DENIED();
+    return deny('authorization_evaluation_error');
   }
 }
 
