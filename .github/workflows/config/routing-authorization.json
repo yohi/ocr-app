@@ -1,6 +1,16 @@
 {
   "schema_version": "1",
-  "approvals": [],
+  "approvals": [
+    {
+      "ref": "OWNER-CLI-INVENTORY-20261105",
+      "kind": "cli_inventory",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d",
+      "issued_at": "2026-11-05T11:03:17.989Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    }
+  ],
   "activations": [],
   "revoked_refs": []
 }

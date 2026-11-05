@@ -1,5 +1,9 @@
 {
   "schema_version": "1",
   "certifications": [],
-  "cli_inventory": null
+  "cli_inventory": {
+    "path": "routing-evidence/pro-cli-inventory-20261105.json",
+    "sha256": "80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d",
+    "approval_ref": "OWNER-CLI-INVENTORY-20261105"
+  }
 }
