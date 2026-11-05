@@ -21,22 +21,66 @@ const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: '
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const features = { classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 2, review_scope_gap: false, features_incomplete: false };
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
-const deepModel = realCatalog.strategies.deep.preferred_model_id;
-const certifiedRealCatalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'a'.repeat(64)}` })) };
-const deepPublishRoute = { selected_model_id: deepModel, fallback_models: certifiedRealCatalog.models.find(model => model.model_id === deepModel).allowed_fallbacks, selected_strategy: 'deep', proposed_strategy: 'deep' };
+const proCliModelInventory = [
+  { model_id: 'gemini-3.8-flash-medium', capability_tier: 'fast', allowed_fallbacks: ['claude-opus-5-5-high', 'gemini-4-argon-high', 'claude-sonnet-5-5-high'] },
+  { model_id: 'claude-opus-5-5-high', capability_tier: 'deep', allowed_fallbacks: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'] },
+  { model_id: 'claude-opus-5-5-medium', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'claude-opus-5-5-low', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'claude-sonnet-5-5-high', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'claude-sonnet-5-5-medium', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'claude-sonnet-5-5-low', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'gemini-3.8-flash-high', capability_tier: 'fast', allowed_fallbacks: ['claude-opus-5-5-high', 'gemini-4-argon-high'] },
+  { model_id: 'gemini-3.8-flash-low', capability_tier: 'fast', allowed_fallbacks: ['claude-opus-5-5-high', 'gemini-4-argon-high'] },
+  { model_id: 'gemini-4-argon-high', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'gemini-4-argon-medium', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'gemini-4-argon-low', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'gpt-oss-120b-medium', capability_tier: 'deep', allowed_fallbacks: [] },
+];
+const deepModel = 'claude-opus-5-5-high';
+const certificationReference = `sha256:${'a'.repeat(64)}`;
+const catalogVersion = '1.0.1';
+const certifiedRealCatalog = {
+  schema_version: '1',
+  catalog_version: catalogVersion,
+  models: proCliModelInventory.map(model => ({ ...model, certification_status: 'certified', certification_reference: certificationReference, catalog_version: catalogVersion })),
+  strategies: {
+    fast: { preferred_model_id: 'gemini-3.8-flash-medium' },
+    deep: { preferred_model_id: deepModel },
+  },
+  unknown_risk_strategy: 'deep',
+};
+const deepPublishRoute = { selected_model_id: deepModel, fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'], selected_strategy: 'deep', proposed_strategy: 'deep' };
 const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable', proposedReviewModel: deepModel, selectedReviewModel: deepModel };
-const versions = { policyVersion: '1.0.0', modelCatalogVersion: realCatalog.catalog_version };
+const versions = { policyVersion: '1.0.0', modelCatalogVersion: catalogVersion };
 const decision = () => createRoutingDecisionRecord({ runBinding: binding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
 const zeroReviewDecision = runBinding => createRoutingDecisionRecord({ runBinding, features: { ...features, reviewable_file_count: 0 }, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route: { ...route, selectedStrategy: null }, policyVersions: versions });
 const catalog = { models: [{ model_id: deepModel, capability_tier: 'deep', certification_status: 'certified' }] };
 const realBundle = { catalog: certifiedRealCatalog, evidence: {
-  certification_refs: certifiedRealCatalog.models.map(model => ({ model_id: model.model_id,
-    certification_reference: model.certification_reference, capability_tier: model.capability_tier,
-    catalog_version: model.catalog_version })),
-  cli_available_models: certifiedRealCatalog.models.map(model => model.model_id),
+  certification_refs: proCliModelInventory.map(model => ({ model_id: model.model_id,
+    certification_reference: certificationReference, capability_tier: model.capability_tier,
+    catalog_version: catalogVersion })),
+  cli_available_models: proCliModelInventory.map(model => model.model_id),
 } };
 const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: deepModel, result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+
+test('anchors the catalog and certified publish fixture to the Pro CLI inventory', () => {
+  assert.equal(realCatalog.catalog_version, catalogVersion);
+  assert.deepEqual(realCatalog.strategies, certifiedRealCatalog.strategies);
+  assert.deepEqual(realCatalog.models.map(({ model_id, capability_tier, allowed_fallbacks }) => ({ model_id, capability_tier, allowed_fallbacks })), proCliModelInventory);
+  assert.deepEqual(certifiedRealCatalog.models.map(({ model_id, certification_reference, capability_tier, catalog_version }) => ({ model_id, certification_reference, capability_tier, catalog_version })),
+    proCliModelInventory.map(({ model_id, capability_tier }) => ({ model_id, certification_reference: certificationReference, capability_tier, catalog_version: catalogVersion })));
+  assert.deepEqual(realBundle.evidence.cli_available_models, proCliModelInventory.map(({ model_id }) => model_id));
+  assert.deepEqual(realBundle.evidence.certification_refs, proCliModelInventory.map(({ model_id, capability_tier }) => ({
+    model_id, certification_reference: certificationReference, capability_tier, catalog_version: catalogVersion,
+  })));
+  assert.deepEqual(deepPublishRoute, {
+    selected_model_id: 'claude-opus-5-5-high',
+    fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
+    selected_strategy: 'deep',
+    proposed_strategy: 'deep',
+  });
+});
 
 async function loadResultEvidenceVerifier() {
   const audit = await import('./ocr-routing-audit.mjs');

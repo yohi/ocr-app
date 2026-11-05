@@ -132,16 +132,22 @@ test('fails closed when any certification evidence binding field mismatches', ()
 });
 
 test('resolves certified primary and fallback models for fast and deep strategies', () => {
-  const fastPrimary = certifiedCatalog.models.find(model => model.model_id === certifiedCatalog.strategies.fast.preferred_model_id);
-  const deepPrimary = certifiedCatalog.models.find(model => model.model_id === certifiedCatalog.strategies.deep.preferred_model_id);
   assert.deepEqual(resolveCertifiedModels(certifiedCatalog, 'fast', evidence), {
-    primaryModelId: fastPrimary.model_id,
-    allowedFallbackModels: [...fastPrimary.allowed_fallbacks],
+    primaryModelId: 'gemini-3.8-flash-medium',
+    allowedFallbackModels: [
+      'claude-opus-5-5-high',
+      'gemini-4-argon-high',
+      'claude-sonnet-5-5-high',
+    ],
     capabilityTier: 'fast',
   });
   assert.deepEqual(resolveCertifiedModels(certifiedCatalog, 'deep', evidence), {
-    primaryModelId: deepPrimary.model_id,
-    allowedFallbackModels: [...deepPrimary.allowed_fallbacks],
+    primaryModelId: 'claude-opus-5-5-high',
+    allowedFallbackModels: [
+      'gemini-4-argon-high',
+      'claude-sonnet-5-5-high',
+      'gpt-oss-120b-medium',
+    ],
     capabilityTier: 'deep',
   });
 });
