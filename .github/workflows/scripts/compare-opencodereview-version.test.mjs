@@ -57,3 +57,11 @@ test('version check disables CLI self-updates and persists comparison values for
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('version check fails closed when the installed CLI differs from the pin', async () => {
+  const { main } = await import('./compare-opencodereview-version.mjs');
+  assert.throws(() => main({
+    env: { OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6' },
+    runCommand: () => 'open-code-review v1.13.5 (commit abc1234)',
+  }), { message: 'OPENCODEREVIEW_VERSION_MISMATCH' });
+});

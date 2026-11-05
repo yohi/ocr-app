@@ -13,10 +13,10 @@
   "allowed_effects": [
     "routing"
   ],
-  "source_manifest_sha256": "sha256:c27f5a891c0f004232da9a52a63fb635027af1e4769e71c943c28ae5d4cf4a12",
+  "source_manifest_sha256": "sha256:99ce2fd5015dd15314e45d42bfcc7daa2e0873ab782bfe1b53a607d80e1130c9",
   "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
   "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
-  "issued_at": "2026-11-05T15:23:10.000Z",
+  "issued_at": "2026-11-05T15:30:14.000Z",
   "expires_at": "2026-11-12T11:03:17.989Z",
   "revocation_ref": "OWNER-ROUTE-OCR-136-OPERATION-20261106"
 }

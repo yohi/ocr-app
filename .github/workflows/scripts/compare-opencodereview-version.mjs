@@ -44,6 +44,7 @@ export function main({ env = process.env, runCommand = execFileSync } = {}) {
       '',
     ].join('\n'));
   }
+  if (!comparison.matches) throw new Error('OPENCODEREVIEW_VERSION_MISMATCH');
   return comparison;
 }
 
