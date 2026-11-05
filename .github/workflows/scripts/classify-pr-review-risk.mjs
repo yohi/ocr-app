@@ -7,7 +7,8 @@ const TEST_SPEC_BASENAME = /(?:^|[._-])(?:test|tests|spec|specs)(?=[._-]|$)/i;
 
 function validPolicy(policy) {
   if (!policy || typeof policy !== 'object' || !Array.isArray(policy.allow_paths) || !Array.isArray(policy.deny_paths)) throw new Error('Trusted risk policy is invalid');
-  const fastPaths = Array.isArray(policy.fast_code_allow_paths) ? policy.fast_code_allow_paths : [];
+  if (policy.fast_code_allow_paths !== undefined && !Array.isArray(policy.fast_code_allow_paths)) throw new Error('Trusted risk policy is invalid');
+  const fastPaths = policy.fast_code_allow_paths ?? [];
   const seen = new Set();
   for (const pattern of [...policy.allow_paths, ...policy.deny_paths, ...fastPaths]) {
     if (typeof pattern !== 'string' || pattern.length > 256) throw new Error('Trusted path rule is invalid');
@@ -74,20 +75,24 @@ function isIncomplete(features, files, validRecords) {
     typeof features.test_files_changed !== 'boolean' ||
     typeof features.review_scope_gap !== 'boolean' || !Array.isArray(features.ocr_reviewable_paths);
 }
+function isTestOrGeneratedPath(path) {
+  if (typeof path !== 'string') return false;
+  return TEST_GENERATED_DIR.test(path) || TEST_SPEC_BASENAME.test(path.split('/').pop());
+}
+
+function isTestOrGeneratedFile(file) {
+  return Boolean(file && typeof file === 'object' &&
+    [file.path, file.oldPath].some(isTestOrGeneratedPath));
+}
+
 function isNonOverridableTestOrGenerated(features) {
-  if (features.test_files_changed === true) return true;
-  const files = features.all_changed_files;
-  if (!Array.isArray(files)) return false;
-  for (const file of files) {
-    if (!file || typeof file !== 'object') continue;
-    for (const path of [file.path, file.oldPath]) {
-      if (typeof path !== 'string') continue;
-      if (TEST_GENERATED_DIR.test(path)) return true;
-      const basename = path.split('/').pop();
-      if (TEST_SPEC_BASENAME.test(basename)) return true;
-    }
-  }
-  return false;
+  return features.test_files_changed === true ||
+    (Array.isArray(features.all_changed_files) && features.all_changed_files.some(isTestOrGeneratedFile));
+}
+
+function isNonOverridableCiOrGitHubPath(features, paths) {
+  return (Array.isArray(features.change_areas) && features.change_areas.includes('ci')) ||
+    paths.some(path => /(?:^|[\\/])\.github(?:[\\/]|$)/i.test(path));
 }
 
 function allPathsMatchAllowlist(paths, allowlist) {
@@ -103,7 +108,7 @@ function decideStatus(features, { paths, code, allCode, known, normalText, unsaf
   else if (features.security_signal === 'metadata_positive' || features.migration_signal === 'metadata_positive' || paths.some(path => HIGH_RISK.test(path))) classification_status = 'high_risk_metadata';
   else if (unsafeMode) classification_status = 'unclassified_other';
   else if (code) {
-    if (allCode && known && !isNonOverridableTestOrGenerated(features) && normalText && features.change_size === 'small' &&
+    if (allCode && known && !isNonOverridableTestOrGenerated(features) && !isNonOverridableCiOrGitHubPath(features, paths) && normalText && features.change_size === 'small' &&
         features.all_changed_file_count >= 1 && features.all_changed_file_count <= 5 &&
         features.reviewable_file_count === features.all_changed_file_count && features.excluded_file_count === 0 &&
         features.security_signal === 'metadata_not_observed' && features.migration_signal === 'metadata_not_observed' &&

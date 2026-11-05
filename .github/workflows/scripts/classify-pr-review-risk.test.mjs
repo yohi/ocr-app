@@ -117,6 +117,15 @@ test('C05: CI/workflow and migration paths stay deep even if allowlisted', () =>
   assert.equal(ci.risk_floor, 'deep');
   const migration = classifyPRRisk(codeBase('src/safe/migrations/001.ts', { change_areas: ['migration'] }), fixturePolicy);
   assert.equal(migration.risk_floor, 'deep');
+
+  const ciCodePolicy = { ...fixturePolicy, fast_code_allow_paths: ['^\\.github/workflows/.*\\.ts$'] };
+  const ciCode = classifyPRRisk(codeBase('.github/workflows/ci.ts'), ciCodePolicy);
+  assert.equal(ciCode.classification_status, 'unclassified_code');
+  assert.equal(ciCode.risk_floor, 'deep');
+
+  const ciArea = classifyPRRisk(codeBase('src/safe/parser.ts', { change_areas: ['ci'] }), fixturePolicy);
+  assert.equal(ciArea.classification_status, 'unclassified_code');
+  assert.equal(ciArea.risk_floor, 'deep');
 });
 
 test('C06: rename, binary, executable, and delete code stay deep despite allowlist', () => {
@@ -169,4 +178,20 @@ test('C09: docs-only PR keeps allowlisted_docs_only fast unchanged', () => {
 
 test('unknown status, malformed metadata, and unsafe modes are not overridden by empty allowlist', () => {
   assert.equal(classifyPRRisk(codeBase('src/safe/parser.ts', { all_changed_files: [codeFile('src/safe/parser.ts', { status: 'unknown' })] }), fixturePolicy).classification_status, 'unclassified_code');
+});
+
+test('invalid fast_code_allow_paths types reject the trusted policy', () => {
+  for (const invalidValue of ['^src/.*$', {}, null]) {
+    assert.throws(
+      () => classifyPRRisk(codeBase(), { ...fixturePolicy, fast_code_allow_paths: invalidValue }),
+      /Trusted risk policy is invalid/,
+    );
+  }
+});
+
+test('an omitted fast_code_allow_paths field remains an empty allowlist', () => {
+  const { fast_code_allow_paths: _fastCodeAllowPaths, ...policyWithoutFastPaths } = fixturePolicy;
+  const result = classifyPRRisk(codeBase(), policyWithoutFastPaths);
+  assert.equal(result.classification_status, 'unclassified_code');
+  assert.equal(result.risk_floor, 'deep');
 });
