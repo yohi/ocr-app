@@ -5,8 +5,8 @@
     {
       "model_id": "gemini-3.8-flash-medium",
       "capability_tier": "fast",
-      "certification_status": "pending",
-      "certification_reference": null,
+      "certification_status": "certified",
+      "certification_reference": "sha256:f312317614e4c2ef00ea9eee5e392a04aff06c25cde375b97a485e26ba476d9b",
       "allowed_fallbacks": [
         "claude-opus-5-5-high",
         "gemini-4-argon-high",
@@ -17,8 +17,8 @@
     {
       "model_id": "claude-opus-5-5-high",
       "capability_tier": "deep",
-      "certification_status": "pending",
-      "certification_reference": null,
+      "certification_status": "certified",
+      "certification_reference": "sha256:cbfbe5dd693d768548eaaa74b8d79f8ec0c451325dbd762c37d13437f15b9c75",
       "allowed_fallbacks": [
         "gemini-4-argon-high",
         "claude-sonnet-5-5-high",
@@ -45,8 +45,8 @@
     {
       "model_id": "claude-sonnet-5-5-high",
       "capability_tier": "deep",
-      "certification_status": "pending",
-      "certification_reference": null,
+      "certification_status": "certified",
+      "certification_reference": "sha256:73b369d25711391daa41078a09d4a6db9608f21548a3a9efd2d2aed1ad97337a",
       "allowed_fallbacks": [],
       "catalog_version": "1.0.1"
     },
@@ -91,8 +91,8 @@
     {
       "model_id": "gemini-4-argon-high",
       "capability_tier": "deep",
-      "certification_status": "pending",
-      "certification_reference": null,
+      "certification_status": "certified",
+      "certification_reference": "sha256:b1a2ea8dff54db2ca562021387b3627758f538cf5aac64ecfa1e174f6f8a9bbd",
       "allowed_fallbacks": [],
       "catalog_version": "1.0.1"
     },
@@ -115,8 +115,8 @@
     {
       "model_id": "gpt-oss-120b-medium",
       "capability_tier": "deep",
-      "certification_status": "pending",
-      "certification_reference": null,
+      "certification_status": "certified",
+      "certification_reference": "sha256:0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
       "allowed_fallbacks": [],
       "catalog_version": "1.0.1"
     }

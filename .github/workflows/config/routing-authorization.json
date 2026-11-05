@@ -9,6 +9,96 @@
       "subject_sha256": "sha256:80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d",
       "issued_at": "2026-11-05T11:03:17.989Z",
       "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-CAPABILITY-GEMINI-3.8-FLASH-MEDIUM-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:c845f37db3bca33c7a6102dddce68483ab0ad64cb727cea0f84c188d22ac30e3",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-MODEL-CERT-GEMINI-3.8-FLASH-MEDIUM-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:f312317614e4c2ef00ea9eee5e392a04aff06c25cde375b97a485e26ba476d9b",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-CAPABILITY-CLAUDE-OPUS-5-5-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:d33ba559e4a5f5178cc4036ea90f0e920b37db609ec923fa1766ca89a91a7014",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-MODEL-CERT-CLAUDE-OPUS-5-5-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:cbfbe5dd693d768548eaaa74b8d79f8ec0c451325dbd762c37d13437f15b9c75",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-CAPABILITY-GEMINI-4-ARGON-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:030bf3a712deb4bf47c6332fb394c824b1776c422ae2103cf8b827d45285bfc7",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-MODEL-CERT-GEMINI-4-ARGON-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:b1a2ea8dff54db2ca562021387b3627758f538cf5aac64ecfa1e174f6f8a9bbd",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-CAPABILITY-CLAUDE-SONNET-5-5-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:824bfafc8fb0b7889c052c971a544e323c6d663a678ca2995e892a935b21d27e",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-MODEL-CERT-CLAUDE-SONNET-5-5-HIGH-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:73b369d25711391daa41078a09d4a6db9608f21548a3a9efd2d2aed1ad97337a",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-CAPABILITY-GPT-OSS-120B-MEDIUM-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:3b15081e9caec51be8d523625f272e663453d4700f55ea4ebae15a2ce0ce65cc",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-MODEL-CERT-GPT-OSS-120B-MEDIUM-20261105",
+      "kind": "model",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
+      "issued_at": "2026-11-05T12:20:00.000Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
     }
   ],
   "activations": [],

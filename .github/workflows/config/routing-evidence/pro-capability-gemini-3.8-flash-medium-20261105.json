@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "subject": "review-model-capability-dossier/v1",
+  "model_id": "gemini-3.8-flash-medium",
+  "capability_tier": "fast",
+  "issuing_repo": "yohi/ocr-app",
+  "quality_basis": [
+    "The model is observed on the authenticated Google AI Pro CLI inventory (inventory evidence sha256:80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d, observed_at 2026-11-05T11:03:17.989Z, cli_version 1.5.1, identity-bound to binary sha256:72738cf0445918483956a5f0da33abdfcfb21a12dd9a421fd57d063782826669).",
+    "Flash-family medium tier is the vendor's latency-optimized review-capable line: it reacts quickly on small pull requests while the fast strategy retains deep-tier fallbacks (claude-opus-5-5-high, gemini-4-argon-high, claude-sonnet-5-5-high) for residual risk.",
+    "The Human Owner reviewed the model family positioning on the Pro plan and assigned capability_tier=fast for the fast review strategy on yohi/ocr-app."
+  ],
+  "decision": "capability_tier=fast is assigned by Human Owner judgment recorded in approval OWNER-CAPABILITY-GEMINI-3.8-FLASH-MEDIUM-20261105.",
+  "issued_at": "2026-11-05T12:20:00.000Z",
+  "expires_at": "2026-11-12T11:03:17.989Z"
+}

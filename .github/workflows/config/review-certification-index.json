@@ -1,6 +1,32 @@
 {
   "schema_version": "1",
-  "certifications": [],
+  "certifications": [
+    {
+      "path": "routing-evidence/pro-model-certification-gemini-3.8-flash-medium-20261105.json",
+      "sha256": "f312317614e4c2ef00ea9eee5e392a04aff06c25cde375b97a485e26ba476d9b",
+      "approval_ref": "OWNER-MODEL-CERT-GEMINI-3.8-FLASH-MEDIUM-20261105"
+    },
+    {
+      "path": "routing-evidence/pro-model-certification-claude-opus-5-5-high-20261105.json",
+      "sha256": "cbfbe5dd693d768548eaaa74b8d79f8ec0c451325dbd762c37d13437f15b9c75",
+      "approval_ref": "OWNER-MODEL-CERT-CLAUDE-OPUS-5-5-HIGH-20261105"
+    },
+    {
+      "path": "routing-evidence/pro-model-certification-gemini-4-argon-high-20261105.json",
+      "sha256": "b1a2ea8dff54db2ca562021387b3627758f538cf5aac64ecfa1e174f6f8a9bbd",
+      "approval_ref": "OWNER-MODEL-CERT-GEMINI-4-ARGON-HIGH-20261105"
+    },
+    {
+      "path": "routing-evidence/pro-model-certification-claude-sonnet-5-5-high-20261105.json",
+      "sha256": "73b369d25711391daa41078a09d4a6db9608f21548a3a9efd2d2aed1ad97337a",
+      "approval_ref": "OWNER-MODEL-CERT-CLAUDE-SONNET-5-5-HIGH-20261105"
+    },
+    {
+      "path": "routing-evidence/pro-model-certification-gpt-oss-120b-medium-20261105.json",
+      "sha256": "0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
+      "approval_ref": "OWNER-MODEL-CERT-GPT-OSS-120B-MEDIUM-20261105"
+    }
+  ],
   "cli_inventory": {
     "path": "routing-evidence/pro-cli-inventory-20261105.json",
     "sha256": "80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d",
