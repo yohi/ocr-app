@@ -254,3 +254,44 @@ test('CLI inventory reports approved model IDs and no live provider capacity cla
     assert.equal(Object.hasOwn(result, 'liveProviderCapacity'), false);
   } finally { cleanup(f); }
 });
+
+test('RED 3-2: rejects missing owner approval for the CLI inventory', () => {
+  const f = fixture();
+  try {
+    f.registry.approvals = f.registry.approvals.filter(approval => approval.ref !== 'OWNER-CLI');
+    assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally { cleanup(f); }
+});
+
+test('RED 3-2: rejects an old catalog_version in the certification evidence', () => {
+  const f = fixture();
+  try {
+    f.certification.catalog_version = '0.9.0';
+    refreshCertification(f);
+    assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally { cleanup(f); }
+});
+
+test('RED 3-2: rejects an inventory raw digest mismatch', () => {
+  const f = fixture();
+  try {
+    const tampered = Buffer.from(JSON.stringify({ ...f.inventory, cli_version: 'tampered' }));
+    f.evidence.set('inventory.json', tampered);
+    writeFileSync(join(f.root, 'inventory.json'), tampered);
+    f.registry.approvals.find(item => item.ref === 'OWNER-CLI').subject_sha256 = `sha256:${hash(tampered)}`;
+    f.certification.cli_evidence_sha256 = hash(tampered);
+    refreshCertification(f);
+    assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally { cleanup(f); }
+});
+
+test('RED 3-2: rejects a CLI binary digest mismatch against the installed executable', () => {
+  const f = fixture();
+  try {
+    f.inventory.cli_binary_sha256 = '0'.repeat(64);
+    refreshInventory(f);
+    f.certification.cli_evidence_sha256 = hash(Buffer.from(JSON.stringify(f.inventory)));
+    refreshCertification(f);
+    assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally { cleanup(f); }
+});

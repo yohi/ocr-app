@@ -185,3 +185,16 @@ test('confidence presence or absence does not alter deterministic selection', ()
   assert.equal(withoutConfidence.selectedStrategy, withConfidence.selectedStrategy);
   assert.equal(withoutConfidence.routeSource, withConfidence.routeSource);
 });
+
+test('RED 3-2: enforce fails closed when no model is certified eligible', () => {
+  const emptyEvidence = { verifiedCertificationRefs: [], cliAvailableModels: evidence.cliAvailableModels };
+  assert.throws(() => select({
+    certifiedCatalog: { catalog: certifiedCatalog, evidence: emptyEvidence },
+  }), error => error.message === 'review_model_unavailable');
+});
+
+test('RED 3-2: deep risk floor cannot downgrade to fast even with a certified fast model and confident decision', () => {
+  const result = select({ features: { risk_floor: 'deep' }, decision: confidentFast });
+  assert.equal(result.selectedStrategy, 'deep');
+  assert.equal(result.routeSource, 'deterministic_fallback');
+});
