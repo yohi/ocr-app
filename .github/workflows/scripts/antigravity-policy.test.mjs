@@ -7,7 +7,7 @@ const markdownRules = JSON.parse(fs.readFileSync(
   new URL('../config/markdown-review-rules.json', import.meta.url),
   'utf8',
 ));
-const pinnedOcrPackagePattern = /@alibaba-group\/open-code-review@(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+)(?:\.(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?=\s|$)/;
+const pinnedOcrPackagePattern = /@alibaba-group\/open-code-review@(?:\$OPENCODEREVIEW_EXPECTED_VERSION|(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+)(?:\.(?:0|[1-9]\d*|(?=[0-9A-Za-z-]*[A-Za-z-])[0-9A-Za-z-]+))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)(?=[\s\"]|$)/;
 
 function stepRun(name) {
   const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

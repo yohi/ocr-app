@@ -82,6 +82,23 @@ export function validateRoutingAudit(record) {
   return record;
 }
 
+export function createRoutingLogSummary(record) {
+  validateRoutingAudit(record);
+  return Object.freeze({
+    effective_mode: record.effective_mode,
+    selection_llm_attempted: record.egress_status === 'allowed'
+      && record.decision_status !== 'not_requested'
+      && record.latency_ms !== null,
+    selection_llm_succeeded: record.decision_status === 'succeeded',
+    selection_llm_status: record.decision_status,
+    selection_llm_egress_status: record.egress_status,
+    selected_review_model: record.selected_review_model,
+    executed_review_model: record.executed_review_model,
+    attempted_review_models: Object.freeze([...record.attempted_review_models]),
+    audit_status: record.audit_status,
+  });
+}
+
 export function verifyValidatedResultEvidence({ rawBytes, validatedResultSha256, validationStatus }) {
   enumValue(validationStatus, ['passed', 'failed', 'not_run']);
   if (rawBytes !== null && !Buffer.isBuffer(rawBytes)) throw new Error('AUDIT_SCHEMA_INVALID');

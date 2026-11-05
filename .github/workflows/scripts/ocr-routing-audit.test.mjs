@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import {
+  createRoutingLogSummary,
   createRoutingDecisionRecord,
   writeRoutingDecision,
   createAttemptRecorder,
@@ -54,6 +55,20 @@ const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource:
 const versions = { policyVersion: '1.0.0', modelCatalogVersion: catalogVersion };
 const decision = () => createRoutingDecisionRecord({ runBinding: binding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
 const zeroReviewDecision = runBinding => createRoutingDecisionRecord({ runBinding, features: { ...features, reviewable_file_count: 0 }, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route: { ...route, selectedStrategy: null }, policyVersions: versions });
+const summaryAudit = overrides => ({
+  schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7,
+  head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: binding.runAttempt,
+  effective_mode: 'enforce', decision_status: 'not_requested', egress_status: 'denied',
+  classification_status: 'unclassified_code', risk_floor: 'deep', selected_strategy: 'deep', proposed_strategy: 'deep',
+  policy_version: versions.policyVersion, feature_schema_version: '3', decision_state_version: '1', model_catalog_version: versions.modelCatalogVersion,
+  owner_approval_ref: null, proposed_review_model: 'gemini-3.8-flash-medium', selected_review_model: 'gemini-3.8-flash-medium',
+  host_success_model: 'gemini-3.8-flash-medium', executed_review_model: 'gemini-3.8-flash-medium',
+  attempted_review_models: ['gemini-3.8-flash-medium'], result_sha256: 'a'.repeat(64),
+  review_validation_status: 'passed', head_validation_status: 'passed', audit_status: 'sealed',
+  review_scope_gap: false, features_incomplete: false, review_quality_measured: true,
+  decision_api_cost: null, latency_ms: null,
+  ...overrides,
+});
 const catalog = { models: [{ model_id: deepModel, capability_tier: 'deep', certification_status: 'certified' }] };
 const realBundle = { catalog: certifiedRealCatalog, evidence: {
   certification_refs: proCliModelInventory.map(model => ({ model_id: model.model_id,
@@ -225,6 +240,9 @@ test('final audit only identifies a validated single host success', () => {
   const final = finalize({});
   const auditV3 = { ...final, schema_version: '3', result_sha256: 'a'.repeat(64) };
   assert.equal(validateRoutingAudit(auditV3), auditV3);
+  const inconsistentAudit = { ...auditV3, executed_review_model: 'other-model' };
+  assert.throws(() => validateRoutingAudit(inconsistentAudit), { message: 'AUDIT_SCHEMA_INVALID' });
+  assert.throws(() => createRoutingLogSummary(inconsistentAudit), { message: 'AUDIT_SCHEMA_INVALID' });
   assert.throws(() => validateRoutingAudit({ ...auditV3, result_sha256: 'invalid' }), { message: 'AUDIT_SCHEMA_INVALID' });
   assert.throws(() => validateRoutingAudit({ ...auditV3, result_sha256: null }), { message: 'AUDIT_SCHEMA_INVALID' });
   assert.equal(validateRoutingAudit({ ...auditV3, result_sha256: null, review_validation_status: 'failed' }).result_sha256, null);
@@ -480,4 +498,59 @@ test('final audit v3 accepts allowlisted_low_risk_code and preserves schema vers
   assert.equal(final.classification_status, 'allowlisted_low_risk_code');
   assert.equal(final.risk_floor, 'fast');
   assert.equal(validateRoutingAudit(final), final);
+});
+
+test('routing log summary reports a skipped selector and the executed review model', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  assert.equal(typeof createRoutingLogSummary, 'function');
+  const summary = createRoutingLogSummary(summaryAudit({
+    decision_status: 'not_requested',
+    egress_status: 'denied',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    executed_review_model: 'gemini-3.8-flash-medium',
+    attempted_review_models: ['gemini-3.8-flash-medium'],
+  }));
+  assert.deepEqual(summary, {
+    effective_mode: 'enforce',
+    selection_llm_attempted: false,
+    selection_llm_succeeded: false,
+    selection_llm_status: 'not_requested',
+    selection_llm_egress_status: 'denied',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    executed_review_model: 'gemini-3.8-flash-medium',
+    attempted_review_models: ['gemini-3.8-flash-medium'],
+    audit_status: 'sealed',
+  });
+});
+
+test('selection LLM attempt requires allowed egress and an actual provider request', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  const cases = [
+    [{ decision_status: 'unavailable', egress_status: 'denied', latency_ms: 5 }, false],
+    [{ decision_status: 'unavailable', egress_status: 'allowed', latency_ms: null }, false],
+    [{ decision_status: 'unavailable', egress_status: 'allowed', latency_ms: 0 }, true],
+    [{ decision_status: 'succeeded', egress_status: 'allowed', latency_ms: 25 }, true],
+  ];
+  for (const [overrides, expected] of cases) {
+    assert.equal(createRoutingLogSummary(summaryAudit(overrides)).selection_llm_attempted, expected);
+  }
+});
+
+test('routing log summary distinguishes attempted selection from actual review execution', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  assert.equal(typeof createRoutingLogSummary, 'function');
+  const summary = createRoutingLogSummary(summaryAudit({
+    decision_status: 'succeeded',
+    egress_status: 'allowed',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    host_success_model: 'claude-opus-5-5-high',
+    executed_review_model: 'claude-opus-5-5-high',
+    attempted_review_models: ['gemini-3.8-flash-medium', 'claude-opus-5-5-high'],
+    latency_ms: 25,
+  }));
+  assert.equal(summary.selection_llm_attempted, true);
+  assert.equal(summary.selection_llm_succeeded, true);
+  assert.equal(summary.selected_review_model, 'gemini-3.8-flash-medium');
+  assert.equal(summary.executed_review_model, 'claude-opus-5-5-high');
+  assert.deepEqual(summary.attempted_review_models, ['gemini-3.8-flash-medium', 'claude-opus-5-5-high']);
 });
