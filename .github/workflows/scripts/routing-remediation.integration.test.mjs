@@ -496,10 +496,11 @@ test('missing sealed context is rejected by the real context reader before any d
     readDecision: async () => ({}), fetchCurrentAuthorization: async () => { log.calls.push({ kind: 'authority-read' }); return { registry: {}, operationalDossiers: {} }; },
     trustedInputs: {}, repoIdentity: { repo_id: 7, full_name: 'owner/repo' }, writeResult: async () => {},
     evaluateStartup: () => ({ authorized: true }),
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'f'.repeat(64) }),
   } });
   assert.equal(result.review.status, 'failed');
   assert.equal(result.review.message, 'ROUTING_EXECUTION_CONTEXT_INVALID');
-  assert.deepEqual(log.calls.map(call => call.kind), ['route-read', 'authority-read']);
+  assert.deepEqual(log.calls.map(call => call.kind), ['authority-read', 'route-read']);
   assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
 });
 
@@ -564,7 +565,9 @@ test('wrong run attempt and missing model certification deny before Host spawn',
   const wrongAttempt = await runRoutingReview({ env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: runTemp }, expectedBinding: wrongBinding,
     readExecutionContext: args => readRoutingExecutionContext(args), readRoute: async () => ({ reviewable_file_count: 0 }), readDecision: async () => ({}),
     fetchCurrentAuthorization: async () => ({ registry: trust.registry, operationalDossiers: trust.operationalDossiers }), trustedInputs: trust,
-    repoIdentity: { repo_id: 7, full_name: 'owner/repo' }, runHost: async () => { log.calls.push({ kind: 'host' }); return {}; } });
+    repoIdentity: { repo_id: 7, full_name: 'owner/repo' },
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'f'.repeat(64) }),
+    runHost: async () => { log.calls.push({ kind: 'host' }); return {}; } });
   assert.equal(wrongAttempt.status, 'failed');
   assert.equal(wrongAttempt.message, 'ROUTING_EXECUTION_CONTEXT_INVALID');
   assert.deepEqual(log.snapshot(), { decisionPosts: 0, hostSpawns: 0, uploads: 0, posts: 0, threads: 0 });
@@ -817,6 +820,7 @@ test('zero-review enforce is a neutral skip with no decision post, model attempt
     readRoute: async () => readSelectedReviewRoute({ runBinding, runTemp }), readDecision: async () => decisionRecord,
     fetchCurrentAuthorization: async () => ({ registry: trust.registry, operationalDossiers: trust.operationalDossiers }),
     trustedInputs: trust, repoIdentity: { repo_id: 7, full_name: 'owner/repo' }, now: () => timestamp,
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'f'.repeat(64) }),
     createRecorder: async ({ catalog }) => {
       log.calls.push({ kind: 'recorder-create' });
       let recorder;
