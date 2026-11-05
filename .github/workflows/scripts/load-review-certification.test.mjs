@@ -278,7 +278,9 @@ test('RED 3-2: rejects an inventory raw digest mismatch', () => {
     const tampered = Buffer.from(JSON.stringify({ ...f.inventory, cli_version: 'tampered' }));
     f.evidence.set('inventory.json', tampered);
     writeFileSync(join(f.root, 'inventory.json'), tampered);
-    f.index.cli_inventory.sha256 = hash(tampered);
+    f.registry.approvals.find(item => item.ref === 'OWNER-CLI').subject_sha256 = `sha256:${hash(tampered)}`;
+    f.certification.cli_evidence_sha256 = hash(tampered);
+    refreshCertification(f);
     assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
   } finally { cleanup(f); }
 });
@@ -288,6 +290,8 @@ test('RED 3-2: rejects a CLI binary digest mismatch against the installed execut
   try {
     f.inventory.cli_binary_sha256 = '0'.repeat(64);
     refreshInventory(f);
+    f.certification.cli_evidence_sha256 = hash(Buffer.from(JSON.stringify(f.inventory)));
+    refreshCertification(f);
     assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
   } finally { cleanup(f); }
 });
