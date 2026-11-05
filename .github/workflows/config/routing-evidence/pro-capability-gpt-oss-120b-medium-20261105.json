@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "subject": "review-model-capability-dossier/v1",
+  "model_id": "gpt-oss-120b-medium",
+  "capability_tier": "deep",
+  "issuing_repo": "yohi/ocr-app",
+  "quality_basis": [
+    "The model is observed on the authenticated Google AI Pro CLI inventory (inventory evidence sha256:80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d, observed_at 2026-11-05T11:03:17.989Z, cli_version 1.5.1, identity-bound to binary sha256:72738cf0445918483956a5f0da33abdfcfb21a12dd9a421fd57d063782826669).",
+    "The 120B open-weight line at medium compute level provides an architecturally independent deep-tier fallback; it is the last resort after cross-family fallbacks are exhausted.",
+    "The Human Owner reviewed the model family positioning on the Pro plan and assigned capability_tier=deep."
+  ],
+  "decision": "capability_tier=deep is assigned by Human Owner judgment recorded in approval OWNER-CAPABILITY-GPT-OSS-120B-MEDIUM-20261105.",
+  "issued_at": "2026-11-05T12:20:00.000Z",
+  "expires_at": "2026-11-12T11:03:17.989Z"
+}

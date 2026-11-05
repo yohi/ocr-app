@@ -22,6 +22,12 @@ certifiedCatalog.models = certifiedCatalog.models.map(model => ({
   certification_reference: `sha256:${'a'.repeat(64)}`,
 }));
 
+const pendingCertificationState = models => models.map(model => ({
+  ...model,
+  certification_status: 'pending',
+  certification_reference: null,
+}));
+
 test('accepts the R4 pending catalog shape and rejects unknown root/model properties', () => {
   assert.doesNotThrow(() => validateCatalogShape(catalog));
   assert.throws(() => validateCatalogShape({ ...catalog, surprise: true }));
@@ -49,7 +55,7 @@ test('rejects fallback self references', () => {
 });
 
 test('detects a cycle between same-tier models independently of tier degradation', () => {
-  const cycle = structuredClone(catalog);
+  const cycle = structuredClone({ ...catalog, models: pendingCertificationState(catalog.models) });
   const deepPreferred = {
     model_id: 'deep-test-model',
     capability_tier: 'deep',
@@ -70,7 +76,7 @@ test('detects a cycle between same-tier models independently of tier degradation
 });
 
 test('rejects a deep-to-fast fallback independently of fallback cycles', () => {
-  const degrading = structuredClone(catalog);
+  const degrading = structuredClone({ ...catalog, models: pendingCertificationState(catalog.models) });
   degrading.strategies.fast.preferred_model_id = degrading.models[1].model_id;
   degrading.strategies.deep.preferred_model_id = degrading.models[0].model_id;
   degrading.models[0].capability_tier = 'deep';
@@ -153,7 +159,7 @@ test('resolves certified primary and fallback models for fast and deep strategie
 });
 
 test('accepts the pending example catalog during semantic validation', () => {
-  assert.doesNotThrow(() => validateCatalogSemantics(catalog, evidence));
+  assert.doesNotThrow(() => validateCatalogSemantics({ ...catalog, models: pendingCertificationState(catalog.models) }, evidence));
 });
 
 test('does not resolve an unavailable deep model or return any model ID', () => {
@@ -193,7 +199,7 @@ test('accepts extra CLI inventory IDs while requiring every catalog model in the
     cliAvailableModels: [...evidence.cliAvailableModels, 'gemini-3.8-flash-legacy'],
   };
   assert.ok(catalog.models.every(model => extraInventory.cliAvailableModels.includes(model.model_id)));
-  assert.doesNotThrow(() => validateCatalogSemantics(catalog, extraInventory));
+  assert.doesNotThrow(() => validateCatalogSemantics({ ...catalog, models: pendingCertificationState(catalog.models) }, extraInventory));
 });
 
 test('RED 3-1: rejects a root/model catalog_version mismatch', () => {
