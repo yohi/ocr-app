@@ -108,7 +108,19 @@ test('shadow proposes a strategy with pending catalog but selects no Host model 
 });
 
 test('enforce returns an explicit empty fallback list when the certified primary has no fallback', () => {
-  const result = select({ decision: deepResult });
+  const noFallbackCatalog = structuredClone(certifiedCatalog);
+  const deepPrimaryId = noFallbackCatalog.strategies.deep.preferred_model_id;
+  noFallbackCatalog.models.find(model => model.model_id === deepPrimaryId).allowed_fallbacks = [];
+  const noFallbackEvidence = {
+    verifiedCertificationRefs: noFallbackCatalog.models.map(model => ({
+      certification_reference: model.certification_reference,
+      model_id: model.model_id,
+      capability_tier: model.capability_tier,
+      catalog_version: model.catalog_version,
+    })),
+    cliAvailableModels: noFallbackCatalog.models.map(model => model.model_id),
+  };
+  const result = select({ decision: deepResult, certifiedCatalog: { catalog: noFallbackCatalog, evidence: noFallbackEvidence } });
   assert.deepEqual(result.fallbackModels, []);
   assert.equal(Object.hasOwn(result, 'fallbackModels'), true);
 });

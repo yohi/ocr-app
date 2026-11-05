@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "catalog_version": "1.0.0",
+  "catalog_version": "1.0.1",
   "models": [
     {
       "model_id": "gemini-3.8-flash-medium",
@@ -8,17 +8,117 @@
       "certification_status": "pending",
       "certification_reference": null,
       "allowed_fallbacks": [
-        "claude-opus-4-6-thinking"
+        "claude-opus-5-5-high",
+        "gemini-4-argon-high",
+        "claude-sonnet-5-5-high"
       ],
-      "catalog_version": "1.0.0"
+      "catalog_version": "1.0.1"
     },
     {
-      "model_id": "claude-opus-4-6-thinking",
+      "model_id": "claude-opus-5-5-high",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [
+        "gemini-4-argon-high",
+        "claude-sonnet-5-5-high",
+        "gpt-oss-120b-medium"
+      ],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "claude-opus-5-5-medium",
       "capability_tier": "deep",
       "certification_status": "pending",
       "certification_reference": null,
       "allowed_fallbacks": [],
-      "catalog_version": "1.0.0"
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "claude-opus-5-5-low",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "claude-sonnet-5-5-high",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "claude-sonnet-5-5-medium",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "claude-sonnet-5-5-low",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-3.8-flash-high",
+      "capability_tier": "fast",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [
+        "claude-opus-5-5-high",
+        "gemini-4-argon-high"
+      ],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-3.8-flash-low",
+      "capability_tier": "fast",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [
+        "claude-opus-5-5-high",
+        "gemini-4-argon-high"
+      ],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-4-argon-high",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-4-argon-medium",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-4-argon-low",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gpt-oss-120b-medium",
+      "capability_tier": "deep",
+      "certification_status": "pending",
+      "certification_reference": null,
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
     }
   ],
   "strategies": {
@@ -26,7 +126,7 @@
       "preferred_model_id": "gemini-3.8-flash-medium"
     },
     "deep": {
-      "preferred_model_id": "claude-opus-4-6-thinking"
+      "preferred_model_id": "claude-opus-5-5-high"
     }
   },
   "unknown_risk_strategy": "deep"
