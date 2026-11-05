@@ -112,8 +112,13 @@ jobs:
 
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
+        env:
+          OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6'
+          OCR_NO_UPDATE: '1'
         run: |
-          npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@1.13.1
+          npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION
+          export PATH="$HOME/.local/bin:$PATH"
+          node self-repo/.github/workflows/scripts/compare-opencodereview-version.mjs
           curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
           bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
           rm -f /tmp/install-agy.sh
@@ -455,7 +460,12 @@ jobs:
               catalog, selectedRoute: route, certifiedBundle: revalidated.certifiedBundle, runTemp: process.env.RUNNER_TEMP,
               resultSha256: resultEvidence.resultSha256 });
             writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
-            console.log(`OCR_ROUTING_SUMMARY ${JSON.stringify(createRoutingLogSummary(record))}`);
+            console.log(`OCR_ROUTING_SUMMARY ${JSON.stringify({
+              ...createRoutingLogSummary(record),
+              opencodereview_version_expected: process.env.OPENCODEREVIEW_VERSION_EXPECTED ?? null,
+              opencodereview_version_actual: process.env.OPENCODEREVIEW_VERSION_ACTUAL ?? null,
+              opencodereview_version_matches: process.env.OPENCODEREVIEW_VERSION_MATCH === 'true',
+            })}`);
           } catch (error) {
             if (process.env.DECISION_ROUTING_MODE !== 'enforce') throw error;
             console.error('ROUTING_AUDIT_MISSING');

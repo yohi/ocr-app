@@ -168,6 +168,17 @@ test('Finalize routing audit prints the structured routing summary', () => {
   const finalizeStep = step('Finalize routing audit');
   assert.match(finalizeStep, /createRoutingLogSummary/);
   assert.match(finalizeStep, /OCR_ROUTING_SUMMARY/);
+  assert.match(finalizeStep, /opencodereview_version_expected/);
+  assert.match(finalizeStep, /opencodereview_version_actual/);
+  assert.match(finalizeStep, /opencodereview_version_matches/);
+});
+
+test('pinned OpenCodeReview CLI compares its actual version and disables self-updates', () => {
+  const installStep = step('Install pinned review tools');
+  assert.match(installStep, /OPENCODEREVIEW_EXPECTED_VERSION: '1\.13\.6'/);
+  assert.match(installStep, /@alibaba-group\/open-code-review@\$OPENCODEREVIEW_EXPECTED_VERSION/);
+  assert.match(installStep, /compare-opencodereview-version\.mjs/);
+  assert.match(installStep, /OCR_NO_UPDATE/);
 });
 
 test('production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs', async () => {
