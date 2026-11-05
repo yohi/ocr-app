@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import { validateRoutingAudit, validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
+import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const decisionRecord = {
@@ -24,6 +25,14 @@ const primaryModel = catalog.strategies.deep.preferred_model_id;
 const fastModel = catalog.models.find(model => model.capability_tier === 'fast');
 const deepFallbackModel = catalog.models.find(model => model.model_id === fastModel.allowed_fallbacks[0]);
 const fastDecisionRecord = { ...decisionRecord, risk_floor: 'fast', selected_strategy: 'fast', proposed_strategy: 'fast' };
+const deepRoute = resolveCertifiedModels(catalog, 'deep', {
+  verifiedCertificationRefs: certifiedBundle.evidence.verifiedCertificationRefs,
+  cliAvailableModels: certifiedBundle.evidence.cliAvailableModels,
+});
+const fastRoute = resolveCertifiedModels(catalog, 'fast', {
+  verifiedCertificationRefs: certifiedBundle.evidence.verifiedCertificationRefs,
+  cliAvailableModels: certifiedBundle.evidence.cliAvailableModels,
+});
 const finalAudit = {
   schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2, effective_mode: 'enforce',
   decision_status: 'unavailable', egress_status: 'denied', classification_status: 'unclassified_code', risk_floor: 'deep', selected_strategy: 'deep', proposed_strategy: 'deep',
@@ -39,7 +48,7 @@ const fastFinalAudit = {
   executed_review_model: deepFallbackModel.model_id, host_success_model: deepFallbackModel.model_id,
   attempted_review_models: [fastModel.model_id, deepFallbackModel.model_id], review_quality_measured: true,
 };
-const selectedRoute = { selected_model_id: primaryModel, fallback_models: [], selected_strategy: 'deep', proposed_strategy: 'deep' };
+const selectedRoute = { selected_model_id: deepRoute.primaryModelId, fallback_models: deepRoute.allowedFallbackModels, selected_strategy: 'deep', proposed_strategy: 'deep' };
 const startupAuthorization = { authorized: true, reason: 'ROUTING_ACTIVATION_AUTHORIZED', approvalRefs: ['OWNER-APPROVED'] };
 const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: primaryModel, result: null, timestamp: '2026-10-21T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 const attempts = [
@@ -155,7 +164,7 @@ test('route strategy below risk floor or inconsistent with the decision is denie
 test('fallback order cannot regress from fallback to primary', () => {
   const primary = fastModel.model_id;
   const fallback = deepFallbackModel.model_id;
-  const route = { ...selectedRoute, selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'fast' };
+  const route = { ...fastRoute, selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'fast' };
   const chain = [
     event({ model: fallback }), event({ event: 'attempt_completed', model: fallback, result: 'model_reported_failure', duration_ms: 5 }),
     event({ event: 'attempt_started', attempt_index: 2, model: primary }), event({ event: 'attempt_completed', attempt_index: 2, model: primary, result: 'host_validated_success', duration_ms: 5 }),

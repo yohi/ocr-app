@@ -20,20 +20,22 @@ const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: '
 
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const features = { classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 2, review_scope_gap: false, features_incomplete: false };
-const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable', proposedReviewModel: 'claude-opus-4-6-thinking', selectedReviewModel: 'claude-opus-4-6-thinking' };
-const versions = { policyVersion: '1.0.0', modelCatalogVersion: '1.0.0' };
+const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
+const deepModel = realCatalog.strategies.deep.preferred_model_id;
+const certifiedRealCatalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'a'.repeat(64)}` })) };
+const deepPublishRoute = { selected_model_id: deepModel, fallback_models: certifiedRealCatalog.models.find(model => model.model_id === deepModel).allowed_fallbacks, selected_strategy: 'deep', proposed_strategy: 'deep' };
+const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable', proposedReviewModel: deepModel, selectedReviewModel: deepModel };
+const versions = { policyVersion: '1.0.0', modelCatalogVersion: realCatalog.catalog_version };
 const decision = () => createRoutingDecisionRecord({ runBinding: binding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
 const zeroReviewDecision = runBinding => createRoutingDecisionRecord({ runBinding, features: { ...features, reviewable_file_count: 0 }, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route: { ...route, selectedStrategy: null }, policyVersions: versions });
-const catalog = { models: [{ model_id: 'claude-opus-4-6-thinking', capability_tier: 'deep', certification_status: 'certified' }] };
-const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
-const certifiedRealCatalog = { ...realCatalog, models: realCatalog.models.map(model => ({ ...model, certification_status: 'certified', certification_reference: `sha256:${'a'.repeat(64)}` })) };
+const catalog = { models: [{ model_id: deepModel, capability_tier: 'deep', certification_status: 'certified' }] };
 const realBundle = { catalog: certifiedRealCatalog, evidence: {
   certification_refs: certifiedRealCatalog.models.map(model => ({ model_id: model.model_id,
     certification_reference: model.certification_reference, capability_tier: model.capability_tier,
     catalog_version: model.catalog_version })),
   cli_available_models: certifiedRealCatalog.models.map(model => model.model_id),
 } };
-const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: 'claude-opus-4-6-thinking', result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
+const event = (fields) => ({ schema_version: '1', run_attempt_id: 'a'.repeat(32), attempt_index: 1, event: 'attempt_started', model: deepModel, result: null, timestamp: '2026-10-20T12:00:00.000Z', duration_ms: null, host_status: null, ...fields });
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 async function loadResultEvidenceVerifier() {
@@ -173,9 +175,9 @@ test('final audit only identifies a validated single host success', () => {
   recorder.onAttemptEvent(event({ event: 'host_completed', run_attempt_id: recorder.runAttemptId, attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }));
   recorder.seal();
   const attempts = readFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), 'utf8').trim().split('\n').map(JSON.parse);
-  const selectedRoute = { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep', proposed_strategy: 'deep' };
-  const certifiedBundle = { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } };
-  const finalize = options => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: null, proposedReviewModel: 'claude-opus-4-6-thinking', selectedReviewModel: 'claude-opus-4-6-thinking', review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ...options });
+  const selectedRoute = { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep', proposed_strategy: 'deep' };
+  const certifiedBundle = { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } };
+  const finalize = options => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, ownerApprovalRef: null, proposedReviewModel: deepModel, selectedReviewModel: deepModel, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ...options });
   const final = finalize({});
   const auditV3 = { ...final, schema_version: '3', result_sha256: 'a'.repeat(64) };
   assert.equal(validateRoutingAudit(auditV3), auditV3);
@@ -184,14 +186,14 @@ test('final audit only identifies a validated single host success', () => {
   assert.equal(validateRoutingAudit({ ...auditV3, result_sha256: null, review_validation_status: 'failed' }).result_sha256, null);
   assert.equal(Object.isFrozen(final), true);
   assert.equal(final.workflow_run_id, binding.workflowRunId);
-  assert.equal(final.executed_review_model, 'claude-opus-4-6-thinking');
-  assert.deepEqual(final.attempted_review_models, ['claude-opus-4-6-thinking']);
-  const publish = evaluatePublishEligibility({ mode: 'enforce', expectedBinding: binding, decisionRecord: record, finalAudit: final, delivery: { outcome: 'success', artifactId: 'artifact-1', runId: binding.workflowRunId, runAttempt: binding.runAttempt }, checkRunId: '123', startupAuthorization: { authorized: true, approvalRefs: ['OWNER-APPROVED'] }, headSha: binding.headSha, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, attempts, certifiedBundle: realBundle });
+  assert.equal(final.executed_review_model, deepModel);
+  assert.deepEqual(final.attempted_review_models, [deepModel]);
+  const publish = evaluatePublishEligibility({ mode: 'enforce', expectedBinding: binding, decisionRecord: record, finalAudit: final, delivery: { outcome: 'success', artifactId: 'artifact-1', runId: binding.workflowRunId, runAttempt: binding.runAttempt }, checkRunId: '123', startupAuthorization: { authorized: true, approvalRefs: ['OWNER-APPROVED'] }, headSha: binding.headSha, selectedRoute: deepPublishRoute, attempts, certifiedBundle: realBundle });
   assert.equal(publish.authorized, true);
   assert.equal(publish.reason, 'PUBLISH_AUTHORIZED');
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts: [], reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog }), { message: 'AUDIT_EVENT_INVALID' });
   const failedValidation = finalize({ validation: { status: 'failed' } });
-  assert.equal(failedValidation.host_success_model, 'claude-opus-4-6-thinking');
+  assert.equal(failedValidation.host_success_model, deepModel);
   assert.equal(failedValidation.executed_review_model, null);
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts: [attempts[0], attempts[2], attempts[1]], reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp }), { message: 'AUDIT_EVENT_INVALID' });
   assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
@@ -213,12 +215,12 @@ test('final audit requires a complete Host chain without pre-publication fiction
     try {
       mkdirSync(join(runTemp, 'ocr-routing'));
       writeFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), `${attempts.map(item => JSON.stringify(item)).join('\n')}\n`);
-      return finalizeRoutingAudit({ decision: decision(), attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } }, runTemp });
+      return finalizeRoutingAudit({ decision: decision(), attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } }, runTemp });
     } finally { rmSync(runTemp, { recursive: true, force: true }); }
   };
 
   const record = finalize([started, completed, hostCompleted]);
-  assert.equal(record.executed_review_model, 'claude-opus-4-6-thinking');
+  assert.equal(record.executed_review_model, deepModel);
   for (const invalid of [
     [{ ...start, binding: { ...binding, runAttempt: binding.runAttempt + 1 } }, started, completed, hostCompleted, publication],
     [started, completed],
@@ -275,10 +277,10 @@ test('route validation rejects out-of-chain models and unavailable bundle models
     event({ event: 'attempt_completed', result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
-  const bundle = { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } };
+  const bundle = { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } };
   assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'other-model', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: bundle }), { message: 'AUDIT_EVENT_INVALID' });
-  assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, evidence: { ...bundle.evidence, cli_available_models: [] } } }), { message: 'AUDIT_EVENT_INVALID' });
-  assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, catalog: { models: [{ model_id: 'claude-opus-4-6-thinking', capability_tier: 'fast' }] } } }), { message: 'AUDIT_EVENT_INVALID' });
+  assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, evidence: { ...bundle.evidence, cli_available_models: [] } } }), { message: 'AUDIT_EVENT_INVALID' });
+  assert.throws(() => validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { ...bundle, catalog: { models: [{ model_id: deepModel, capability_tier: 'fast' }] } } }), { message: 'AUDIT_EVENT_INVALID' });
 });
 
 test('route validation accepts failed Host completion without completed attempts', () => {
@@ -287,13 +289,13 @@ test('route validation accepts failed Host completion without completed attempts
 
   assert.deepEqual(validateRoutingAttempts({
     attempts: failedChain,
-    selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' },
+    selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' },
     certifiedBundle: bundle,
   }), { attemptedModels: [], successModel: null });
 });
 
 test('route validation rejects completed attempts that regress from fallback to primary', () => {
-  const primary = 'claude-opus-4-6-thinking';
+  const primary = deepModel;
   const fallback = 'claude-sonnet-4-6';
   const route = { selected_model_id: primary, fallback_models: [fallback], selected_strategy: 'deep' };
   const bundle = { catalog: { models: [...catalog.models, { model_id: fallback, capability_tier: 'deep', certification_status: 'certified' }] }, evidence: { certification_refs: [], cli_available_models: [primary, fallback] } };
@@ -313,7 +315,7 @@ test('skipped Host completion leaves the success model null', () => {
     event({ event: 'attempt_completed', result: 'host_skipped', duration_ms: 1 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 1, host_status: 'skipped' }),
   ];
-  assert.equal(validateRoutingAttempts({ attempts: skippedChain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } } }).successModel, null);
+  assert.equal(validateRoutingAttempts({ attempts: skippedChain, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } } }).successModel, null);
 });
 
 test('same-model retries remain distinct chain attempts while output model list is unique', () => {
@@ -324,15 +326,15 @@ test('same-model retries remain distinct chain attempts while output model list 
     second, event({ event: 'attempt_completed', attempt_index: 2, result: 'host_validated_success', duration_ms: 10 }),
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 20, host_status: 'success' }),
   ];
-  const validation = validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } } });
-  assert.deepEqual(validation.attemptedModels, ['claude-opus-4-6-thinking', 'claude-opus-4-6-thinking']);
+  const validation = validateRoutingAttempts({ attempts: chain, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } } });
+  assert.deepEqual(validation.attemptedModels, [deepModel, deepModel]);
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-'));
   try {
     mkdirSync(join(runTemp, 'ocr-routing'));
     writeFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), `${chain.map(item => JSON.stringify(item)).join('\n')}\n`);
-    const final = finalizeRoutingAudit({ decision: decision(), attempts: chain, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } }, runTemp });
-    assert.deepEqual(final.attempted_review_models, ['claude-opus-4-6-thinking']);
-    assert.equal(final.host_success_model, 'claude-opus-4-6-thinking');
+    const final = finalizeRoutingAudit({ decision: decision(), attempts: chain, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } }, runTemp });
+    assert.deepEqual(final.attempted_review_models, [deepModel]);
+    assert.equal(final.host_success_model, deepModel);
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
@@ -352,9 +354,9 @@ test('shadow successful review records completed, success, and executed models w
     event({ event: 'host_completed', attempt_index: null, model: null, result: null, duration_ms: 10, host_status: 'success' }),
   ];
   const audit = finalizeRoutingAudit({ decision: shadowDecision, attempts: shadowAttempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: shadowBinding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog });
-  assert.deepEqual(audit.attempted_review_models, ['claude-opus-4-6-thinking']);
-  assert.equal(audit.host_success_model, 'claude-opus-4-6-thinking');
-  assert.equal(audit.executed_review_model, 'claude-opus-4-6-thinking');
+  assert.deepEqual(audit.attempted_review_models, [deepModel]);
+  assert.equal(audit.host_success_model, deepModel);
+  assert.equal(audit.executed_review_model, deepModel);
 });
 
 test('two successful Host completion events are rejected and cannot execute a model', () => {
@@ -372,7 +374,7 @@ test('two successful Host completion events are rejected and cannot execute a mo
     writeFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), `${twoSuccesses.map(item => JSON.stringify(item)).join('\n')}\n`);
     let finalRecord = null;
     assert.throws(() => {
-  finalRecord = finalizeRoutingAudit({ decision: decision(), attempts: twoSuccesses, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: 'claude-opus-4-6-thinking', fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: ['claude-opus-4-6-thinking'] } }, runTemp });
+  finalRecord = finalizeRoutingAudit({ decision: decision(), attempts: twoSuccesses, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute: { selected_model_id: deepModel, fallback_models: [], selected_strategy: 'deep' }, certifiedBundle: { catalog, evidence: { certification_refs: [], cli_available_models: [deepModel] } }, runTemp });
     }, { message: 'AUDIT_EVENT_INVALID' });
     assert.equal(finalRecord?.executed_review_model ?? null, null);
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
