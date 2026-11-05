@@ -81,7 +81,7 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutIde
     head_sha: typeof headSha === 'string' ? headSha : '', workflow_run_id: typeof runBinding?.workflowRunId === 'string' ? runBinding.workflowRunId : '',
     run_attempt: typeof runBinding?.runAttempt === 'number' ? runBinding.runAttempt : 0, destination: DESTINATION,
     authorization_source: allowed ? (globalOptIn ? 'global_flag' : 'repository_policy') : null,
-    policy_version: typeof policy?.policy_version === 'string' ? policy.policy_version : 'invalid', approval_ref: allowed && entry ? entry.approval_ref : null,
+    policy_version: typeof policy?.policy_version === 'string' ? policy.policy_version : 'invalid', approval_ref: allowed && !globalOptIn && entry ? entry.approval_ref : null,
     checked_at: new Date().toISOString(),
   };
 }

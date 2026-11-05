@@ -12,6 +12,7 @@ const repo = { id: 42, full_name: 'owner/repo', private: false, visibility: 'pub
 test('authorizes a public repository only on exact trusted id and name match', async () => {
   const grant = await execute(repo);
   assert.deepEqual({ allowed: grant.allowed, reason: grant.reason, visibility: grant.visibility, repo_id: grant.repo_id, full_name: grant.full_name, destination: grant.destination, workflow_run_id: grant.workflow_run_id, run_attempt: grant.run_attempt }, { allowed: true, reason: 'authorized', visibility: 'public', repo_id: 42, full_name: 'owner/repo', destination: 'openrouter-decisions', workflow_run_id: binding.workflowRunId, run_attempt: 2 });
+  assert.equal(grant.approval_ref, 'OWNER-123');
 });
 
 for (const [name, body] of [['private', { ...repo, private: true, visibility: 'private' }], ['internal', { ...repo, private: true, visibility: 'internal' }]]) {
@@ -83,10 +84,10 @@ test('global decision opt-in authorizes off-mode egress without a target allowli
   const grant = await execute(repo, 200, {
     runBinding: { ...binding, mode: 'off', decisionLlmEnabled: true },
     routingMode: 'off', decisionLlmEnabled: true,
-    policy: { ...policy, allowed_repositories: [] },
   });
   assert.equal(grant.allowed, true);
   assert.equal(grant.authorization_source, 'global_flag');
+  assert.equal(grant.approval_ref, null);
   assert.equal(grant.effective_mode, 'off');
   assert.equal(grant.decision_llm_enabled, true);
 });
