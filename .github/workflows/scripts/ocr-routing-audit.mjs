@@ -86,7 +86,9 @@ export function createRoutingLogSummary(record) {
   validateRoutingAudit(record);
   return Object.freeze({
     effective_mode: record.effective_mode,
-    selection_llm_attempted: record.decision_status !== 'not_requested',
+    selection_llm_attempted: record.egress_status === 'allowed'
+      && record.decision_status !== 'not_requested'
+      && record.latency_ms !== null,
     selection_llm_succeeded: record.decision_status === 'succeeded',
     selection_llm_status: record.decision_status,
     selection_llm_egress_status: record.egress_status,

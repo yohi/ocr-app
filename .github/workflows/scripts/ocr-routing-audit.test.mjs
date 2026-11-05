@@ -523,6 +523,19 @@ test('routing log summary reports a skipped selector and the executed review mod
   });
 });
 
+test('selection LLM attempt requires allowed egress and an actual provider request', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  const cases = [
+    [{ decision_status: 'unavailable', egress_status: 'denied', latency_ms: 5 }, false],
+    [{ decision_status: 'unavailable', egress_status: 'allowed', latency_ms: null }, false],
+    [{ decision_status: 'unavailable', egress_status: 'allowed', latency_ms: 0 }, true],
+    [{ decision_status: 'succeeded', egress_status: 'allowed', latency_ms: 25 }, true],
+  ];
+  for (const [overrides, expected] of cases) {
+    assert.equal(createRoutingLogSummary(summaryAudit(overrides)).selection_llm_attempted, expected);
+  }
+});
+
 test('routing log summary distinguishes attempted selection from actual review execution', async () => {
   const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
   assert.equal(typeof createRoutingLogSummary, 'function');
@@ -533,6 +546,7 @@ test('routing log summary distinguishes attempted selection from actual review e
     host_success_model: 'claude-opus-5-5-high',
     executed_review_model: 'claude-opus-5-5-high',
     attempted_review_models: ['gemini-3.8-flash-medium', 'claude-opus-5-5-high'],
+    latency_ms: 25,
   }));
   assert.equal(summary.selection_llm_attempted, true);
   assert.equal(summary.selection_llm_succeeded, true);
