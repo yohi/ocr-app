@@ -4,7 +4,7 @@ import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, test } from 'node:test';
-import { createRoutingDecisionRecord, finalizeRoutingAudit as finalizeRoutingAuditCore, validateRoutingAudit, validateRoutingDecisionRecord, verifyValidatedResultEvidence } from './ocr-routing-audit.mjs';
+import { createRoutingDecisionRecord, createRoutingLogSummary, finalizeRoutingAudit as finalizeRoutingAuditCore, validateRoutingAudit, validateRoutingDecisionRecord, verifyValidatedResultEvidence } from './ocr-routing-audit.mjs';
 import { publishRoutingReview } from './publish-routing-review.mjs';
 import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
@@ -41,7 +41,10 @@ async function execute(name, imports, env = {}) {
     .replace(/\bimport\(/g, 'imports(');
   const process = { env, exitCode: 0, cwd: () => '.' };
   process.logs = [];
-  const console = { error: (...values) => process.logs.push(values.join(' ')) };
+  const console = {
+    error: (...values) => process.logs.push(values.join(' ')),
+    log: (...values) => process.logs.push(values.join(' ')),
+  };
   await new (Object.getPrototypeOf(async function () {}).constructor)('imports', 'process', 'console', code)(imports, process, console);
   return process;
 }
@@ -113,7 +116,7 @@ function fixture(count = 1) {
       readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
     'update-check-run.mjs': checkRun,
-    'ocr-routing-audit.mjs': { finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
+    'ocr-routing-audit.mjs': { createRoutingLogSummary, finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
       writeRoutingAudit: ({ record }) => files.set('/run/ocr-routing/final.json', JSON.stringify(record)),
       validateRoutingDecisionRecord, validateRoutingAudit },
     'publish-routing-review.mjs': { publishRoutingReview: async input => {
@@ -195,7 +198,22 @@ test('production shadow Host entrypoint reauthorizes absent routes with complete
 
 test('production finalizer supplies the certified route and run path for a nonempty review', async () => {
   const value = fixture();
-  await execute('Finalize routing audit', value.imports, value.env);
+  const env = { ...value.env, OPENCODEREVIEW_VERSION_EXPECTED: '1.13.6',
+    OPENCODEREVIEW_VERSION_ACTUAL: '1.13.6', OPENCODEREVIEW_VERSION_MATCH: 'true' };
+  const result = await execute('Finalize routing audit', value.imports, env);
+  assert.equal(result.exitCode, 0);
+  const summaryLine = result.logs.find(line => line.startsWith('OCR_ROUTING_SUMMARY '));
+  assert.ok(summaryLine, 'finalizer must emit OCR_ROUTING_SUMMARY');
+  const summary = JSON.parse(summaryLine.slice('OCR_ROUTING_SUMMARY '.length));
+  assert.equal(summary.effective_mode, 'enforce');
+  assert.equal(summary.selection_llm_status, 'not_requested');
+  assert.equal(summary.selected_review_model, 'primary');
+  assert.equal(summary.executed_review_model, 'primary');
+  assert.deepEqual(summary.attempted_review_models, ['primary']);
+  assert.equal(summary.audit_status, 'sealed');
+  assert.equal(summary.opencodereview_version_expected, '1.13.6');
+  assert.equal(summary.opencodereview_version_actual, '1.13.6');
+  assert.equal(summary.opencodereview_version_matches, true);
   const finalAudit = JSON.parse(value.files.get('/run/ocr-routing/final.json'));
   assert.equal(finalAudit.executed_review_model, 'primary');
   assert.equal(finalAudit.result_sha256, value.env.VALIDATED_RESULT_SHA256);
