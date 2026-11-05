@@ -10,15 +10,15 @@ const DECISION_STATUS = Object.freeze({
   egressDenied: 'egress_denied', notRequested: 'not_requested',
 });
 
-function assertMode(mode, runBinding) {
-  if (mode === 'off') throw new Error('routing_disabled');
-  if (mode !== 'shadow' && mode !== 'enforce') throw new Error('routing_mode_invalid');
+function assertMode(mode, runBinding, decisionLlmEnabled) {
+  if (mode === 'off' && decisionLlmEnabled !== true) throw new Error('routing_disabled');
+  if (mode !== 'off' && mode !== 'shadow' && mode !== 'enforce') throw new Error('routing_mode_invalid');
   try {
     assertRunBindingValid(runBinding);
   } catch {
     throw new Error('run_binding_invalid');
   }
-  if (runBinding.mode !== mode) throw new Error('run_binding_mismatch');
+  if (runBinding.mode !== mode || (runBinding.decisionLlmEnabled ?? false) !== decisionLlmEnabled) throw new Error('run_binding_mismatch');
 }
 
 function localFloor(features) {
@@ -100,8 +100,8 @@ function result({ mode, strategy, source, decisionStatus, certifiedCatalog }) {
   return boundedRoute(route);
 }
 
-export function selectReviewRoute({ mode, features, decision, certifiedCatalog, runBinding }) {
-  assertMode(mode, runBinding);
+export function selectReviewRoute({ mode, decisionLlmEnabled = false, features, decision, certifiedCatalog, runBinding }) {
+  assertMode(mode, runBinding, decisionLlmEnabled);
   if (features?.reviewable_file_count === 0) {
     return {
       selectedStrategy: null,

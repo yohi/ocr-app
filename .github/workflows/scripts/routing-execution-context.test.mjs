@@ -56,6 +56,34 @@ test('writes private context atomically without overwrite and reads exact run bi
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('round-trips the decision LLM opt-in flag in the sealed run binding', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'routing-context-opt-in-'));
+  const optedInBinding = { ...binding, mode: 'off', decisionLlmEnabled: true };
+  const optedInContext = { ...context, binding: optedInBinding };
+  try {
+    writeRoutingExecutionContext({ runTemp: dir, context: optedInContext });
+    const read = readRoutingExecutionContext({ runTemp: dir, expectedBinding: optedInBinding });
+    assert.equal(read.binding.decisionLlmEnabled, true);
+    assert.throws(() => readRoutingExecutionContext({ runTemp: dir,
+      expectedBinding: { ...optedInBinding, decisionLlmEnabled: false } }), { code: 'ROUTING_EXECUTION_CONTEXT_INVALID' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('off-mode opt-in context revalidates without a target activation', () => {
+  const optedInBinding = { ...binding, mode: 'off', decisionLlmEnabled: true };
+  const optedInContext = { ...context, binding: optedInBinding, authorization: { ...context.authorization, approval_refs: [] },
+    cli_inventory_sha256: null, cli_binary_sha256: null };
+  const trustedInputs = { needsModel: false, policySha256: `sha256:${hash}`, catalogSha256: `sha256:${hash}`,
+    sourceManifestSha256: `sha256:${hash}`, registry: { schema_version: '1', approvals: [], activations: [], revoked_refs: [] },
+    operationalDossiers: {} };
+
+  const result = revalidateRoutingExecutionContext({ context: optedInContext, expectedBinding: optedInBinding, trustedInputs,
+    repoIdentity: { repo_id: 10, full_name: 'org/repo' }, now, cliBinarySha256: null });
+
+  assert.equal(result.startupAuthorization.reason, 'GLOBAL_FLAG');
+  assert.equal(result.certifiedBundle, null);
+});
+
 test('rejects malformed, linked, oversized and run-mismatched context before consumer activity', () => {
   const dir = mkdtempSync(join(tmpdir(), 'routing-context-'));
   const path = join(dir, 'ocr-routing-execution-context.json');

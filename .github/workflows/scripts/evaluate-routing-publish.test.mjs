@@ -7,7 +7,7 @@ import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 
 const binding = { workflowRunId: '9007199254740993', runAttempt: 2, headSha: 'a'.repeat(40), mode: 'enforce' };
 const decisionRecord = {
-  schema_version: '1', effective_mode: 'enforce', head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2,
+  schema_version: '1', effective_mode: 'enforce', decision_llm_enabled: false, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2,
   classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 1, proposed_strategy: 'deep', selected_strategy: 'deep',
   route_source: 'deterministic_fallback', decision_status: 'unavailable', egress_status: 'denied', observer_status: 'not_started',
   decision_latency_ms: null, decision_api_cost: null, policy_version: '1.0.0', feature_schema_version: '3', decision_state_version: '1', model_catalog_version: '1.0.0',
@@ -34,7 +34,7 @@ const fastRoute = resolveCertifiedModels(catalog, 'fast', {
   cliAvailableModels: certifiedBundle.evidence.cliAvailableModels,
 });
 const finalAudit = {
-  schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2, effective_mode: 'enforce',
+  schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: 2, effective_mode: 'enforce', decision_llm_enabled: false,
   decision_status: 'unavailable', egress_status: 'denied', classification_status: 'unclassified_code', risk_floor: 'deep', selected_strategy: 'deep', proposed_strategy: 'deep',
   policy_version: '1.0.0', feature_schema_version: '3', decision_state_version: '1', model_catalog_version: '1.0.0', owner_approval_ref: null,
   proposed_review_model: primaryModel, selected_review_model: primaryModel, host_success_model: primaryModel, executed_review_model: primaryModel,

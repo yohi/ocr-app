@@ -59,9 +59,12 @@ function classifyVisibility(body, apiValid) {
   return visibility;
 }
 
-export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutIdentity, runBinding, installationToken, policy, fetchImpl }) {
+export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutIdentity, runBinding, installationToken, policy, fetchImpl,
+  decisionLlmEnabled = false, routingMode = runBinding?.mode }) {
   let validBinding = true;
   try { assertRunBindingValid(runBinding); } catch { validBinding = false; }
+  const modeMatchesBinding = routingMode === runBinding?.mode;
+  const globalOptIn = routingMode === 'off' && decisionLlmEnabled === true && runBinding?.decisionLlmEnabled === true;
   const target = parseTarget(targetRepo);
   const [owner, repoName, ...extra] = target.split('/');
   const { body, apiValid } = extra.length
@@ -69,13 +72,16 @@ export async function authorizeDecisionEgress({ targetRepo, headSha, checkoutIde
     : await fetchRepository({ owner, repoName, installationToken, fetchImpl });
   const visibility = classifyVisibility(body, apiValid);
   const entry = policyEntries(policy).find(item => item && typeof item === 'object' && item.id === body?.id && item.full_name === body?.full_name && approvalValid(item.approval_ref, policy?.approval_reference_format));
-  const allowed = Boolean(validBinding && apiValid && visibility !== VISIBILITY.unknown && entry && body.full_name.toLowerCase() === target.toLowerCase() && typeof checkoutIdentity?.fullName === 'string' && checkoutIdentity.fullName.toLowerCase() === target.toLowerCase() && checkoutIdentity.headSha === headSha && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
+  const authorizationAllowed = routingMode === 'off' ? globalOptIn : Boolean(entry);
+  const allowed = Boolean(validBinding && modeMatchesBinding && apiValid && visibility !== VISIBILITY.unknown && authorizationAllowed && body.full_name.toLowerCase() === target.toLowerCase() && typeof checkoutIdentity?.fullName === 'string' && checkoutIdentity.fullName.toLowerCase() === target.toLowerCase() && checkoutIdentity.headSha === headSha && headSha === runBinding.headSha && /^[0-9a-f]{40}$/.test(headSha ?? '') && policy?.destination === DESTINATION && typeof policy?.policy_version === 'string' && policy.policy_version.length > 0);
   return {
     schema_version: '1', allowed, reason: allowed ? REASONS.authorized : REASONS.denied, visibility,
+    effective_mode: routingMode, decision_llm_enabled: runBinding?.decisionLlmEnabled ?? false,
     repo_id: apiValid ? body.id : 0, full_name: apiValid ? body.full_name : target,
     head_sha: typeof headSha === 'string' ? headSha : '', workflow_run_id: typeof runBinding?.workflowRunId === 'string' ? runBinding.workflowRunId : '',
     run_attempt: typeof runBinding?.runAttempt === 'number' ? runBinding.runAttempt : 0, destination: DESTINATION,
-    policy_version: typeof policy?.policy_version === 'string' ? policy.policy_version : 'invalid', approval_ref: allowed ? entry.approval_ref : null,
+    authorization_source: allowed ? (globalOptIn ? 'global_flag' : 'repository_policy') : null,
+    policy_version: typeof policy?.policy_version === 'string' ? policy.policy_version : 'invalid', approval_ref: allowed && entry ? entry.approval_ref : null,
     checked_at: new Date().toISOString(),
   };
 }

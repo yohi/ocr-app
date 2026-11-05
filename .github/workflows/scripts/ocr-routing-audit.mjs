@@ -11,8 +11,8 @@ const STRATEGIES = ['fast', 'deep'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
 const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid_response'];
 const EGRESS_STATUSES = ['allowed', 'denied', 'not_checked'];
-const DECISION_KEYS = ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
-const AUDIT_KEYS = ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms'];
+const DECISION_KEYS = ['schema_version','effective_mode','decision_llm_enabled','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version'];
+const AUDIT_KEYS = ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_llm_enabled','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms'];
 const APPROVAL_REF = /^[A-Za-z0-9_.:/-]+$/;
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -47,11 +47,13 @@ function catalogModel(catalog, model, enforce) {
 export function validateRoutingDecisionRecord(record) {
   exactKeys(record, DECISION_KEYS);
   if (record.schema_version !== '1' || !/^[0-9a-f]{40}$/.test(record.head_sha) || !/^[1-9][0-9]{0,31}$/.test(record.workflow_run_id) || !Number.isSafeInteger(record.run_attempt) || record.run_attempt < 1) throw new Error('AUDIT_SCHEMA_INVALID');
-  enumValue(record.effective_mode, ['shadow','enforce']); enumValue(record.classification_status, CLASSIFICATIONS); enumValue(record.risk_floor, STRATEGIES);
+  enumValue(record.effective_mode, ['off','shadow','enforce']); enumValue(record.classification_status, CLASSIFICATIONS); enumValue(record.risk_floor, STRATEGIES);
+  if (typeof record.decision_llm_enabled !== 'boolean' || (record.effective_mode === 'off' && !record.decision_llm_enabled)) throw new Error('AUDIT_SCHEMA_INVALID');
   enumValue(record.route_source, ROUTE_SOURCES); enumValue(record.decision_status, DECISION_STATUSES); enumValue(record.egress_status, EGRESS_STATUSES); enumValue(record.observer_status, ['available','unavailable','not_started']);
   if (record.proposed_strategy !== null) enumValue(record.proposed_strategy, STRATEGIES);
   if (record.selected_strategy !== null) enumValue(record.selected_strategy, STRATEGIES);
-  if ((record.effective_mode === 'shadow' && record.selected_strategy !== null) || (record.effective_mode === 'enforce' && record.reviewable_file_count > 0 && record.selected_strategy === null)) throw new Error('AUDIT_SCHEMA_INVALID');
+  if ((record.effective_mode === 'shadow' && record.selected_strategy !== null)
+    || ((record.effective_mode === 'enforce' || record.effective_mode === 'off') && record.reviewable_file_count > 0 && record.selected_strategy === null)) throw new Error('AUDIT_SCHEMA_INVALID');
   count(record.reviewable_file_count); nullableNumber(record.decision_latency_ms); nullableNumber(record.decision_api_cost);
   if (record.route_source === 'not_requested' && record.reviewable_file_count !== 0) throw new Error('AUDIT_SCHEMA_INVALID');
   validVersion(record.policy_version); validVersion(record.model_catalog_version);
@@ -62,7 +64,8 @@ export function validateRoutingDecisionRecord(record) {
 export function validateRoutingAudit(record) {
   exactKeys(record, AUDIT_KEYS);
   if (record.schema_version !== '3' || !Number.isSafeInteger(record.repo_id) || record.repo_id < 1 || !validRepo(record.repo) || !Number.isSafeInteger(record.pr_number) || record.pr_number < 1 || !/^[0-9a-f]{40}$/.test(record.head_sha) || !/^[1-9][0-9]{0,31}$/.test(record.workflow_run_id) || !Number.isSafeInteger(record.run_attempt) || record.run_attempt < 1) throw new Error('AUDIT_SCHEMA_INVALID');
-  enumValue(record.effective_mode, ['shadow','enforce']); enumValue(record.decision_status, DECISION_STATUSES); enumValue(record.egress_status, EGRESS_STATUSES);
+  enumValue(record.effective_mode, ['off','shadow','enforce']); enumValue(record.decision_status, DECISION_STATUSES); enumValue(record.egress_status, EGRESS_STATUSES);
+  if (typeof record.decision_llm_enabled !== 'boolean' || (record.effective_mode === 'off' && !record.decision_llm_enabled)) throw new Error('AUDIT_SCHEMA_INVALID');
   enumValue(record.classification_status, CLASSIFICATIONS); enumValue(record.risk_floor, STRATEGIES);
   if (record.selected_strategy !== null) enumValue(record.selected_strategy, STRATEGIES);
   if (record.proposed_strategy !== null) enumValue(record.proposed_strategy, STRATEGIES);
@@ -117,7 +120,8 @@ export function createRoutingDecisionRecord({ runBinding, features, decision, eg
   assertRunBindingValid(runBinding);
   if (!ownRecord(features) || !ownRecord(decision) || !ownRecord(route) || !ownRecord(policyVersions)) throw new Error('AUDIT_SCHEMA_INVALID');
   const record = {
-    schema_version: '1', effective_mode: runBinding.mode, head_sha: runBinding.headSha, workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt,
+    schema_version: '1', effective_mode: runBinding.mode, decision_llm_enabled: runBinding.decisionLlmEnabled ?? false,
+    head_sha: runBinding.headSha, workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt,
     classification_status: features.classification_status, risk_floor: features.risk_floor, reviewable_file_count: features.reviewable_file_count,
     proposed_strategy: route.proposedStrategy ?? null, selected_strategy: route.selectedStrategy ?? null, route_source: route.routeSource, decision_status: route.decisionStatus,
     egress_status: egressStatus, observer_status: 'not_started', decision_latency_ms: decision.latencyMs ?? null, decision_api_cost: decision.cost ?? null,
@@ -136,8 +140,9 @@ export function writeRoutingDecision({ runTemp, record, mkdirSync = fs.mkdirSync
   writtenDecisionPaths.add(path);
 }
 
-export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, runAttempt, appendFileSync = fs.appendFileSync, mkdirSync = fs.mkdirSync, chmodSync = fs.chmodSync }) {
-  if (!['shadow','enforce'].includes(mode)) throw new Error('AUDIT_MODE_INVALID');
+export function createAttemptRecorder({ runTemp, mode, decisionLlmEnabled = false, catalog, runAttemptId, runAttempt, appendFileSync = fs.appendFileSync, mkdirSync = fs.mkdirSync, chmodSync = fs.chmodSync }) {
+  const appliedRoute = mode === 'enforce' || (mode === 'off' && decisionLlmEnabled === true);
+  if (!['shadow','enforce'].includes(mode) && !appliedRoute) throw new Error('AUDIT_MODE_INVALID');
   if (!Number.isSafeInteger(runAttempt) || runAttempt < 1) throw new Error('AUDIT_EVENT_INVALID: runAttempt must be a positive safe integer');
   const boundRunAttemptId = runAttemptId ?? randomBytes(16).toString('hex');
   if (typeof boundRunAttemptId !== 'string' || !/^[a-f0-9]{32}$/.test(boundRunAttemptId)) throw new Error('AUDIT_EVENT_INVALID');
@@ -146,12 +151,12 @@ export function createAttemptRecorder({ runTemp, mode, catalog, runAttemptId, ru
   mkdirSync(directory, { recursive: true, mode: 0o700 }); chmodSync(directory, 0o700);
   function markUnavailable(error) {
     state = 'unavailable';
-    if (mode === 'enforce') throw new Error(error === 'AUDIT_MODEL_NOT_CERTIFIED' ? error : 'AUDIT_EVENT_INVALID');
+    if (appliedRoute) throw new Error(error === 'AUDIT_MODEL_NOT_CERTIFIED' ? error : 'AUDIT_EVENT_INVALID');
   }
   function onAttemptEvent(event) {
     if (sealed) { markUnavailable('AUDIT_EVENT_INVALID'); return; }
     try {
-      validateAttemptEvent(event, boundRunAttemptId, catalog, mode === 'enforce');
+      validateAttemptEvent(event, boundRunAttemptId, catalog, appliedRoute);
       appendFileSync(path, `${JSON.stringify(event)}\n`, { mode: 0o600, flag: 'a' });
       chmodSync(path, 0o600);
     } catch (error) {
@@ -173,12 +178,13 @@ export function finalizeRoutingAudit(input) {
   if (!ownRecord(input) || Reflect.ownKeys(input).some(key => typeof key !== 'string' || !allowedKeys.includes(key))) throw new Error('AUDIT_EVENT_INVALID');
   const { decision, attempts, reviewResult, validation, headCheck, runBinding, policy, catalog = policy?.catalog, selectedRoute, certifiedBundle, runTemp, resultSha256, fs: fileSystem = fs } = input;
   validateRoutingDecisionRecord(decision); assertRunBindingValid(runBinding); assertSerializedRunBindingMatches(runBinding, decision);
-  assertRunBindingEquals(runBinding, { workflowRunId: decision.workflow_run_id, runAttempt: decision.run_attempt, headSha: decision.head_sha, mode: decision.effective_mode });
-  const enforced = decision.effective_mode === 'enforce';
-  if (enforced && Array.isArray(attempts) && attempts.length === 0 && (decision.reviewable_file_count !== 0 || reviewResult?.status !== 'skipped')) throw new Error('AUDIT_EVENT_INVALID');
+  assertRunBindingEquals(runBinding, { workflowRunId: decision.workflow_run_id, runAttempt: decision.run_attempt,
+    headSha: decision.head_sha, mode: decision.effective_mode, decisionLlmEnabled: decision.decision_llm_enabled });
+  const appliedRoute = decision.effective_mode === 'enforce' || (decision.effective_mode === 'off' && decision.decision_llm_enabled);
+  if (appliedRoute && Array.isArray(attempts) && attempts.length === 0 && (decision.reviewable_file_count !== 0 || reviewResult?.status !== 'skipped')) throw new Error('AUDIT_EVENT_INVALID');
   let chain = attempts;
   let validatedAttempts = { attemptedModels: [], successModel: null };
-  if (enforced && decision.reviewable_file_count > 0) {
+  if (appliedRoute && decision.reviewable_file_count > 0) {
     if (typeof runTemp !== 'string' || !selectedRoute || !certifiedBundle) throw new Error('AUDIT_EVENT_INVALID');
     try {
       const path = join(runTemp, 'ocr-routing', 'attempts.ndjson');
@@ -191,21 +197,21 @@ export function finalizeRoutingAudit(input) {
     validatedAttempts = validateRoutingAttempts({ attempts: chain, selectedRoute, certifiedBundle });
   }
   let order = { valid: false, completed: [], success: null };
-  if (enforced && decision.reviewable_file_count > 0) {
+  if (appliedRoute && decision.reviewable_file_count > 0) {
     order = validateAttemptOrder(chain, runBinding, false);
-  } else if (!enforced && Array.isArray(attempts) && attempts.length > 0) {
+  } else if (!appliedRoute && Array.isArray(attempts) && attempts.length > 0) {
     order = validateAttemptOrder(attempts, runBinding, false);
     validatedAttempts = { attemptedModels: order.completed.map(item => item.model), successModel: order.success?.model ?? null };
-  } else if (enforced && reviewResult?.status === 'skipped' && decision.reviewable_file_count === 0) {
+  } else if (appliedRoute && reviewResult?.status === 'skipped' && decision.reviewable_file_count === 0) {
     order = validateAttemptOrder(chain, runBinding, true);
   }
   const status = value => ['passed','failed','not_run'].includes(value) ? value : 'not_run';
   const reviewStatus = status(validation?.status); const headStatus = status(headCheck?.status);
-  const completedModels = order.valid ? validatedAttempts.attemptedModels.map(item => enforced ? catalogModel(catalog, item, true) : item).filter(Boolean) : [];
+  const completedModels = order.valid ? validatedAttempts.attemptedModels.map(item => appliedRoute ? catalogModel(catalog, item, true) : item).filter(Boolean) : [];
   const attempted = [...new Set(completedModels)];
-  const successfulModel = order.valid && validatedAttempts.successModel ? catalogModel(catalog, validatedAttempts.successModel, enforced) : null;
+  const successfulModel = order.valid && validatedAttempts.successModel ? catalogModel(catalog, validatedAttempts.successModel, appliedRoute) : null;
   const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' && headStatus === 'passed' && successfulModel !== null;
-  const model = value => catalogModel(catalog, value ?? null, enforced);
+  const model = value => catalogModel(catalog, value ?? null, appliedRoute);
   const repoId = policy?.repoId ?? policy?.repo_id; const repo = policy?.repo ?? policy?.repoName; const pr = policy?.prNumber ?? policy?.pr_number;
   if (!Number.isSafeInteger(repoId) || repoId < 1 || !validRepo(repo) || !Number.isSafeInteger(pr) || pr < 1) throw new Error('AUDIT_SCHEMA_INVALID');
   const reviewScopeGap = policy?.review_scope_gap ?? policy?.features?.review_scope_gap ?? policy?.reviewScopeGap ?? policy?.features?.reviewScopeGap;
@@ -215,13 +221,14 @@ export function finalizeRoutingAudit(input) {
   nullableApprovalRef(ownerApprovalRef);
   const audit = {
     schema_version: '3', repo_id: repoId, repo, pr_number: pr, head_sha: decision.head_sha, workflow_run_id: decision.workflow_run_id, run_attempt: decision.run_attempt, effective_mode: decision.effective_mode,
+    decision_llm_enabled: decision.decision_llm_enabled,
     decision_status: decision.decision_status, egress_status: decision.egress_status, classification_status: decision.classification_status, risk_floor: decision.risk_floor,
     selected_strategy: decision.selected_strategy, proposed_strategy: decision.proposed_strategy, policy_version: decision.policy_version, feature_schema_version: decision.feature_schema_version, decision_state_version: decision.decision_state_version, model_catalog_version: decision.model_catalog_version,
     owner_approval_ref: ownerApprovalRef,
     proposed_review_model: model(policy?.proposedReviewModel ?? policy?.proposed_review_model ?? decision.proposed_review_model), selected_review_model: model(policy?.selectedReviewModel ?? policy?.selected_review_model ?? decision.selected_review_model), host_success_model: successfulModel,
     executed_review_model: qualifies ? successfulModel : null, attempted_review_models: attempted,
     result_sha256: resultSha256, review_validation_status: reviewStatus, head_validation_status: headStatus, audit_status: 'sealed', review_scope_gap: reviewScopeGap,
-    features_incomplete: featuresIncomplete, review_quality_measured: enforced && Boolean(qualifies),
+    features_incomplete: featuresIncomplete, review_quality_measured: appliedRoute && Boolean(qualifies),
     decision_api_cost: decision.decision_api_cost, latency_ms: decision.decision_latency_ms,
   };
   validateRoutingAudit(audit);

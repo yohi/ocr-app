@@ -48,12 +48,16 @@ export async function runRoutingReview({
   ...hostOptions
 }) {
   const mode = env?.DECISION_ROUTING_MODE ?? 'off';
+  const decisionLlmEnabled = env?.DECISION_LLM_ENABLED === 'true';
+  const globalOptIn = mode === 'off' && decisionLlmEnabled && hostOptions.mode !== 'thread';
+  const appliedRoute = mode === 'enforce' || globalOptIn;
   const host = hostOptions.mode === 'thread' ? runThreadHost : runHost;
   const legacy = { ...hostOptions, env, prompt, onProgress };
-  if (mode === 'off') return host(legacy);
+  if (mode === 'off' && !globalOptIn) return host(legacy);
 
   try {
-    if (!['shadow', 'enforce'].includes(mode)) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
+    if (globalOptIn && (expectedBinding?.mode !== 'off' || expectedBinding.decisionLlmEnabled !== true)) denied('RUN_BINDING_MISMATCH');
+    if (!globalOptIn && !['shadow', 'enforce'].includes(mode)) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     const authorization = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
     if (!authorization?.registry) denied('ROUTING_ACTIVATION_DENIED');
     const freshInputs = {
@@ -67,22 +71,50 @@ export async function runRoutingReview({
       cliBinarySha256: trustedInputs?.cliBinarySha256,
       registry: authorization.registry,
       operationalDossiers: authorization.operationalDossiers,
+      certificationRepoIdentity: trustedInputs?.certificationRepoIdentity,
     };
-    const startupAuthorization = evaluateStartup({
-      mode,
-      repoIdentity,
-      registry: freshInputs.registry,
-      operationalDossiers: freshInputs.operationalDossiers,
-      policySha256: freshInputs.policySha256,
-      catalogSha256: freshInputs.catalogSha256,
-      sourceManifestSha256: freshInputs.sourceManifestSha256,
-      now: now(),
-    });
+    const startupAuthorization = globalOptIn ? { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] }
+      : evaluateStartup({
+        mode,
+        repoIdentity,
+        registry: freshInputs.registry,
+        operationalDossiers: freshInputs.operationalDossiers,
+        policySha256: freshInputs.policySha256,
+        catalogSha256: freshInputs.catalogSha256,
+        sourceManifestSha256: freshInputs.sourceManifestSha256,
+        now: now(),
+      });
     if (!startupAuthorization.authorized) denied('ROUTING_ACTIVATION_DENIED');
+    let route;
+    let sealed;
+    let cliIdentity = null;
+    let certification = null;
+    const verifyCertifiedRoute = async checked => {
+      const evidence = checked.certifiedBundle?.evidence;
+      const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
+      const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
+      const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs ?? evidence?.verifiedCertificationRefs,
+        cliAvailableModels: [...available] };
+      const resolver = resolveModels ?? (await import('./validate-review-model-catalog.mjs')).resolveCertifiedModels;
+      const resolved = resolver({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
+      if (resolved.primaryModelId !== route.selected_model_id
+        || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
+      return { ...freshInputs.catalog, models };
+    };
     const authorizeBeforeSpawn = async () => {
       try {
         const current = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
         if (!current?.registry) return false;
+        if (globalOptIn) {
+          const currentCli = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
+          if (!currentCli || typeof currentCli.binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(currentCli.binarySha256)
+            || currentCli.resolvedPath !== cliIdentity?.resolvedPath || currentCli.binarySha256 !== cliIdentity?.binarySha256) return false;
+          const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
+            trustedInputs: { ...freshInputs, registry: current.registry, operationalDossiers: current.operationalDossiers,
+              needsModel: route.reviewable_file_count > 0 }, repoIdentity, now: now(), cliBinarySha256: currentCli.binarySha256 });
+          if (route.reviewable_file_count > 0) await verifyCertifiedRoute(checked);
+          return true;
+        }
         return evaluateStartup({
           mode,
           repoIdentity,
@@ -104,20 +136,19 @@ export async function runRoutingReview({
       }
       return result;
     };
-    let cliIdentity = null;
-    if (mode === 'enforce') {
+    if (appliedRoute) {
       cliIdentity = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
       if (!cliIdentity || typeof cliIdentity.binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(cliIdentity.binarySha256)
         || typeof cliIdentity.resolvedPath !== 'string' || !cliIdentity.resolvedPath) {
         denied('ROUTING_ACTIVATION_DENIED');
       }
     }
-    const route = await readRoute();
+    route = await readRoute();
     if (!route) {
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
       return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
     }
-    const sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
+    sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     let decision;
     try {
@@ -128,21 +159,11 @@ export async function runRoutingReview({
       if (error?.code === 'RUN_BINDING_INVALID' || error?.code === 'RUN_BINDING_MISMATCH') throw error;
       denied('RUN_BINDING_INVALID');
     }
-    let certification = null;
-    if (mode === 'enforce' && route.reviewable_file_count > 0) {
+    if (appliedRoute && route.reviewable_file_count > 0) {
       const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
         trustedInputs: { ...freshInputs, needsModel: true }, repoIdentity, now: now(),
         cliBinarySha256: cliIdentity.binarySha256 });
-      const evidence = checked.certifiedBundle?.evidence;
-      const available = new Set(evidence?.cli_available_models ?? []);
-      const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
-      const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs,
-        cliAvailableModels: [...available] };
-      const resolver = resolveModels ?? (await import('./validate-review-model-catalog.mjs')).resolveCertifiedModels;
-      const resolved = resolver({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
-      if (resolved.primaryModelId !== route.selected_model_id
-        || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
-      certification = { ...freshInputs.catalog, models };
+      certification = await verifyCertifiedRoute(checked);
     } else {
       await revalidateExecutionContext({ context: sealed, expectedBinding,
         trustedInputs: { ...freshInputs, needsModel: false }, repoIdentity, now: now(), cliBinarySha256: null });
@@ -151,12 +172,12 @@ export async function runRoutingReview({
     if (createRecorder) {
       try {
         recorder = await createRecorder({ context: sealed, writeResult, writeOutput,
-          catalog: certification ?? trustedInputs?.catalog, mode });
+          catalog: certification ?? trustedInputs?.catalog, mode, decisionLlmEnabled });
       } catch (error) {
-        if (mode === 'enforce') throw error;
+        if (appliedRoute) throw error;
       }
     }
-    if (mode === 'enforce' && route.reviewable_file_count === 0) {
+    if (appliedRoute && route.reviewable_file_count === 0) {
       if (recorder) recorder.seal();
       const result = skippedResult(hostOptions.mode);
       if (writeResult) await writeResult(result);
@@ -165,7 +186,8 @@ export async function runRoutingReview({
     const isThread = hostOptions.mode === 'thread';
     return runAuthorizedHost({ ...legacy,
       routingMode: mode,
-      ...(mode === 'enforce' && route.reviewable_file_count > 0 ? {
+      decisionLlmEnabled,
+      ...(appliedRoute && route.reviewable_file_count > 0 ? {
         model: route.selected_model_id,
         fallbackModels: [...route.fallback_models],
         modelCatalog: certification,
@@ -174,9 +196,9 @@ export async function runRoutingReview({
         targetRoot: env.TARGET_REPO_PATH,
         readCliIdentity: readInstalledCliIdentity,
       } : {}),
-      ...(mode === 'enforce' ? { onProgress: undefined } : { onProgress }),
+      ...(appliedRoute ? { onProgress: undefined } : { onProgress }),
       ...(recorder ? { onAttemptEvent: recorder.onAttemptEvent, runAttemptId: recorder.runAttemptId } : {}),
-      ...(isThread ? { onProgress: mode === 'enforce' ? undefined : onProgress } : {}),
+      ...(isThread ? { onProgress: appliedRoute ? undefined : onProgress } : {}),
     });
   } catch (error) {
     const code = ['ROUTING_ACTIVATION_DENIED', 'ROUTING_EXECUTION_CONTEXT_INVALID', 'NO_SELECTED_REVIEW_ROUTE', 'RUN_BINDING_INVALID', 'RUN_BINDING_MISMATCH'].includes(error?.code)

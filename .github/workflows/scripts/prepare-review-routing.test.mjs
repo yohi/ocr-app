@@ -21,8 +21,8 @@ const preparation = () => ({
 });
 const route = () => serializeSelectedReviewRoute(preparation());
 const hash = value => createHash('sha256').update(value).digest('hex');
-const runGitFixture = (sha, oldSha) => async (_command, args) => {
-  if (args[0] === 'config') return Buffer.from('https://github.com/owner/repo.git\n');
+const runGitFixture = (sha, oldSha, repo = 'owner/repo') => async (_command, args) => {
+  if (args[0] === 'config') return Buffer.from(`https://github.com/${repo}.git\n`);
   if (args[0] === 'rev-parse') return Buffer.from(`${sha}\n`);
   if (args[0] === 'merge-base') return Buffer.from(`${oldSha}\n`);
   if (args.includes('--name-status')) return Buffer.from('M\0src/example.js\0');
@@ -151,11 +151,11 @@ test('run binding keeps canonical run ID and freezes runner identity', () => {
   assert.equal(Object.isFrozen(binding), true);
 });
 
-test('route serializer emits the exact 15-key contract and writer seals the standalone route privately', () => {
+test('route serializer emits the exact 16-key contract and writer seals the standalone route privately', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-'));
   try {
     const serialized = route();
-    assert.deepEqual(Object.keys(serialized), ['schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status', 'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id', 'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version']);
+    assert.deepEqual(Object.keys(serialized), ['schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status', 'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id', 'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version']);
     const path = join(runTemp, 'ocr-selected-route.json');
     writeSelectedReviewRoute({ runTemp, result: preparation() });
     assert.equal(statSync(path).mode & 0o777, 0o600);
@@ -207,6 +207,43 @@ test('off mode performs no routing I/O or network request', async () => {
   const result = await prepareRoutingStep({ runBinding: null, env: env('off'), fetchImpl: async () => { networkCalls++; } });
   assert.deepEqual(result, { route: null, decisionRecord: null, egressStatus: 'not_checked' });
   assert.equal(networkCalls, 0);
+});
+
+test('off mode with the global flag selects a centrally certified model without target activation', async () => {
+  const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-global-opt-in-'));
+  const fixture = certificationFixture();
+  const targetRepo = 'justice/repo';
+  const targetId = 2;
+  const environment = { ...env('off'), DECISION_LLM_ENABLED: 'true', GITHUB_REPOSITORY: 'owner/repo',
+    RUNNER_TEMP: runTemp, OCR_PREVIEW_PATH: join(runTemp, 'preview.json'), BASE_REF: 'main', TARGET_REPO: targetRepo,
+    GITHUB_TOKEN: 'target-app-token', CENTRAL_GITHUB_TOKEN: 'central-token', OPENROUTER_API_KEY: 'test-key' };
+  writeFileSync(environment.OCR_PREVIEW_PATH, JSON.stringify({ reviewable_files: [{ path: 'src/example.js' }] }));
+  const sha = 'a'.repeat(40);
+  const oldSha = 'b'.repeat(40);
+  let decisionPosts = 0;
+  try {
+    const result = await prepareRoutingStep({ env: environment, trustedInputs: fixture.trust, now: () => fixture.now,
+      fetchRepoIdentity: async ({ fullName }) => fullName === targetRepo
+        ? { id: targetId, full_name: targetRepo } : { id: 1, full_name: 'owner/repo' },
+      readCliIdentity: async () => ({ binarySha256: hash(fixture.binary) }),
+      fetchImpl: async (url, options) => {
+        if (options.method === 'POST') {
+          decisionPosts++;
+          return { ok: true, json: async () => ({ answers: { review_strategy: {
+            type: 'choice', choice: 'deep', probabilities: { fast: 0.05, deep: 0.95 }, confidence: 0.95,
+          } } }) };
+        }
+        return { ok: true, json: async () => ({ id: targetId, full_name: targetRepo, private: true, visibility: 'private' }) };
+      },
+      runGit: runGitFixture(sha, oldSha, targetRepo),
+    });
+
+    assert.equal(decisionPosts, 1);
+    assert.equal(result.route.effective_mode, 'off');
+    assert.equal(result.route.selected_model_id, 'certified-primary');
+    assert.equal(result.decisionRecord.decision_llm_enabled, true);
+    assert.equal(result.egressStatus, 'allowed');
+  } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
 for (const mode of ['shadow', 'enforce']) {

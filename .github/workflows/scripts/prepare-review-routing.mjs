@@ -17,7 +17,7 @@ import { loadVerifiedCertification, readInstalledCliIdentity } from './load-revi
 import { readRoutingExecutionContext, writeRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 
 const ROUTE_KEYS = Object.freeze([
-  'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'status',
+  'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status',
   'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id',
   'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
 ]);
@@ -43,7 +43,8 @@ function validateRoute(value) {
   if (!plainRecord(value)) routeError();
   const keys = Reflect.ownKeys(value);
   if (keys.length !== ROUTE_KEYS.length || keys.some(key => typeof key !== 'string' || !ROUTE_KEYS.includes(key) || value[key] === undefined)) routeError();
-  if (value.schema_version !== '1' || !['shadow', 'enforce'].includes(value.effective_mode) || !ROUTE_STATUSES.includes(value.status) ||
+  if (value.schema_version !== '1' || !['off', 'shadow', 'enforce'].includes(value.effective_mode)
+      || typeof value.decision_llm_enabled !== 'boolean' || (value.effective_mode === 'off' && !value.decision_llm_enabled) || !ROUTE_STATUSES.includes(value.status) ||
       !/^[1-9][0-9]{0,31}$/.test(value.workflow_run_id) || !Number.isSafeInteger(value.run_attempt) || value.run_attempt < 1 ||
       !/^[0-9a-f]{40}$/.test(value.head_sha) || !Number.isSafeInteger(value.reviewable_file_count) || value.reviewable_file_count < 0 ||
       !STRATEGIES.includes(value.selected_strategy) || !STRATEGIES.includes(value.proposed_strategy) ||
@@ -55,7 +56,7 @@ function validateRoute(value) {
     if (typeof value[key] !== 'string' || value[key].length < 1 || value[key].length > 128 || /[\r\n]/.test(value[key])) routeError();
   }
   if (value.effective_mode === 'shadow' && (value.selected_model_id !== null || value.fallback_models.length !== 0 || value.selected_strategy !== null)) routeError();
-  if (value.effective_mode === 'enforce' && value.reviewable_file_count > 0 && value.selected_model_id === null) routeError();
+  if ((value.effective_mode === 'enforce' || value.effective_mode === 'off') && value.reviewable_file_count > 0 && value.selected_model_id === null) routeError();
   if (value.status === 'no_reviewable_files' && value.reviewable_file_count !== 0) routeError();
   if (value.route_source === 'not_requested' && value.reviewable_file_count !== 0) routeError();
   return value;
@@ -83,6 +84,7 @@ export function serializeSelectedReviewRoute({ route, runBinding, policyVersions
     run_attempt: runBinding.runAttempt,
     head_sha: runBinding.headSha,
     effective_mode: runBinding.mode,
+    decision_llm_enabled: runBinding.decisionLlmEnabled ?? false,
     status: route.status,
     reviewable_file_count: route.reviewableCount,
     proposed_strategy: route.proposedStrategy,
@@ -102,7 +104,8 @@ export function readSelectedReviewRoute({ runBinding, runTemp, fs: fileSystem = 
   assertRunBindingValid(runBinding);
   const route = loadRouteFromFile(join(runTemp, 'ocr-selected-route.json'), fileSystem);
   assertSerializedRunBindingMatches(runBinding, route);
-  assertRunBindingEquals(runBinding, { workflowRunId: route.workflow_run_id, runAttempt: route.run_attempt, headSha: route.head_sha, mode: route.effective_mode });
+  assertRunBindingEquals(runBinding, { workflowRunId: route.workflow_run_id, runAttempt: route.run_attempt,
+    headSha: route.head_sha, mode: route.effective_mode, decisionLlmEnabled: route.decision_llm_enabled });
   return route;
 }
 
@@ -118,10 +121,13 @@ export function writeSelectedReviewRoute({ runTemp, result, fs: fileSystem = fs 
 export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs, fetchImpl = fetch, runGit,
   trustedInputs = {}, now = () => new Date().toISOString(), readEvidence, readCliIdentity, fetchRepoIdentity, execGit = execFileSync,
   fetchCurrentAuthorization = fetchCurrentRoutingAuthorization, listTrackedPaths }) {
-  if (env?.DECISION_ROUTING_MODE === 'off') return { route: null, decisionRecord: null, egressStatus: 'not_checked' };
+  const decisionLlmEnabled = env?.DECISION_LLM_ENABLED === 'true';
+  const globalOptIn = env?.DECISION_ROUTING_MODE === 'off' && decisionLlmEnabled;
+  if (env?.DECISION_ROUTING_MODE === 'off' && !decisionLlmEnabled) return { route: null, decisionRecord: null, egressStatus: 'not_checked' };
   const binding = runBinding ?? createRunBindingFromEnv(env);
   assertRunBindingValid(binding);
-  if (!['shadow', 'enforce'].includes(binding.mode) || env?.DECISION_ROUTING_MODE !== binding.mode) throw new Error('RUN_BINDING_MISMATCH');
+  if ((!globalOptIn && !['shadow', 'enforce'].includes(binding.mode)) || env?.DECISION_ROUTING_MODE !== binding.mode
+    || (binding.decisionLlmEnabled ?? false) !== decisionLlmEnabled) throw new Error('RUN_BINDING_MISMATCH');
   if (typeof env.TARGET_REPO !== 'string' || !env.TARGET_REPO || typeof env.GITHUB_TOKEN !== 'string' || !env.GITHUB_TOKEN) activationDenied();
   const centralToken = env.CENTRAL_GITHUB_TOKEN || env.GITHUB_TOKEN;
   const repoFullName = env.TARGET_REPO;
@@ -203,20 +209,24 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   const policy = inputs.egressPolicy;
   const catalog = inputs.catalog;
   const checkedAt = now();
-  const startup = evaluateRoutingStartup({ mode: binding.mode,
-    repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, registry: inputs.registry,
-    operationalDossiers: inputs.operationalDossiers, policySha256: inputs.policySha256,
-    catalogSha256: inputs.catalogSha256, sourceManifestSha256: inputs.sourceManifestSha256, now: checkedAt });
+  const startup = globalOptIn ? { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] }
+    : evaluateRoutingStartup({ mode: binding.mode,
+      repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, registry: inputs.registry,
+      operationalDossiers: inputs.operationalDossiers, policySha256: inputs.policySha256,
+      catalogSha256: inputs.catalogSha256, sourceManifestSha256: inputs.sourceManifestSha256, now: checkedAt });
   if (!startup.authorized) activationDenied();
   const checkoutIdentity = await readCheckoutIdentity({ cwd: env.TARGET_REPO_PATH || 'target-repo', expectedRepo: env.TARGET_REPO, expectedHeadSha: binding.headSha, ...(runGit ? { runGit } : {}) });
   const preview = JSON.parse(fileSystem.readFileSync(env.OCR_PREVIEW_PATH, 'utf8'));
   const features = classifyPRRisk(await extractPRFeatures({ cwd: env.TARGET_REPO_PATH || 'target-repo', baseRef: env.BASE_REF, headSha: binding.headSha, preview, ...(runGit ? { runGit } : {}) }),
     riskPolicy);
-  const grant = await authorizeDecisionEgress({ targetRepo: env.TARGET_REPO, headSha: binding.headSha, checkoutIdentity, runBinding: binding, installationToken: env.GITHUB_TOKEN, policy, fetchImpl });
+  const grant = await authorizeDecisionEgress({ targetRepo: env.TARGET_REPO, headSha: binding.headSha, checkoutIdentity,
+    runBinding: binding, installationToken: env.GITHUB_TOKEN, policy, fetchImpl,
+    decisionLlmEnabled, routingMode: binding.mode });
   let egressStatus = grant.allowed ? 'allowed' : 'denied';
   let decision = { status: 'not_requested', latencyMs: null, cost: null };
   let verifiedBundle = null;
   let cliIdentity = null;
+  const needsModel = (binding.mode === 'enforce' || globalOptIn) && features.reviewable_file_count > 0;
   if (binding.mode === 'enforce' && features.reviewable_file_count > 0) {
     const loadedCli = await (readCliIdentity ?? inputs.readCliIdentity)();
     cliIdentity = loadedCli;
@@ -234,17 +244,29 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   if (features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     latestAuthorization = await (inputs.fetchCurrentAuthorization ?? fetchCurrentAuthorization)({ ...authorityParams, now: now() });
     if (!latestAuthorization?.registry) activationDenied();
-    freshStartup = evaluateRoutingStartup({ mode: binding.mode,
-      repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, registry: latestAuthorization.registry,
-      operationalDossiers: latestAuthorization.operationalDossiers, policySha256: inputs.policySha256,
-      catalogSha256: inputs.catalogSha256, sourceManifestSha256: inputs.sourceManifestSha256, now: now() });
+    freshStartup = globalOptIn ? { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] }
+      : evaluateRoutingStartup({ mode: binding.mode,
+        repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, registry: latestAuthorization.registry,
+        operationalDossiers: latestAuthorization.operationalDossiers, policySha256: inputs.policySha256,
+        catalogSha256: inputs.catalogSha256, sourceManifestSha256: inputs.sourceManifestSha256, now: now() });
     if (!freshStartup.authorized) activationDenied();
   }
-  if (features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
+  if (globalOptIn && needsModel) {
+    cliIdentity = await (readCliIdentity ?? inputs.readCliIdentity)();
+    const verified = loadVerifiedCertification({ catalog, index: inputs.index, registry: latestAuthorization.registry,
+      repoIdentity: { repo_id: centralIdentity.id, full_name: centralIdentity.full_name }, now: now(),
+      readEvidence: readEvidence ?? inputs.readEvidence, cliBinarySha256: cliIdentity.binarySha256 });
+    if (verified.verifiedCertificationRefs.length === 0 || verified.cliAvailableModels.length === 0) {
+      throw new Error('REVIEW_CERTIFICATION_INVALID');
+    }
+    verifiedBundle = { catalog, evidence: { verifiedCertificationRefs: verified.verifiedCertificationRefs,
+      cliAvailableModels: verified.cliAvailableModels } };
+  }
+  if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
   }
-  const resolved = selectReviewRoute({ mode: binding.mode, features, decision,
-    certifiedCatalog: binding.mode === 'enforce' && features.reviewable_file_count > 0 ? verifiedBundle : catalog,
+  const resolved = selectReviewRoute({ mode: binding.mode, decisionLlmEnabled, features, decision,
+    certifiedCatalog: needsModel ? verifiedBundle : catalog,
     runBinding: binding });
   const normalizedDecisionStatus = resolved.decisionStatus === 'egress_denied' ? 'unavailable' : resolved.decisionStatus;
   const auditRoute = { ...resolved, decisionStatus: normalizedDecisionStatus };
@@ -259,9 +281,9 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   };
   const serializedRoute = serializeSelectedReviewRoute({ route: routeResult, runBinding: binding, policyVersions });
   {
-    const needsModel = binding.mode === 'enforce' && features.reviewable_file_count > 0;
     writeRoutingExecutionContext({ runTemp: env.RUNNER_TEMP, fileSystem, context: {
-      schema_version: '1', binding: { workflowRunId: binding.workflowRunId, runAttempt: binding.runAttempt, headSha: binding.headSha, mode: binding.mode },
+      schema_version: '1', binding: { workflowRunId: binding.workflowRunId, runAttempt: binding.runAttempt,
+        headSha: binding.headSha, mode: binding.mode, decisionLlmEnabled },
       repo_identity: { repoId: repoIdentity.id, fullName: repoIdentity.full_name, headSha: binding.headSha },
       authorization: { policy_sha256: inputs.policySha256.slice(7), catalog_sha256: inputs.catalogSha256.slice(7),
         source_manifest_sha256: inputs.sourceManifestSha256.slice(7), approval_refs: freshStartup.approvalRefs },
@@ -269,11 +291,13 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       cli_inventory_sha256: needsModel ? inputs.index.cli_inventory.sha256 : null,
       cli_binary_sha256: needsModel ? cliIdentity.binarySha256 : null,
     } });
-    const expectedBinding = { workflowRunId: binding.workflowRunId, runAttempt: binding.runAttempt, headSha: binding.headSha, mode: binding.mode };
+    const expectedBinding = { workflowRunId: binding.workflowRunId, runAttempt: binding.runAttempt, headSha: binding.headSha,
+      mode: binding.mode, decisionLlmEnabled };
     const sealedContext = readRoutingExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding, fileSystem });
     revalidateRoutingExecutionContext({ context: sealedContext, expectedBinding,
       trustedInputs: { ...inputs, registry: latestAuthorization.registry, operationalDossiers: latestAuthorization.operationalDossiers,
-        catalog, needsModel, readEvidence: readEvidence ?? inputs.readEvidence },
+        catalog, needsModel, ...(globalOptIn ? { certificationRepoIdentity: { repo_id: centralIdentity.id, full_name: centralIdentity.full_name } } : {}),
+        readEvidence: readEvidence ?? inputs.readEvidence },
       repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, now: now(),
       cliBinarySha256: needsModel ? cliIdentity.binarySha256 : null });
   }

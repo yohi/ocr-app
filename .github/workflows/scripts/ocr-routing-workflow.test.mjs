@@ -16,11 +16,11 @@ test('off mode retains legacy Host and skips routing steps', () => {
   assert.match(step('Run Antigravity review host'), /DECISION_ROUTING_MODE == 'off'/);
   assert.match(step('Prepare dynamic routing'), /env\.DECISION_ROUTING_MODE == 'shadow'.*env\.DECISION_ROUTING_MODE == 'enforce'/);
   const host = step('Run Antigravity review host');
-  assert.match(host, /mode === 'off' \? null : createRunBindingFromEnv/);
-  assert.match(host, /mode === 'off' \? null : JSON\.parse\(fs\.readFileSync\(catalogPath/);
-  assert.match(host, /mode === 'off' \? \{\} : \{/);
-  assert.match(host, /repoIdentity = mode === 'off' \? null/);
-  assert.match(host, /authorityParams: mode === 'off' \? undefined/);
+  assert.match(host, /routingEnabled \? createRunBindingFromEnv/);
+  assert.match(host, /routingEnabled \? JSON\.parse\(fs\.readFileSync\(catalogPath/);
+  assert.match(host, /trustedInputs = !routingEnabled \? \{\} : \{/);
+  assert.match(host, /repoIdentity = !routingEnabled \? null/);
+  assert.match(host, /authorityParams: !routingEnabled \? undefined/);
   assert.match(host, /runHost: options => runHost\(\{ cwd: 'target-repo', \.\.\.options/);
   assert.match(host, /onProgress: chunk => process\.stderr\.write\(chunk\)/);
 });

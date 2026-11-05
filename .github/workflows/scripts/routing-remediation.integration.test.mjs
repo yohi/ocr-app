@@ -724,7 +724,7 @@ test('primary failure falls back, seals audit, passes Gate, checks HEAD, uploads
   const trustedInputs = { policySha256: `sha256:${'b'.repeat(64)}`, catalogSha256: `sha256:${'c'.repeat(64)}`,
     sourceManifestSha256: `sha256:${'d'.repeat(64)}`, index: {}, catalog, readEvidence: () => Buffer.alloc(0),
     repoIdentity: { repo_id: 7, full_name: 'owner/repo' } };
-  const route = { schema_version: '1', workflow_run_id: '123', run_attempt: 1, head_sha: head, effective_mode: 'enforce',
+  const route = { schema_version: '1', workflow_run_id: '123', run_attempt: 1, head_sha: head, effective_mode: 'enforce', decision_llm_enabled: false,
     status: 'prepared', reviewable_file_count: 1, proposed_strategy: 'deep', selected_strategy: 'deep',
     selected_model_id: 'certified-primary', fallback_models: ['certified-fallback'], route_source: 'deterministic_fallback',
     decision_status: 'unavailable', policy_version: '1', model_catalog_version: '1' };

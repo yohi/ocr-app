@@ -1135,3 +1135,21 @@ test('RED 3-2: enforce uses the attested executable for every spawn including fa
   assert.ok(commands.every(cmd => cmd === '/attested/agy'));
   assert.equal(result.status, 'success');
 });
+
+test('off-mode decision opt-in uses the attested model and records certified attempts', async () => {
+  const commands = [];
+  const events = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: event => events.push(event),
+    spawn: command => {
+      commands.push(command);
+      return childFor(JSON.stringify(validReview));
+    },
+  });
+
+  assert.deepEqual(commands, ['/attested/agy']);
+  assert.equal(result.status, 'success');
+  assert.deepEqual(events.map(event => event.event), ['attempt_started', 'attempt_completed', 'host_completed']);
+});
