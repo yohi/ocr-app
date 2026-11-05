@@ -58,7 +58,7 @@ const zeroReviewDecision = runBinding => createRoutingDecisionRecord({ runBindin
 const summaryAudit = overrides => ({
   schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7,
   head_sha: binding.headSha, workflow_run_id: binding.workflowRunId, run_attempt: binding.runAttempt,
-  effective_mode: 'enforce', decision_status: 'not_requested', egress_status: 'denied',
+  effective_mode: 'enforce', decision_llm_enabled: false, decision_status: 'not_requested', egress_status: 'denied',
   classification_status: 'unclassified_code', risk_floor: 'deep', selected_strategy: 'deep', proposed_strategy: 'deep',
   policy_version: versions.policyVersion, feature_schema_version: '3', decision_state_version: '1', model_catalog_version: versions.modelCatalogVersion,
   owner_approval_ref: null, proposed_review_model: 'gemini-3.8-flash-medium', selected_review_model: 'gemini-3.8-flash-medium',
@@ -142,8 +142,8 @@ test('records null digest when result bytes are unavailable', async () => {
  test('decision record is strict, bound, and frozen', () => {
   const record = decision();
   assert.equal(Object.isFrozen(record), true);
-  assert.deepEqual(Object.keys(record), ['schema_version','effective_mode','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version']);
-  assert.equal(Object.keys(record).length, 20);
+  assert.deepEqual(Object.keys(record), ['schema_version','effective_mode','decision_llm_enabled','head_sha','workflow_run_id','run_attempt','classification_status','risk_floor','reviewable_file_count','proposed_strategy','selected_strategy','route_source','decision_status','egress_status','observer_status','decision_latency_ms','decision_api_cost','policy_version','feature_schema_version','decision_state_version','model_catalog_version']);
+  assert.equal(Object.keys(record).length, 21);
 });
 
 test('decision record rejects an invalid enum and malformed binding', () => {
@@ -187,6 +187,22 @@ test('attempt recorder binds generated IDs and enforces attempts.ndjson mode', (
     const attemptsPath = join(runTemp, 'ocr-routing', 'attempts.ndjson');
     assert.equal(statSync(attemptsPath).mode & 0o777, 0o600);
     assert.equal(readFileSync(attemptsPath, 'utf8').trim().split('\n').length, 2);
+  } finally { rmSync(runTemp, { recursive: true, force: true }); }
+});
+
+test('off-mode decision LLM opt-in records enforced certified-model attempts', () => {
+  const runTemp = mkdtempSync(join(tmpdir(), 'ocr-audit-off-opt-in-'));
+  try {
+    const recorder = createAttemptRecorder({ runTemp, mode: 'off', decisionLlmEnabled: true, catalog,
+      runAttemptId: 'a'.repeat(32), runAttempt: binding.runAttempt });
+    recorder.onAttemptEvent(event({ run_attempt_id: recorder.runAttemptId }));
+    recorder.onAttemptEvent(event({ run_attempt_id: recorder.runAttemptId, event: 'attempt_completed',
+      result: 'host_validated_success', duration_ms: 12 }));
+    recorder.seal();
+    assert.equal(recorder.health(), 'available');
+    assert.equal(readFileSync(join(runTemp, 'ocr-routing', 'attempts.ndjson'), 'utf8').trim().split('\n').length, 2);
+    assert.throws(() => createAttemptRecorder({ runTemp: join(runTemp, 'disabled'), mode: 'off',
+      decisionLlmEnabled: false, catalog, runAttempt: binding.runAttempt }), /AUDIT_MODE_INVALID/);
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
 });
 
@@ -258,8 +274,8 @@ test('final audit only identifies a validated single host success', () => {
   assert.equal(failedValidation.host_success_model, deepModel);
   assert.equal(failedValidation.executed_review_model, null);
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts: [attempts[0], attempts[2], attempts[1]], reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp }), { message: 'AUDIT_EVENT_INVALID' });
-  assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
-  assert.equal(Object.keys(final).length, 33);
+  assert.deepEqual(Object.keys(final), ['schema_version','repo_id','repo','pr_number','head_sha','workflow_run_id','run_attempt','effective_mode','decision_llm_enabled','decision_status','egress_status','classification_status','risk_floor','selected_strategy','proposed_strategy','policy_version','feature_schema_version','decision_state_version','model_catalog_version','owner_approval_ref','proposed_review_model','selected_review_model','host_success_model','executed_review_model','attempted_review_models','result_sha256','review_validation_status','head_validation_status','audit_status','review_scope_gap','features_incomplete','review_quality_measured','decision_api_cost','latency_ms']);
+  assert.equal(Object.keys(final).length, 34);
   assert.equal(Object.hasOwn(final, 'reviewable_file_count'), false);
   assert.throws(() => finalize({ runBinding: { ...binding, runAttempt: 999 } }), { message: 'RUN_BINDING_MISMATCH' });
   assert.throws(() => finalizeRoutingAudit({ decision: record, attempts, reviewResult: { status: 'success' }, validation: { status: 'passed' }, headCheck: { status: 'passed' }, runBinding: binding, policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false }, catalog, selectedRoute, certifiedBundle, runTemp, ignored: true }), { message: 'AUDIT_EVENT_INVALID' });
@@ -486,6 +502,19 @@ test('decision record v1 accepts allowlisted_low_risk_code and preserves schema 
   assert.equal(record.risk_floor, 'fast');
   assert.equal(validateRoutingDecisionRecord(record), record);
   assert.throws(() => validateRoutingDecisionRecord({ ...record, classification_status: 'allowlisted_unknown_code' }), { message: 'AUDIT_SCHEMA_INVALID' });
+});
+
+test('off-mode decision records and audit are valid only with the decision LLM flag enabled', () => {
+  const runBinding = { ...binding, mode: 'off', decisionLlmEnabled: true };
+  const record = createRoutingDecisionRecord({ runBinding, features, decision: { latencyMs: 12, cost: null },
+    egressStatus: 'allowed', route, policyVersions: versions });
+  assert.equal(record.effective_mode, 'off');
+  assert.equal(record.decision_llm_enabled, true);
+  assert.equal(validateRoutingDecisionRecord(record), record);
+
+  const audit = summaryAudit({ effective_mode: 'off', decision_llm_enabled: true, review_quality_measured: true });
+  assert.equal(validateRoutingAudit(audit), audit);
+  assert.throws(() => validateRoutingAudit({ ...audit, decision_llm_enabled: false }), { message: 'AUDIT_SCHEMA_INVALID' });
 });
 
 test('final audit v3 accepts allowlisted_low_risk_code and preserves schema versions', () => {

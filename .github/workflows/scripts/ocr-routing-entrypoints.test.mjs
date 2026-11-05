@@ -22,7 +22,7 @@ afterEach(() => {
 });
 const binding = { workflowRunId: '123', runAttempt: 1, headSha: 'a'.repeat(40), mode: 'enforce' };
 const route = { schema_version: '1', workflow_run_id: '123', run_attempt: 1, head_sha: binding.headSha,
-  effective_mode: 'enforce', reviewable_file_count: 1, selected_model_id: 'primary', fallback_models: [], selected_strategy: 'deep' };
+  effective_mode: 'enforce', decision_llm_enabled: false, reviewable_file_count: 1, selected_model_id: 'primary', fallback_models: [], selected_strategy: 'deep' };
 const catalog = { models: [{ model_id: 'primary', certification_status: 'certified', capability_tier: 'deep' }],
   strategies: { deep: { preferred_model_id: 'primary' } } };
 const bundle = { catalog, evidence: { cli_available_models: ['primary'] } };
@@ -109,7 +109,8 @@ function fixture(count = 1) {
     'node:child_process': { execFileSync: (command, args) => command === 'gh'
       ? args.includes('--jq') ? '7' : JSON.stringify({ id: 7, full_name: args[1].slice(6) }) : '' },
     'prepare-review-routing.mjs': { createRunBindingFromEnv: () => binding, readSelectedReviewRoute: () => selected },
-    'ocr-run-binding.mjs': { createRunBindingFromEnv: env => ({ ...binding, mode: env.DECISION_ROUTING_MODE }) },
+    'ocr-run-binding.mjs': { createRunBindingFromEnv: env => ({ ...binding, mode: env.DECISION_ROUTING_MODE,
+      decisionLlmEnabled: env.DECISION_LLM_ENABLED === 'true' }) },
     'routing-authorization.mjs': { fetchCurrentRoutingAuthorization: authority, hashRoutingSourceManifest: () => `sha256:${'d'.repeat(64)}` },
     'routing-execution-context.mjs': { readRoutingExecutionContext: () => ({}), revalidateRoutingExecutionContext: revalidate },
     'load-review-certification.mjs': { createRoutingEvidenceReader: () => () => Buffer.from('evidence'),
@@ -158,6 +159,35 @@ test('production off Host entrypoint runs without loading the routing catalog or
     return value.imports(source);
   }, env);
   assert.equal(hosts, 1);
+});
+
+test('off+enabled Host entrypoint supplies the bound flag and central certification inputs', async () => {
+  const value = fixture();
+  const env = { ...value.env, DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', GITHUB_REPOSITORY: 'central/repo' };
+  let input;
+  value.modules['run-routing-review.mjs'] = { runRoutingReview: async options => { input = options; return { status: 'success' }; } };
+  value.modules['antigravity-host.mjs'] = { runHost: async () => ({ status: 'success' }) };
+
+  await execute('Run Antigravity review host', value.imports, env);
+
+  assert.equal(input.expectedBinding.mode, 'off');
+  assert.equal(input.expectedBinding.decisionLlmEnabled, true);
+  assert.deepEqual(input.repoIdentity, { repo_id: 7, full_name: 'owner/repo' });
+  assert.deepEqual(input.trustedInputs.certificationRepoIdentity, { repo_id: 7, full_name: 'central/repo' });
+  assert.equal(input.authorityParams.centralRepoFullName, 'central/repo');
+});
+
+test('workflow prepares and consumes off-mode routes only when the explicit flag is enabled', () => {
+  assert.match(workflow, /DECISION_LLM_ENABLED:\s*\$\{\{\s*vars\.DECISION_LLM_ENABLED\s*\|\|\s*'false'\s*\}\}/);
+  const prepare = step('Prepare dynamic routing');
+  assert.match(prepare, /DECISION_ROUTING_MODE == 'off'.*DECISION_LLM_ENABLED == 'true'/s);
+  for (const name of ['Run Antigravity review host', 'Finalize routing audit', 'Reauthorize routing audit upload', 'Upload routing audit']) {
+    const stage = step(name);
+    assert.match(stage, /DECISION_LLM_ENABLED/);
+    assert.match(stage, /DECISION_ROUTING_MODE.*'off'/);
+  }
+  const post = step('Post review comments');
+  assert.match(post, /DECISION_LLM_ENABLED.*finalize-routing\.outcome == 'success'.*reauthorize-upload\.outputs\.AUTHORIZED == 'true'/s);
 });
 
 test('routing workflow entrypoints share the safe certification evidence reader', () => {

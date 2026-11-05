@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DECISION_ROUTING_MODE: ${{ vars.DECISION_ROUTING_MODE || 'off' }}
+      DECISION_LLM_ENABLED: ${{ vars.DECISION_LLM_ENABLED || 'false' }}
     steps:
       - name: Checkout trusted workflow repository
         uses: actions/checkout@v4
@@ -51,10 +52,15 @@ jobs:
         if: steps.target.outputs.internal == 'true'
         env:
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
+          DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
         run: |
           case "$DECISION_ROUTING_MODE" in
             off|shadow|enforce) ;;
             *) printf '%s\n' 'ROUTING_MODE_INVALID' >&2; exit 1 ;;
+          esac
+          case "$DECISION_LLM_ENABLED" in
+            true|false) ;;
+            *) printf '%s\n' 'DECISION_LLM_ENABLED_INVALID' >&2; exit 1 ;;
           esac
 
       - name: Generate GitHub App token
@@ -158,7 +164,7 @@ jobs:
 
       - name: Prepare dynamic routing
         id: prepare-routing
-        if: steps.target.outputs.internal == 'true' && steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
+        if: steps.target.outputs.internal == 'true' && ((env.DECISION_ROUTING_MODE == 'off' && env.DECISION_LLM_ENABLED == 'true') || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')))
         continue-on-error: ${{ env.DECISION_ROUTING_MODE == 'shadow' }}
         env:
           BASE_REF: ${{ github.event.client_payload.base_ref }}
@@ -171,6 +177,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
+          DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           OPENROUTER_API_KEY: ${{ secrets.DECISION_OPENROUTER_API_KEY }}
         run: |
           npm ci --prefix self-repo/.github/workflows --ignore-scripts
@@ -184,8 +191,9 @@ jobs:
             });
             await prepareRoutingStep({ runBinding, env: process.env, execGit });
           } catch (error) {
-            if (process.env.DECISION_ROUTING_MODE !== 'enforce') throw error;
-            console.error('ROUTING_ACTIVATION_DENIED');
+            const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
+            if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
+            console.error(globalOptIn ? 'DECISION_ROUTING_FAILED' : 'ROUTING_ACTIVATION_DENIED');
             process.exitCode = 1;
           }
           EOF
@@ -243,6 +251,7 @@ jobs:
           ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || '' }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
+          DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           RUNNER_TEMP: ${{ runner.temp }}
@@ -279,16 +288,20 @@ jobs:
               '</ocr_review_context>',
             ].join('\n');
             const mode = process.env.DECISION_ROUTING_MODE || 'off';
+            const decisionLlmEnabled = process.env.DECISION_LLM_ENABLED === 'true';
+            const globalOptIn = mode === 'off' && decisionLlmEnabled;
+            const routingEnabled = mode !== 'off' || globalOptIn;
             const commandOptions = { encoding: 'utf8', ...(mode === 'enforce' ? { stdio: ['ignore', 'pipe', 'pipe'] } : {}) };
-            const runBinding = mode === 'off' ? null : createRunBindingFromEnv(process.env);
+            const runBinding = routingEnabled ? createRunBindingFromEnv(process.env) : null;
             const routePath = `${process.env.RUNNER_TEMP}/ocr-selected-route.json`;
             const decisionPath = `${process.env.RUNNER_TEMP}/ocr-routing/decision.json`;
             const catalogPath = './self-repo/.github/workflows/config/review-model-catalog.json';
             const policyPath = './self-repo/.github/workflows/config/decision-egress-policy.json';
-            const catalog = mode === 'off' ? null : JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+            const catalog = routingEnabled ? JSON.parse(fs.readFileSync(catalogPath, 'utf8')) : null;
             const hashFile = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
             const trustedRoot = resolve('self-repo');
-            const trustedInputs = mode === 'off' ? {} : {
+            const centralRepo = routingEnabled ? JSON.parse(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`], commandOptions)) : null;
+            const trustedInputs = !routingEnabled ? {} : {
               catalog,
               index: JSON.parse(fs.readFileSync('./self-repo/.github/workflows/config/review-certification-index.json', 'utf8')),
               policySha256: hashFile(policyPath),
@@ -297,8 +310,9 @@ jobs:
                 readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
                 listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], commandOptions).split('\0').filter(Boolean) }),
               readEvidence: createRoutingEvidenceReader({ trustedRoot, fileSystem: fs }),
+              ...(globalOptIn ? { certificationRepoIdentity: { repo_id: centralRepo.id, full_name: centralRepo.full_name } } : {}),
             };
-            const repoIdentity = mode === 'off' ? null : { repo_id: Number(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`, '--jq', '.id'], commandOptions).trim()), full_name: process.env.TARGET_REPO };
+            const repoIdentity = !routingEnabled ? null : { repo_id: Number(execFileSync('gh', ['api', `repos/${process.env.TARGET_REPO}`, '--jq', '.id'], commandOptions).trim()), full_name: process.env.TARGET_REPO };
             let attemptRecorder = null;
             let result = await runRoutingReview({
               env: process.env,
@@ -315,7 +329,7 @@ jobs:
               expectedBinding: runBinding,
               trustedInputs,
               repoIdentity,
-              authorityParams: mode === 'off' ? undefined : { centralRepoFullName: process.env.GITHUB_REPOSITORY, centralRepoId: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], commandOptions).trim()), token: process.env.CENTRAL_GITHUB_TOKEN, protectedRef: 'master', fetchImpl: fetch },
+              authorityParams: !routingEnabled ? undefined : { centralRepoFullName: centralRepo.full_name, centralRepoId: centralRepo.id, token: process.env.CENTRAL_GITHUB_TOKEN, protectedRef: 'master', fetchImpl: fetch },
               createRecorder: options => {
                 attemptRecorder = createAttemptRecorder({ runTemp: process.env.RUNNER_TEMP, runAttempt: Number(process.env.GITHUB_RUN_ATTEMPT), ...options });
                 return attemptRecorder;
@@ -326,9 +340,10 @@ jobs:
             });
             attemptRecorder?.seal();
             fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
-            if (mode === 'enforce' && result.status === 'failed') process.exitCode = 1;
+            if ((mode === 'enforce' || globalOptIn) && result.status === 'failed') process.exitCode = 1;
           } catch (error) {
-            if (process.env.DECISION_ROUTING_MODE !== 'enforce') throw error;
+            const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
+            if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
             console.error('REVIEW_EXECUTION_FAILED');
             process.exitCode = 1;
           }
@@ -395,11 +410,12 @@ jobs:
 
       - name: Finalize routing audit
         id: finalize-routing
-        if: always() && steps.target.outputs.internal == 'true' && steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
+        if: always() && steps.target.outputs.internal == 'true' && ((env.DECISION_ROUTING_MODE == 'off' && env.DECISION_LLM_ENABLED == 'true') || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')))
         continue-on-error: ${{ env.DECISION_ROUTING_MODE == 'shadow' }}
         env:
           RUNNER_TEMP: ${{ runner.temp }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
+          DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
@@ -445,7 +461,10 @@ jobs:
               centralRepoFullName: process.env.GITHUB_REPOSITORY, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN, fetchImpl: fetch, now: new Date().toISOString() });
             if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
             const readEvidence = createRoutingEvidenceReader({ trustedRoot, fileSystem: fs });
-            const trustedInputs = { ...current, catalog, readEvidence, needsModel: runBinding.mode === 'enforce' && decision.reviewable_file_count > 0,
+            const globalOptIn = runBinding.mode === 'off' && runBinding.decisionLlmEnabled;
+            const trustedInputs = { ...current, catalog, readEvidence,
+              certificationRepoIdentity: globalOptIn ? { repo_id: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], commandOptions).trim()), full_name: process.env.GITHUB_REPOSITORY } : undefined,
+              needsModel: (runBinding.mode === 'enforce' || globalOptIn) && decision.reviewable_file_count > 0,
               policySha256: digest(resolve(trustedRoot, '.github/workflows/config/decision-egress-policy.json')),
               catalogSha256: digest(resolve(trustedRoot, '.github/workflows/config/review-model-catalog.json')),
               index: JSON.parse(fs.readFileSync(resolve(trustedRoot, '.github/workflows/config/review-certification-index.json'), 'utf8')),
@@ -467,7 +486,8 @@ jobs:
               opencodereview_version_matches: process.env.OPENCODEREVIEW_VERSION_MATCH === 'true',
             })}`);
           } catch (error) {
-            if (process.env.DECISION_ROUTING_MODE !== 'enforce') throw error;
+            const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
+            if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
             console.error('ROUTING_AUDIT_MISSING');
             process.exitCode = 1;
           }
@@ -475,10 +495,11 @@ jobs:
 
       - name: Reauthorize routing audit upload
         id: reauthorize-upload
-        if: always() && steps.target.outputs.internal == 'true' && steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
+        if: always() && steps.target.outputs.internal == 'true' && ((env.DECISION_ROUTING_MODE == 'off' && env.DECISION_LLM_ENABLED == 'true') || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')))
         env:
           RUNNER_TEMP: ${{ runner.temp }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
+          DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
@@ -525,10 +546,12 @@ jobs:
             if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
             const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
             const readEvidence = createRoutingEvidenceReader({ trustedRoot: centralRoot, fileSystem: fs });
-            const needsModel = binding.mode === 'enforce' && JSON.parse(fs.readFileSync(`${runTemp}/ocr-routing/decision.json`, 'utf8')).reviewable_file_count > 0;
+            const globalOptIn = binding.mode === 'off' && binding.decisionLlmEnabled;
+            const needsModel = (binding.mode === 'enforce' || globalOptIn) && JSON.parse(fs.readFileSync(`${runTemp}/ocr-routing/decision.json`, 'utf8')).reviewable_file_count > 0;
             const trustedInputs = { ...current, policySha256: digest(policyPath), catalogSha256: digest(catalogPath), sourceManifestSha256,
               catalog, index: JSON.parse(fs.readFileSync(resolve(centralRoot, '.github/workflows/config/review-certification-index.json'), 'utf8')),
-              readEvidence, needsModel };
+              readEvidence, needsModel,
+              ...(globalOptIn ? { certificationRepoIdentity: { repo_id: central.id, full_name: central.full_name } } : {}) };
             const cli = needsModel ? await readInstalledCliIdentity({ env: process.env, targetRoot }) : null;
             revalidateRoutingExecutionContext({ context: sealed, expectedBinding: binding, trustedInputs,
               repoIdentity: { repo_id: repo.id, full_name: repo.full_name }, now: new Date().toISOString(), cliBinarySha256: cli?.binarySha256 ?? null });
@@ -537,7 +560,7 @@ jobs:
             console.error(process.env.DECISION_ROUTING_MODE === 'enforce'
               ? 'Routing upload authorization denied: ROUTING_ACTIVATION_DENIED'
               : `Routing upload authorization denied: ${error?.code ?? error?.message ?? 'unknown'}`);
-            if (process.env.DECISION_ROUTING_MODE === 'shadow' && !auditAvailable) {
+            if ((process.env.DECISION_ROUTING_MODE === 'shadow' || (process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true')) && !auditAvailable) {
               fs.appendFileSync(process.env.GITHUB_OUTPUT, 'SHADOW_AUDIT_UNAVAILABLE=true\n');
             }
           }
@@ -547,7 +570,7 @@ jobs:
 
       - name: Upload routing audit
         id: upload-routing
-        if: always() && steps.target.outputs.internal == 'true' && steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && steps.finalize-routing.outcome == 'success' && steps.reauthorize-upload.outputs.AUTHORIZED == 'true' && steps.reauthorize-upload.outputs.SHADOW_AUDIT_UNAVAILABLE != 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
+        if: always() && steps.target.outputs.internal == 'true' && ((env.DECISION_ROUTING_MODE == 'off' && env.DECISION_LLM_ENABLED == 'true') || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce'))) && steps.finalize-routing.outcome == 'success' && steps.reauthorize-upload.outputs.AUTHORIZED == 'true' && steps.reauthorize-upload.outputs.SHADOW_AUDIT_UNAVAILABLE != 'true'
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -725,7 +748,7 @@ jobs:
 
       - name: Post review comments
         id: post-review
-        if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && (env.DECISION_ROUTING_MODE == 'off' || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow'))
+        if: always() && steps.target.outputs.internal == 'true' && steps.host-review.outputs.ROUTE_GUARD_FAILED != 'true' && ((env.DECISION_ROUTING_MODE == 'off' && (env.DECISION_LLM_ENABLED != 'true' || (steps.finalize-routing.outcome == 'success' && steps.reauthorize-upload.outputs.AUTHORIZED == 'true' && steps.reauthorize-upload.outputs.SHADOW_AUDIT_UNAVAILABLE != 'true'))) || (steps.routing-start.outputs.ROUTING_START_AUTHORIZED == 'true' && env.DECISION_ROUTING_MODE == 'shadow'))
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           CENTRAL_GITHUB_TOKEN: ${{ github.token }}

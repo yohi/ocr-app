@@ -191,7 +191,8 @@ export function extractPayload(raw) {
 }
 
 async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, model, onProgress,
-  executablePath, executableIdentity, targetRoot, readCliIdentity, env, routingMode, authorizeBeforeSpawn }) {
+  executablePath, executableIdentity, targetRoot, readCliIdentity, env, routingMode, decisionLlmEnabled, authorizeBeforeSpawn }) {
+  const certifiedRoute = routingMode === 'enforce' || (routingMode === 'off' && decisionLlmEnabled === true);
   if (typeof authorizeBeforeSpawn === 'function') {
     try {
       if (await authorizeBeforeSpawn() !== true) {
@@ -201,10 +202,10 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
       return { error: new Error('ROUTING_AUTHORITY_UNAVAILABLE'), failureKind: 'authorization_denied' };
     }
   }
-  if (routingMode === 'enforce' && typeof executablePath !== 'string') {
+  if (certifiedRoute && typeof executablePath !== 'string') {
     return { error: new Error('ROUTING_EXECUTABLE_NOT_ATTESTED'), failureKind: 'spawn_failed' };
   }
-  if (routingMode === 'enforce') {
+  if (certifiedRoute) {
     let currentIdentity;
     try {
       currentIdentity = await readCliIdentity({ env, targetRoot });
@@ -227,7 +228,7 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
     let timer;
     let child;
     try {
-      const command = routingMode === 'enforce' ? executablePath : 'agy';
+      const command = certifiedRoute ? executablePath : 'agy';
       child = spawn(command, [
         '--add-dir', workspace,
         '--sandbox',
@@ -377,8 +378,9 @@ async function runMode({
   targetRoot,
   readCliIdentity = readInstalledCliIdentity,
   authorizeBeforeSpawn,
+  decisionLlmEnabled = false,
 }) {
-  const enforce = routingMode === 'enforce';
+  const certifiedRoute = routingMode === 'enforce' || (routingMode === 'off' && decisionLlmEnabled === true);
   const auditId = typeof runAttemptId === 'string' && /^[a-f0-9]{32}$/i.test(runAttemptId)
     ? runAttemptId
     : randomBytes(16).toString('hex');
@@ -386,7 +388,7 @@ async function runMode({
   let attemptIndex = 0;
   const emitEvent = (event, index, currentModel, result, duration, hostStatus) => {
     if (typeof onAttemptEvent !== 'function') {
-      if (enforce) auditIncomplete = true;
+      if (certifiedRoute) auditIncomplete = true;
       return;
     }
     try {
@@ -402,20 +404,20 @@ async function runMode({
         host_status: hostStatus,
       });
     } catch {
-      if (enforce) auditIncomplete = true;
+      if (certifiedRoute) auditIncomplete = true;
     }
   };
   const complete = result => {
     const status = result.status;
-    if (routingMode === 'shadow' || enforce) {
+    if (routingMode === 'shadow' || certifiedRoute) {
       emitEvent('host_completed', null, null, null, null, status);
     }
-    return enforce && auditIncomplete ? failure(mode, 'AUDIT_INCOMPLETE') : result;
+    return certifiedRoute && auditIncomplete ? failure(mode, 'AUDIT_INCOMPLETE') : result;
   };
   const fixedFailure = code => complete(failure(mode, code));
 
-  if (typeof prompt !== 'string' || prompt.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Prompt is required');
-  if (typeof cwd !== 'string' || cwd.length === 0) return fixedFailure(enforce ? 'INVALID_REVIEW_INPUT' : 'Trusted working directory is required');
+  if (typeof prompt !== 'string' || prompt.length === 0) return fixedFailure(certifiedRoute ? 'INVALID_REVIEW_INPUT' : 'Prompt is required');
+  if (typeof cwd !== 'string' || cwd.length === 0) return fixedFailure(certifiedRoute ? 'INVALID_REVIEW_INPUT' : 'Trusted working directory is required');
   const effectiveTimeoutMs = typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
     ? timeoutMs
     : resolveTimeoutMs(env);
@@ -424,7 +426,7 @@ async function runMode({
     : resolvePrintTimeoutMs(env);
   const effectiveModel = model ? normalizeAntigravityModel(model) : resolveModel(env);
   let fallbackCandidates;
-  if (enforce) {
+  if (certifiedRoute) {
     const catalogModels = Array.isArray(modelCatalog?.models) ? modelCatalog.models : [];
     const byId = new Map(catalogModels.map(entry => [entry?.model_id, entry]));
     const primary = byId.get(effectiveModel);
@@ -453,7 +455,7 @@ async function runMode({
   }
   const models = [effectiveModel, ...fallbackCandidates]
     .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
-  const progressSink = enforce ? undefined : onProgress;
+  const progressSink = certifiedRoute ? undefined : onProgress;
 
   const attempts = Math.max(1, maxRetries + 1);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
@@ -463,9 +465,9 @@ async function runMode({
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const currentIndex = ++attemptIndex;
       const startedAt = Date.now();
-      if (routingMode === 'shadow' || enforce) {
+      if (routingMode === 'shadow' || certifiedRoute) {
         emitEvent('attempt_started', currentIndex, normalizeAntigravityModel(currentModel), null, null, null);
-        if (enforce && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
+        if (certifiedRoute && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
       }
       let childResult;
       try {
@@ -484,6 +486,7 @@ async function runMode({
           readCliIdentity,
           env,
           routingMode,
+          decisionLlmEnabled,
           authorizeBeforeSpawn,
         });
       } catch (error) {
@@ -521,9 +524,9 @@ async function runMode({
           validationMessage = error.message;
         }
       }
-      if (routingMode === 'shadow' || enforce) {
+      if (routingMode === 'shadow' || certifiedRoute) {
         emitEvent('attempt_completed', currentIndex, normalizeAntigravityModel(currentModel), attemptResult, Date.now() - startedAt, null);
-        if (enforce && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
+        if (certifiedRoute && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
       }
       if (validatedResult) return complete(validatedResult);
 
@@ -534,17 +537,17 @@ async function runMode({
           shouldFallback = true;
           break;
         }
-        return complete(failure(mode, enforce ? 'MODEL_REPORTED_FAILURE' : errorMessage));
+        return complete(failure(mode, certifiedRoute ? 'MODEL_REPORTED_FAILURE' : errorMessage));
       }
       if (attempt < attempts && isTransientError(errorMessage)) {
         await new Promise(r => setTimeout(r, retryDelayMs * attempt));
         continue;
       }
-      return complete(failure(mode, enforce ? 'REVIEW_EXECUTION_FAILED' : errorMessage));
+      return complete(failure(mode, certifiedRoute ? 'REVIEW_EXECUTION_FAILED' : errorMessage));
     }
     if (shouldFallback) continue;
   }
-  return complete(failure(mode, enforce ? 'REVIEW_EXECUTION_FAILED' : 'Antigravity host failed without a response'));
+  return complete(failure(mode, certifiedRoute ? 'REVIEW_EXECUTION_FAILED' : 'Antigravity host failed without a response'));
 }
 
 export function runHost(options) {

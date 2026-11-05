@@ -31,12 +31,15 @@ const certificationEvidence = {
 
 function input(overrides = {}) {
   const calls = [];
-  const env = { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run', ...(overrides.env ?? {}) };
+  const env = { DECISION_ROUTING_MODE: 'enforce', DECISION_LLM_ENABLED: 'false', RUNNER_TEMP: '/tmp/run', ...(overrides.env ?? {}) };
   const expectedBinding = overrides.expectedBinding ?? {
     workflowRunId: '123', runAttempt: 1, headSha: 'a'.repeat(40), mode: env.DECISION_ROUTING_MODE,
+    decisionLlmEnabled: env.DECISION_LLM_ENABLED === 'true',
   };
-  const decision = ['shadow', 'enforce'].includes(expectedBinding.mode) ? {
-    schema_version: '1', effective_mode: expectedBinding.mode, head_sha: expectedBinding.headSha,
+  const decision = ['shadow', 'enforce'].includes(expectedBinding.mode)
+    || (expectedBinding.mode === 'off' && expectedBinding.decisionLlmEnabled === true) ? {
+    schema_version: '1', effective_mode: expectedBinding.mode, decision_llm_enabled: expectedBinding.decisionLlmEnabled ?? false,
+    head_sha: expectedBinding.headSha,
     workflow_run_id: expectedBinding.workflowRunId, run_attempt: expectedBinding.runAttempt,
     classification_status: 'unclassified_code', risk_floor: 'deep', reviewable_file_count: 2,
     proposed_strategy: 'deep', selected_strategy: expectedBinding.mode === 'shadow' ? null : 'deep',
@@ -348,6 +351,70 @@ test('Given off mode, When invoked, Then legacy Host runs without routing reads'
   assert.deepEqual(Object.fromEntries(Object.keys(legacyHostOptions).map(key => [key, fixture.calls[0][key]])), legacyHostOptions);
   assert.equal(fixture.calls[0].onProgress, onProgress);
   assert.deepEqual(routingReads, { context: 0, route: 0, decision: 0 });
+});
+
+test('Given off mode with decision opt-in, When invoked, Then the certified selected route reaches Host without target activation', async () => {
+  let hostOptions;
+  let startupEvaluations = 0;
+  const registry = { schema_version: '1', approvals: [], activations: [], revoked_refs: [] };
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/justice' },
+    readRoute: async () => ({ schema_version: '1', effective_mode: 'off', decision_llm_enabled: true,
+      selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: ['certified-fallback'],
+      reviewable_file_count: 2, status: 'prepared' }),
+    readExecutionContext: async () => ({ binding: fixture.args.expectedBinding }),
+    fetchCurrentAuthorization: async () => ({ registry, operationalDossiers: {} }),
+    evaluateStartup: () => { startupEvaluations++; throw new Error('target activation must not be evaluated'); },
+    revalidateExecutionContext: async ({ trustedInputs }) => {
+      assert.equal(trustedInputs.needsModel, true);
+      return { certifiedBundle: { catalog: { models: [{ model_id: 'certified-primary', certification_status: 'certified', capability_tier: 'deep' }] },
+        evidence: { certification_refs: ['certified-primary'], cli_available_models: ['certified-primary', 'certified-fallback'] } } };
+    },
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'a'.repeat(64) }),
+    createRecorder: async () => ({ onAttemptEvent: () => {}, runAttemptId: 'a'.repeat(32), seal: () => {} }),
+    runHost: async options => {
+      hostOptions = options;
+      assert.equal(await options.authorizeBeforeSpawn(), true);
+      return { status: 'success' };
+    },
+  });
+  fixture.args.trustedInputs = { certificationRepoIdentity: { repo_id: 1, full_name: 'central-org/central-repo' } };
+
+  const result = await runRoutingReview(fixture.args);
+
+  assert.equal(result.status, 'success');
+  assert.equal(startupEvaluations, 0);
+  assert.equal(hostOptions.routingMode, 'off');
+  assert.equal(hostOptions.decisionLlmEnabled, true);
+  assert.equal(hostOptions.model, 'certified-primary');
+  assert.deepEqual(hostOptions.fallbackModels, ['certified-fallback']);
+  assert.equal(hostOptions.executablePath, '/attested/agy');
+});
+
+test('Given off-mode opt-in with invalid certification, When invoked, Then Host does not run', async () => {
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true' },
+    readRoute: async () => ({ schema_version: '1', effective_mode: 'off', decision_llm_enabled: true,
+      selected_model_id: 'uncertified', selected_strategy: 'deep', fallback_models: [], reviewable_file_count: 1, status: 'prepared' }),
+    fetchCurrentAuthorization: async () => ({ registry: { schema_version: '1', approvals: [], activations: [], revoked_refs: [] }, operationalDossiers: {} }),
+    revalidateExecutionContext: async () => ({ certifiedBundle: null }),
+  });
+
+  const result = await runRoutingReview(fixture.args);
+
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(fixture.calls, []);
+});
+
+test('Given opt-in env disagrees with the run binding, When invoked, Then Host is not called', async () => {
+  const fixture = input({ env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true' },
+    expectedBinding: { workflowRunId: '123', runAttempt: 1, headSha: 'a'.repeat(40), mode: 'shadow', decisionLlmEnabled: false } });
+
+  const result = await runRoutingReview(fixture.args);
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.message, 'RUN_BINDING_MISMATCH');
+  assert.deepEqual(fixture.calls, []);
 });
 
 test('Given shadow route binding mismatch, When invoked, Then no Host runs and only fixed denial is returned', async () => {

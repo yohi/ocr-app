@@ -12,6 +12,7 @@ const repo = { id: 42, full_name: 'owner/repo', private: false, visibility: 'pub
 test('authorizes a public repository only on exact trusted id and name match', async () => {
   const grant = await execute(repo);
   assert.deepEqual({ allowed: grant.allowed, reason: grant.reason, visibility: grant.visibility, repo_id: grant.repo_id, full_name: grant.full_name, destination: grant.destination, workflow_run_id: grant.workflow_run_id, run_attempt: grant.run_attempt }, { allowed: true, reason: 'authorized', visibility: 'public', repo_id: 42, full_name: 'owner/repo', destination: 'openrouter-decisions', workflow_run_id: binding.workflowRunId, run_attempt: 2 });
+  assert.equal(grant.approval_ref, 'OWNER-123');
 });
 
 for (const [name, body] of [['private', { ...repo, private: true, visibility: 'private' }], ['internal', { ...repo, private: true, visibility: 'internal' }]]) {
@@ -79,10 +80,49 @@ test('denies an unapproved repository and absent or invalid Owner approval refer
   assert.equal((await execute(repo, 200, { policy: { ...policy, allowed_repositories: null } })).allowed, false);
 });
 
+test('global decision opt-in authorizes off-mode egress without a target allowlist entry', async () => {
+  const grant = await execute(repo, 200, {
+    runBinding: { ...binding, mode: 'off', decisionLlmEnabled: true },
+    routingMode: 'off', decisionLlmEnabled: true,
+  });
+  assert.equal(grant.allowed, true);
+  assert.equal(grant.authorization_source, 'global_flag');
+  assert.equal(grant.approval_ref, null);
+  assert.equal(grant.effective_mode, 'off');
+  assert.equal(grant.decision_llm_enabled, true);
+});
+
+test('global decision opt-in does not authorize disabled, shadow, or enforce paths', async () => {
+  for (const [routingMode, enabled, entries] of [
+    ['off', false, policy.allowed_repositories],
+    ['shadow', true, []],
+    ['enforce', true, []],
+  ]) {
+    const grant = await execute(repo, 200, {
+      runBinding: { ...binding, mode: routingMode, decisionLlmEnabled: enabled },
+      routingMode, decisionLlmEnabled: enabled,
+      policy: { ...policy, allowed_repositories: entries },
+    });
+    assert.equal(grant.allowed, false, `${routingMode}/${enabled} must require the repository policy`);
+  }
+});
+
+test('global decision opt-in retains target identity and HEAD checks', async () => {
+  const options = {
+    runBinding: { ...binding, mode: 'off', decisionLlmEnabled: true },
+    routingMode: 'off', decisionLlmEnabled: true,
+    policy: { ...policy, allowed_repositories: [] },
+  };
+  assert.equal((await execute({ ...repo, full_name: 'other/repo' }, 200, options)).allowed, false);
+  assert.equal((await execute(repo, 200, { ...options, targetRepo: 'other/repo' })).allowed, false);
+  assert.equal((await execute(repo, 200, { ...options, headSha: 'b'.repeat(40) })).allowed, false);
+  assert.equal((await execute(repo, 200, { ...options, checkoutIdentity: { fullName: 'owner/repo', headSha: 'b'.repeat(40) } })).allowed, false);
+});
+
 test('denies malformed RunBinding fields without throwing', async () => {
   for (const runBinding of [
     { ...binding, workflowRunId: 'abc' }, { ...binding, runAttempt: Number.MAX_SAFE_INTEGER + 1 },
-    { ...binding, headSha: 'not-a-sha' }, { ...binding, mode: 'off' },
+    { ...binding, headSha: 'not-a-sha' }, { ...binding, mode: 'invalid' },
   ]) {
     const grant = await execute(repo, 200, { runBinding });
     assert.equal(grant.allowed, false);

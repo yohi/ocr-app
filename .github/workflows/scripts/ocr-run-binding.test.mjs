@@ -6,7 +6,24 @@ const sha = 'A'.repeat(40);
 const env = (overrides = {}) => ({ GITHUB_RUN_ID: '9007199254740993', GITHUB_RUN_ATTEMPT: '2', COMMIT_SHA: sha, DECISION_ROUTING_MODE: 'shadow', ...overrides });
 
 test('preserves the run id string and parses attempt once as number', () => {
-  assert.deepEqual(createRunBindingFromEnv(env()), { workflowRunId: '9007199254740993', runAttempt: 2, headSha: sha.toLowerCase(), mode: 'shadow' });
+  assert.deepEqual(createRunBindingFromEnv(env()), { workflowRunId: '9007199254740993', runAttempt: 2, headSha: sha.toLowerCase(), mode: 'shadow', decisionLlmEnabled: false });
+});
+
+test('defaults DECISION_LLM_ENABLED to false and accepts only explicit boolean strings', () => {
+  assert.equal(createRunBindingFromEnv(env()).decisionLlmEnabled, false);
+  assert.equal(createRunBindingFromEnv(env({ DECISION_LLM_ENABLED: '' })).decisionLlmEnabled, false);
+  assert.equal(createRunBindingFromEnv(env({ DECISION_LLM_ENABLED: 'false' })).decisionLlmEnabled, false);
+  assert.equal(createRunBindingFromEnv(env({ DECISION_LLM_ENABLED: 'true' })).decisionLlmEnabled, true);
+  for (const value of ['TRUE', 'yes', '1', ' true ']) {
+    assert.throws(() => createRunBindingFromEnv(env({ DECISION_LLM_ENABLED: value })), { code: 'RUN_BINDING_INVALID' });
+  }
+});
+
+test('accepts off mode only as a valid bound routing mode', () => {
+  const binding = createRunBindingFromEnv(env({ DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true' }));
+  assert.equal(binding.mode, 'off');
+  assert.equal(binding.decisionLlmEnabled, true);
+  assert.throws(() => createRunBindingFromEnv(env({ DECISION_ROUTING_MODE: 'unknown' })), { code: 'RUN_BINDING_INVALID' });
 });
 
 for (const value of ['0', '02', '+2', '2e1', '9007199254740992', ' 2', '2 ']) {
@@ -37,14 +54,24 @@ test('rejects mismatched serialized numeric types without coercion', () => {
 
 test('accepts serialized grant fields without mode but validates mode when present', () => {
   const binding = createRunBindingFromEnv(env());
-  const record = { workflow_run_id: binding.workflowRunId, run_attempt: binding.runAttempt, head_sha: binding.headSha };
+  const record = { workflow_run_id: binding.workflowRunId, run_attempt: binding.runAttempt, head_sha: binding.headSha,
+    decision_llm_enabled: binding.decisionLlmEnabled };
   assert.doesNotThrow(() => assertSerializedRunBindingMatches(binding, record));
   assert.throws(() => assertSerializedRunBindingMatches(binding, { ...record, effective_mode: 'enforce' }), { code: 'RUN_BINDING_MISMATCH' });
+  assert.throws(() => assertSerializedRunBindingMatches(binding, { ...record, decision_llm_enabled: true }), { code: 'RUN_BINDING_MISMATCH' });
+});
+
+test('requires the decision LLM flag in serialized bindings when the run opted in', () => {
+  const optedIn = createRunBindingFromEnv(env({ DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true' }));
+  const record = { workflow_run_id: optedIn.workflowRunId, run_attempt: optedIn.runAttempt, head_sha: optedIn.headSha };
+  assert.throws(() => assertSerializedRunBindingMatches(optedIn, record), { code: 'RUN_BINDING_MISMATCH' });
+  assert.doesNotThrow(() => assertSerializedRunBindingMatches(optedIn, { ...record,
+    effective_mode: 'off', decision_llm_enabled: true }));
 });
 
 test('rejects differences in each run binding field', () => {
   const binding = createRunBindingFromEnv(env());
-  for (const difference of [{ headSha: 'b'.repeat(40) }, { mode: 'enforce' }, { workflowRunId: '9' }, { runAttempt: 1 }, { runAttempt: '2' }]) {
+  for (const difference of [{ headSha: 'b'.repeat(40) }, { mode: 'enforce' }, { workflowRunId: '9' }, { runAttempt: 1 }, { runAttempt: '2' }, { decisionLlmEnabled: true }]) {
     assert.throws(() => assertRunBindingEquals(binding, { ...binding, ...difference }), { code: 'RUN_BINDING_MISMATCH' });
   }
 });

@@ -150,6 +150,15 @@ test('off mode is rejected rather than invoking this workflow resolver', () => {
   assert.throws(() => select({ mode: 'off' }), /routing_disabled/);
 });
 
+test('off mode applies a valid decision only with the bound decision LLM opt-in', () => {
+  const optedInBinding = { ...runBinding, mode: 'off', decisionLlmEnabled: true };
+  const result = select({ mode: 'off', decisionLlmEnabled: true, runBinding: optedInBinding,
+    features: { risk_floor: 'deep' }, decision: deepResult, certifiedCatalog: certifiedBundle });
+  assert.equal(result.selectedStrategy, 'deep');
+  assert.equal(result.selectedReviewModel, certifiedCatalog.strategies.deep.preferred_model_id);
+  assert.throws(() => select({ mode: 'off', decisionLlmEnabled: false, runBinding: optedInBinding }), /routing_disabled/);
+});
+
 test('returned route strings reject newline injection and model IDs are bounded', () => {
   const malicious = structuredClone(certifiedCatalog);
   malicious.strategies.fast.preferred_model_id = `model\nGITHUB_OUTPUT=evil`;

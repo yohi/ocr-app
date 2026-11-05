@@ -25,7 +25,9 @@ function digestMatches(contextDigest, trustedDigest) {
 }
 
 function validContext(context) {
-  if (!exact(context, KEYS) || context.schema_version !== '1' || !exact(context.binding, ['workflowRunId', 'runAttempt', 'headSha', 'mode'])
+  const legacyBinding = exact(context?.binding, ['workflowRunId', 'runAttempt', 'headSha', 'mode']);
+  const optedInBinding = exact(context?.binding, ['workflowRunId', 'runAttempt', 'headSha', 'mode', 'decisionLlmEnabled']);
+  if (!exact(context, KEYS) || context.schema_version !== '1' || (!legacyBinding && !optedInBinding)
     || !exact(context.repo_identity, ['repoId', 'fullName', 'headSha'])
     || !exact(context.authorization, ['policy_sha256', 'catalog_sha256', 'source_manifest_sha256', 'approval_refs'])
     || !Array.isArray(context.authorization.approval_refs) || !context.authorization.approval_refs.every(v => typeof v === 'string')
@@ -77,24 +79,33 @@ export function revalidateRoutingExecutionContext({ context, expectedBinding, tr
   try {
     if (!validContext(context)) return failure(INVALID);
     assertRunBindingEquals(expectedBinding, context.binding);
+    const globalOptIn = expectedBinding.mode === 'off' && expectedBinding.decisionLlmEnabled === true;
     if (context.repo_identity.repoId !== repoIdentity.repo_id || context.repo_identity.fullName !== repoIdentity.full_name
       || context.repo_identity.headSha !== expectedBinding.headSha
       || !digestMatches(context.authorization.policy_sha256, trustedInputs.policySha256)
       || !digestMatches(context.authorization.catalog_sha256, trustedInputs.catalogSha256)
       || !digestMatches(context.authorization.source_manifest_sha256, trustedInputs.sourceManifestSha256)) return failure(INVALID);
-    const startupAuthorization = evaluateRoutingStartup({
-      mode: expectedBinding.mode, repoIdentity: { repo_id: repoIdentity.repo_id, full_name: repoIdentity.full_name },
-      registry: trustedInputs.registry, operationalDossiers: trustedInputs.operationalDossiers,
-      policySha256: trustedInputs.policySha256, catalogSha256: trustedInputs.catalogSha256,
-      sourceManifestSha256: trustedInputs.sourceManifestSha256, now,
-    });
-    if (!startupAuthorization.authorized || startupAuthorization.approvalRefs.join('\0') !== context.authorization.approval_refs.join('\0')) return failure(DENIED);
+    let startupAuthorization;
+    if (globalOptIn) {
+      if (context.authorization.approval_refs.length !== 0) return failure(INVALID);
+      startupAuthorization = { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] };
+    } else {
+      startupAuthorization = evaluateRoutingStartup({
+        mode: expectedBinding.mode, repoIdentity: { repo_id: repoIdentity.repo_id, full_name: repoIdentity.full_name },
+        registry: trustedInputs.registry, operationalDossiers: trustedInputs.operationalDossiers,
+        policySha256: trustedInputs.policySha256, catalogSha256: trustedInputs.catalogSha256,
+        sourceManifestSha256: trustedInputs.sourceManifestSha256, now,
+      });
+      if (!startupAuthorization.authorized || startupAuthorization.approvalRefs.join('\0') !== context.authorization.approval_refs.join('\0')) return failure(DENIED);
+    }
     if (trustedInputs.needsModel && (context.cli_binary_sha256 === null || context.cli_inventory_sha256 === null
       || context.cli_binary_sha256 !== cliBinarySha256)) return failure(INVALID);
     let certifiedBundle = null;
     if (trustedInputs.needsModel) {
+      const certificationRepoIdentity = globalOptIn ? trustedInputs.certificationRepoIdentity : repoIdentity;
+      if (!certificationRepoIdentity) return failure(INVALID);
       const verified = loadVerifiedCertification({ catalog: trustedInputs.catalog, index: trustedInputs.index,
-        registry: trustedInputs.registry, repoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
+        registry: trustedInputs.registry, repoIdentity: certificationRepoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
       if (verified.cliAvailableModels.length === 0 || trustedInputs.index?.cli_inventory?.sha256 !== context.cli_inventory_sha256) return failure(DENIED);
       if (context.certification_refs.some(ref => !verified.verifiedCertificationRefs.some(item => item.certification_reference === ref))) return failure(DENIED);
       certifiedBundle = {

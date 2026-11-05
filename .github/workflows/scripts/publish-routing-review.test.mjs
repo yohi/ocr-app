@@ -24,14 +24,14 @@ const verifiedCertificationRefs = certifiedCatalog.models.map(model => ({
 }));
 const selectedRoute = {
   schema_version: '1', workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt,
-  head_sha: runBinding.headSha, effective_mode: 'enforce', status: 'prepared', reviewable_file_count: 1,
+  head_sha: runBinding.headSha, effective_mode: 'enforce', decision_llm_enabled: false, status: 'prepared', reviewable_file_count: 1,
   selected_strategy: 'fast', selected_model_id: selectedModel, fallback_models: fastEntry.allowed_fallbacks,
   proposed_strategy: 'fast', route_source: 'deterministic_fallback', decision_status: 'unavailable',
   policy_version: '1.0.0', model_catalog_version: catalog.catalog_version,
 };
 const finalAudit = {
   schema_version: '3', repo_id: 42, repo: 'owner/repo', pr_number: 7, head_sha: runBinding.headSha,
-  workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt, effective_mode: 'enforce',
+  workflow_run_id: runBinding.workflowRunId, run_attempt: runBinding.runAttempt, effective_mode: 'enforce', decision_llm_enabled: false,
   decision_status: 'unavailable', egress_status: 'denied', classification_status: 'unclassified_code', risk_floor: 'fast',
   selected_strategy: 'fast', proposed_strategy: 'fast', policy_version: '1.0.0', feature_schema_version: '3',
   decision_state_version: '1', model_catalog_version: catalog.catalog_version, owner_approval_ref: null,
@@ -41,7 +41,7 @@ const finalAudit = {
   features_incomplete: false, review_quality_measured: true, decision_api_cost: null, latency_ms: null,
 };
 const decisionRecord = {
-  schema_version: '1', effective_mode: 'enforce', head_sha: runBinding.headSha, workflow_run_id: runBinding.workflowRunId, run_attempt: 2,
+  schema_version: '1', effective_mode: 'enforce', decision_llm_enabled: false, head_sha: runBinding.headSha, workflow_run_id: runBinding.workflowRunId, run_attempt: 2,
   classification_status: 'unclassified_code', risk_floor: 'fast', reviewable_file_count: 1,
   proposed_strategy: 'fast', selected_strategy: 'fast', route_source: 'deterministic_fallback',
   decision_status: 'unavailable', egress_status: 'denied', observer_status: 'not_started',
