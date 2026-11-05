@@ -1,6 +1,6 @@
 const CLASSES = new Set(['allowlisted_docs_only', 'allowlisted_low_risk_code', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete']);
 const CODE_EXTENSIONS = /\.(?:[cm]?[jt]sx?|py|sql|sh)$/i;
-const HIGH_RISK = /(?:^|[\\/._-])(?:security|identity|auth|credential|permission|secret|policy|iam|crypto|migration|migrations|payment|deploy)(?:$|[\\/._-])/i;
+const HIGH_RISK = /(?:^|[\\/._-])(?:security|identity|auth|authentication|authorization|iam|secret|secrets|credential|credentials|token|crypto|permission|permissions|policy|policies|migration|migrations|payment|payments|deploy|deployment|workflow|workflows)(?:$|[\\/._-])/i;
 const TEST_GENERATED_DIR = /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures|__fixtures__|generated|__generated__)(?:\/|$)/i;
 const TEST_SPEC_BASENAME = /(?:^|[._-])(?:test|tests|spec|specs)(?=[._-]|$)/i;
 
