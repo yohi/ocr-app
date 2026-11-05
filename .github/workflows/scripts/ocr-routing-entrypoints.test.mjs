@@ -109,7 +109,8 @@ function fixture(count = 1) {
     'ocr-run-binding.mjs': { createRunBindingFromEnv: env => ({ ...binding, mode: env.DECISION_ROUTING_MODE }) },
     'routing-authorization.mjs': { fetchCurrentRoutingAuthorization: authority, hashRoutingSourceManifest: () => `sha256:${'d'.repeat(64)}` },
     'routing-execution-context.mjs': { readRoutingExecutionContext: () => ({}), revalidateRoutingExecutionContext: revalidate },
-    'load-review-certification.mjs': { readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
+    'load-review-certification.mjs': { createRoutingEvidenceReader: () => () => Buffer.from('evidence'),
+      readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
     'update-check-run.mjs': checkRun,
     'ocr-routing-audit.mjs': { finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
@@ -154,6 +155,13 @@ test('production off Host entrypoint runs without loading the routing catalog or
     return value.imports(source);
   }, env);
   assert.equal(hosts, 1);
+});
+
+test('routing workflow entrypoints share the safe certification evidence reader', () => {
+  for (const name of ['Run Antigravity review host', 'Finalize routing audit', 'Reauthorize routing audit upload',
+    'Evaluate routing publish eligibility', 'Publish enforce review']) {
+    assert.match(step(name), /createRoutingEvidenceReader/, `${name} must use the shared evidence path resolver`);
+  }
 });
 
 test('production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs', async () => {

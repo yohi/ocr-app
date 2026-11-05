@@ -94,6 +94,22 @@ test('rejects catalog self-endorsement without approved index evidence', () => {
   assert.throws(() => loadVerifiedCertification({ catalog: { models: [{ certification_status: 'certified', certification_reference: 'sha256:fake' }] } }), { message: 'REVIEW_CERTIFICATION_INVALID' });
 });
 
+test('reads config-root certification paths only from the routing evidence directory', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'routing-evidence-reader-'));
+  const config = join(root, '.github/workflows/config');
+  const evidence = join(config, 'routing-evidence');
+  mkdirSync(evidence, { recursive: true });
+  const bytes = Buffer.from('{"schema_version":"1"}');
+  writeFileSync(join(evidence, 'inventory.json'), bytes);
+  try {
+    const { createRoutingEvidenceReader } = await import('./load-review-certification.mjs');
+    assert.equal(typeof createRoutingEvidenceReader, 'function');
+    const readEvidence = createRoutingEvidenceReader({ trustedRoot: root });
+    assert.deepEqual(readEvidence('routing-evidence/inventory.json'), bytes);
+    assert.throws(() => readEvidence('routing-evidence/../outside.json'), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
 test('returns exactly resolver evidence for valid certification, capability dossier, and inventory approvals', () => {
   const f = fixture();
   try {
