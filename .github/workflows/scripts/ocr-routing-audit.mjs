@@ -6,7 +6,7 @@ import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBind
 import { validateAttemptEvent, validateAttemptOrder, validateRoutingAttempts } from './routing-attempts.mjs';
 export { validateRoutingAttempts } from './routing-attempts.mjs';
 
-const CLASSIFICATIONS = ['allowlisted_docs_only', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete'];
+const CLASSIFICATIONS = ['allowlisted_docs_only', 'allowlisted_low_risk_code', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete'];
 const STRATEGIES = ['fast', 'deep'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
 const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid_response'];

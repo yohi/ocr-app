@@ -149,3 +149,39 @@ test('choice probability of 0.65 is sufficient when the margin is clear', () => 
   const result = select({ decision: { ...confidentFast, probabilities: { fast: 0.65, deep: 0.35 } } });
   assert.equal(result.selectedStrategy, 'fast');
 });
+
+test('C10: code-fast classification falls back to deep when decision did not succeed or is weak', () => {
+  const codeFastFeatures = { risk_floor: 'fast', classification_status: 'allowlisted_low_risk_code' };
+  for (const [decision, expectedSource] of [
+    [{ status: 'decision_unavailable', reason: '429' }, 'deterministic_fallback'],
+    [{ status: 'invalid_response' }, 'deterministic_fallback'],
+    [{ status: 'decision_available', choice: 'fast', probabilities: { fast: 0.64, deep: 0.36 } }, 'deterministic_fallback'],
+    [{ status: 'decision_available', choice: 'fast', probabilities: { fast: 0.57, deep: 0.43 } }, 'deterministic_fallback'],
+    [{ status: 'decision_available', choice: 'deep', probabilities: { fast: 0.2, deep: 0.8 } }, 'model_decision'],
+  ]) {
+    const result = select({ features: codeFastFeatures, decision });
+    assert.equal(result.selectedStrategy, 'deep', JSON.stringify(decision));
+    assert.equal(result.routeSource, expectedSource, JSON.stringify(decision));
+    assert.equal(result.decisionStatus, decision.status === 'decision_unavailable' ? 'unavailable' : decision.status === 'invalid_response' ? 'invalid_response' : 'succeeded');
+  }
+});
+
+test('C11: code-fast classification can select fast when decision succeeded and is confident', () => {
+  const result = select({ features: { risk_floor: 'fast', classification_status: 'allowlisted_low_risk_code' }, decision: confidentFast });
+  assert.equal(result.selectedStrategy, 'fast');
+  assert.equal(result.routeSource, 'model_decision');
+  assert.equal(result.decisionStatus, 'succeeded');
+});
+
+test('docs-only fast remains unchanged and does not require the code-fast guard', () => {
+  const result = select({ features: { risk_floor: 'fast', classification_status: 'allowlisted_docs_only' }, decision: confidentFast });
+  assert.equal(result.selectedStrategy, 'fast');
+  assert.equal(result.routeSource, 'model_decision');
+});
+
+test('confidence presence or absence does not alter deterministic selection', () => {
+  const withoutConfidence = select({ features: { risk_floor: 'fast', classification_status: 'allowlisted_low_risk_code' }, decision: { ...confidentFast, confidence: null } });
+  const withConfidence = select({ features: { risk_floor: 'fast', classification_status: 'allowlisted_low_risk_code' }, decision: confidentFast });
+  assert.equal(withoutConfidence.selectedStrategy, withConfidence.selectedStrategy);
+  assert.equal(withoutConfidence.routeSource, withConfidence.routeSource);
+});

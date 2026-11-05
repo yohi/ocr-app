@@ -88,8 +88,8 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
         state: decisionState,
         questions: { review_strategy: {
           type: 'choice',
-          instructions: 'Choose code review depth from PR metadata only. Deep is preferred for high impact or uncertainty. This is advisory; application policy may override.',
-          criteria: { fast: 'Low-impact allowlisted documentation changes only', deep: 'Code, security-sensitive, unknown, complex or high-impact changes' },
+          instructions: 'Choose code review depth from PR metadata only. Deep is preferred for high impact or uncertainty. Fast is limited to allowlisted low-risk changes. This is advisory; application policy may override.',
+          criteria: { fast: 'Low-impact allowlisted documentation or low-risk code changes', deep: 'Code, security-sensitive, unknown, complex or high-impact changes' },
         } },
       }),
     });

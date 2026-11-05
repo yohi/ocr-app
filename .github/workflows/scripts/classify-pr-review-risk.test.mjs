@@ -13,6 +13,17 @@ const base = (path = 'README.md', overrides = {}) => ({
   classification_status: 'incomplete', features_incomplete: false,
   review_scope_gap: false, risk_floor: 'deep', ...overrides,
 });
+const fixturePolicy = { ...policy, fast_code_allow_paths: ['^src/safe/.*\\.(?:ts|js|py)$'] };
+const codeFile = (path, overrides = {}) => ({ path, status: 'modified', oldMode: '100644', mode: '100644', additions: 1, deletions: 0, binary: false, ...overrides });
+const codeBase = (path = 'src/safe/parser.ts', overrides = {}) => base(path, {
+  all_changed_files: [codeFile(path)],
+  ocr_reviewable_paths: [path],
+  language_families: ['typescript'],
+  change_areas: ['other'],
+  test_files_changed: false,
+  ...overrides,
+});
+
 
 test('allows only fully reviewable README markdown modifications as fast', () => {
   const result = classifyPRRisk(base(), policy);
@@ -70,4 +81,117 @@ test('incomplete features and unobserved security metadata never establish safe 
   assert.deepEqual([code.classification_status, code.risk_floor], ['unclassified_code', 'deep']);
   const unknown = classifyPRRisk(base('README.md', { security_signal: 'unassessable' }), policy);
   assert.deepEqual([unknown.classification_status, unknown.risk_floor], ['unclassified_other', 'deep']);
+});
+
+test('C01: allowlisted low-risk code selects new enum and fast floor with fixture allowlist', () => {
+  const result = classifyPRRisk(codeBase('src/safe/parser.ts'), fixturePolicy);
+  assert.equal(result.classification_status, 'allowlisted_low_risk_code');
+  assert.equal(result.risk_floor, 'fast');
+});
+
+test('C02: empty fast_code_allow_paths keeps normal code as unclassified_code deep', () => {
+  const result = classifyPRRisk(codeBase('src/safe/parser.ts'), policy);
+  assert.equal(result.classification_status, 'unclassified_code');
+  assert.equal(result.risk_floor, 'deep');
+});
+
+test('C03: mixed docs and code PR remains deep even when code path is allowlisted', () => {
+  const result = classifyPRRisk(codeBase('src/safe/parser.ts', {
+    all_changed_files: [codeFile('src/safe/parser.ts'), { path: 'README.md', status: 'modified', oldMode: '100644', mode: '100644', additions: 1, deletions: 0, binary: false }],
+    all_changed_file_count: 2, reviewable_file_count: 2, excluded_file_count: 0, review_scope_gap: false,
+  }), fixturePolicy);
+  assert.equal(result.classification_status, 'unclassified_code');
+  assert.equal(result.risk_floor, 'deep');
+});
+
+test('C04: high-risk tokens in allowlisted path remain high_risk_metadata deep', () => {
+  for (const path of ['src/safe/auth/token.ts', 'src/safe/identity/map.ts', 'src/safe/credential/store.ts', 'src/safe/secret/manager.ts', 'src/safe/policy/rule.ts', 'src/safe/crypto/util.ts', 'src/safe/migration/001.ts', 'src/safe/payment/gateway.ts']) {
+    const result = classifyPRRisk(codeBase(path), fixturePolicy);
+    assert.equal(result.classification_status, 'high_risk_metadata', path);
+    assert.equal(result.risk_floor, 'deep', path);
+  }
+});
+
+test('C05: CI/workflow and migration paths stay deep even if allowlisted', () => {
+  const ci = classifyPRRisk(codeBase('.github/workflows/ci.yml', { language_families: ['yaml'], change_areas: ['ci'] }), fixturePolicy);
+  assert.equal(ci.risk_floor, 'deep');
+  const migration = classifyPRRisk(codeBase('src/safe/migrations/001.ts', { change_areas: ['migration'] }), fixturePolicy);
+  assert.equal(migration.risk_floor, 'deep');
+
+  const ciCodePolicy = { ...fixturePolicy, fast_code_allow_paths: ['^\\.github/workflows/.*\\.ts$'] };
+  const ciCode = classifyPRRisk(codeBase('.github/workflows/ci.ts'), ciCodePolicy);
+  assert.equal(ciCode.classification_status, 'unclassified_code');
+  assert.equal(ciCode.risk_floor, 'deep');
+
+  const ciArea = classifyPRRisk(codeBase('src/safe/parser.ts', { change_areas: ['ci'] }), fixturePolicy);
+  assert.equal(ciArea.classification_status, 'unclassified_code');
+  assert.equal(ciArea.risk_floor, 'deep');
+});
+
+test('C06: rename, binary, executable, and delete code stay deep despite allowlist', () => {
+  const variations = [
+    { status: 'renamed', oldPath: 'src/safe/parser.ts' },
+    { binary: true },
+    { mode: '100755', oldMode: '100644' },
+    { status: 'deleted', oldMode: '100644', mode: '100644', additions: 0, deletions: 10 },
+  ];
+  for (const variation of variations) {
+    const result = classifyPRRisk(codeBase('src/safe/parser.ts', { all_changed_files: [{ ...codeFile('src/safe/parser.ts'), ...variation }] }), fixturePolicy);
+    assert.equal(result.risk_floor, 'deep', JSON.stringify(variation));
+  }
+});
+
+test('C07: scope gap, incomplete features, and unassessable signals keep code deep', () => {
+  const gap = classifyPRRisk(codeBase('src/safe/parser.ts', { review_scope_gap: true }), fixturePolicy);
+  assert.equal(gap.risk_floor, 'deep');
+  const incomplete = classifyPRRisk(codeBase('src/safe/parser.ts', { features_incomplete: true }), fixturePolicy);
+  assert.equal(incomplete.classification_status, 'incomplete');
+  assert.equal(incomplete.risk_floor, 'deep');
+  const unassessable = classifyPRRisk(codeBase('src/safe/parser.ts', { security_signal: 'unassessable' }), fixturePolicy);
+  assert.equal(unassessable.risk_floor, 'deep');
+});
+
+test('C08 and C08a-e: test files, fixtures, and generated paths stay unclassified_code deep', () => {
+  for (const path of [
+    'src/safe/parser.test.ts',
+    'tests/safe.py',
+    'src/safe/parser.spec.ts',
+    'src/safe/fixtures/data.ts',
+    'src/safe/generated/client.ts',
+    'src/safe/__fixtures__/data.ts',
+    'src/safe/__generated__/client.ts',
+  ]) {
+    const result = classifyPRRisk(codeBase(path), fixturePolicy);
+    assert.equal(result.classification_status, 'unclassified_code', path);
+    assert.equal(result.risk_floor, 'deep', path);
+  }
+  const flag = classifyPRRisk(codeBase('src/safe/parser.ts', { test_files_changed: true }), fixturePolicy);
+  assert.equal(flag.classification_status, 'unclassified_code');
+  assert.equal(flag.risk_floor, 'deep');
+});
+
+test('C09: docs-only PR keeps allowlisted_docs_only fast unchanged', () => {
+  const result = classifyPRRisk(base('README.md'), policy);
+  assert.equal(result.classification_status, 'allowlisted_docs_only');
+  assert.equal(result.risk_floor, 'fast');
+});
+
+test('unknown status, malformed metadata, and unsafe modes are not overridden by empty allowlist', () => {
+  assert.equal(classifyPRRisk(codeBase('src/safe/parser.ts', { all_changed_files: [codeFile('src/safe/parser.ts', { status: 'unknown' })] }), fixturePolicy).classification_status, 'unclassified_code');
+});
+
+test('invalid fast_code_allow_paths types reject the trusted policy', () => {
+  for (const invalidValue of ['^src/.*$', {}, null]) {
+    assert.throws(
+      () => classifyPRRisk(codeBase(), { ...fixturePolicy, fast_code_allow_paths: invalidValue }),
+      /Trusted risk policy is invalid/,
+    );
+  }
+});
+
+test('an omitted fast_code_allow_paths field remains an empty allowlist', () => {
+  const { fast_code_allow_paths: _fastCodeAllowPaths, ...policyWithoutFastPaths } = fixturePolicy;
+  const result = classifyPRRisk(codeBase(), policyWithoutFastPaths);
+  assert.equal(result.classification_status, 'unclassified_code');
+  assert.equal(result.risk_floor, 'deep');
 });

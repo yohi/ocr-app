@@ -1,6 +1,7 @@
 {
   "schema_version": "1",
   "allow_paths": ["^README\\.md$", "^docs/.+\\.md$"],
+  "fast_code_allow_paths": [],
   "deny_paths": [
     "(^|/)AGENTS\\.md$",
     "(^|/)(security|identity|auth|credential|permission|secret|policy)([-_./]|$)",
