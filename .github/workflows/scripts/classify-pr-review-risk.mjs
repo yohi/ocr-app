@@ -1,6 +1,10 @@
 const CLASSES = new Set(['allowlisted_docs_only', 'allowlisted_low_risk_code', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete']);
 const CODE_EXTENSIONS = /\.(?:[cm]?[jt]sx?|py|sql|sh)$/i;
-const HIGH_RISK = /(?:^|[\\/._-])(?:security|identity|auth|credential|permission|secret|policy|iam|crypto|migration|migrations|payment|deploy)(?:$|[\\/._-])/i;
+const HIGH_RISK_TOKENS = new Set([
+  'security', 'identity', 'auth', 'authentication', 'authorization', 'iam', 'secret', 'secrets',
+  'credential', 'credentials', 'token', 'crypto', 'permission', 'permissions', 'policy', 'policies',
+  'migration', 'migrations', 'payment', 'payments', 'deploy', 'deployment', 'workflow', 'workflows',
+]);
 const TEST_GENERATED_DIR = /(?:^|\/)(?:test|tests|spec|specs|__tests__|fixtures|__fixtures__|generated|__generated__)(?:\/|$)/i;
 const TEST_SPEC_BASENAME = /(?:^|[._-])(?:test|tests|spec|specs)(?=[._-]|$)/i;
 
@@ -95,6 +99,10 @@ function isNonOverridableCiOrGitHubPath(features, paths) {
     paths.some(path => /(?:^|[\\/])\.github(?:[\\/]|$)/i.test(path));
 }
 
+function hasHighRiskToken(path) {
+  return path.split(/[\\/._-]+/).some(token => HIGH_RISK_TOKENS.has(token.toLowerCase()));
+}
+
 function allPathsMatchAllowlist(paths, allowlist) {
   return Array.isArray(allowlist) && allowlist.length > 0 && paths.every(path => pathsMatch([path], allowlist));
 }
@@ -105,7 +113,7 @@ function decideStatus(features, { paths, code, allCode, known, normalText, unsaf
   let classification_status;
   if (incomplete) classification_status = 'incomplete';
   else if (!signalsKnown) classification_status = 'unclassified_other';
-  else if (features.security_signal === 'metadata_positive' || features.migration_signal === 'metadata_positive' || paths.some(path => HIGH_RISK.test(path))) classification_status = 'high_risk_metadata';
+  else if (features.security_signal === 'metadata_positive' || features.migration_signal === 'metadata_positive' || paths.some(hasHighRiskToken)) classification_status = 'high_risk_metadata';
   else if (unsafeMode) classification_status = 'unclassified_other';
   else if (code) {
     if (allCode && known && !isNonOverridableTestOrGenerated(features) && !isNonOverridableCiOrGitHubPath(features, paths) && normalText && features.change_size === 'small' &&

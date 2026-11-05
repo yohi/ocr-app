@@ -112,6 +112,14 @@ test('C04: high-risk tokens in allowlisted path remain high_risk_metadata deep',
   }
 });
 
+test('C04a: plan-mandated high-risk tokens in allowlisted path remain high_risk_metadata deep', () => {
+  for (const path of ['src/safe/auth/token.ts', '.github/workflows/ci.yml', 'src/safe/migrations/001.ts', 'src/safe/payments/calc.ts', 'src/safe/deploy/config.ts', 'src/safe/workflow/run.ts', 'src/safe/authentication/session.ts', 'src/safe/authorization/role.ts', 'src/safe/secrets/manager.ts', 'src/safe/credentials/store.ts', 'src/safe/crypto/hash.ts']) {
+    const result = classifyPRRisk(codeBase(path), fixturePolicy);
+    assert.equal(result.classification_status, 'high_risk_metadata', path);
+    assert.equal(result.risk_floor, 'deep', path);
+  }
+});
+
 test('C05: CI/workflow and migration paths stay deep even if allowlisted', () => {
   const ci = classifyPRRisk(codeBase('.github/workflows/ci.yml', { language_families: ['yaml'], change_areas: ['ci'] }), fixturePolicy);
   assert.equal(ci.risk_floor, 'deep');
@@ -120,7 +128,7 @@ test('C05: CI/workflow and migration paths stay deep even if allowlisted', () =>
 
   const ciCodePolicy = { ...fixturePolicy, fast_code_allow_paths: ['^\\.github/workflows/.*\\.ts$'] };
   const ciCode = classifyPRRisk(codeBase('.github/workflows/ci.ts'), ciCodePolicy);
-  assert.equal(ciCode.classification_status, 'unclassified_code');
+  assert.equal(ciCode.classification_status, 'high_risk_metadata');
   assert.equal(ciCode.risk_floor, 'deep');
 
   const ciArea = classifyPRRisk(codeBase('src/safe/parser.ts', { change_areas: ['ci'] }), fixturePolicy);
