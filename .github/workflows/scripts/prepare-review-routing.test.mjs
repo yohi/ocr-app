@@ -387,8 +387,13 @@ test('default enforce preparation loads and verifies evidence from central confi
   mkdirSync(runTemp);
   const fixture = certificationFixture();
   const now = fixture.now;
+  const certificationIndex = {
+    ...fixture.trust.index,
+    certifications: fixture.trust.index.certifications.map(entry => ({ ...entry, path: `routing-evidence/${entry.path}` })),
+    cli_inventory: { ...fixture.trust.index.cli_inventory, path: `routing-evidence/${fixture.trust.index.cli_inventory.path}` },
+  };
   const pinnedRegistry = { schema_version: '1', approvals: [], activations: [], revoked_refs: [] };
-  createCentralCheckout(selfRepo, pinnedRegistry, { catalog: fixture.trust.catalog, index: fixture.trust.index,
+  createCentralCheckout(selfRepo, pinnedRegistry, { catalog: fixture.trust.catalog, index: certificationIndex,
     egressPolicy: allowedEgressPolicyFixture });
   const configRoot = join(selfRepo, '.github/workflows/config');
   const policySha256 = `sha256:${hash(readFileSync(join(configRoot, 'decision-egress-policy.json')))}`;
