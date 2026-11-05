@@ -225,40 +225,103 @@
       "subject_sha256": "sha256:7c4251f3c1d17e51a4dabba68a8cb0086d17fbc2e739395976b9b06afdcce25f",
       "issued_at": "2026-11-05T13:25:02.742Z",
       "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-OPERATION-20261105",
+      "kind": "owner_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:ee4c11f419760ce4131dd90a4221a2724509c05c5c74e73a7e37b71959e7de36",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-SECURITY-20261105",
+      "kind": "security",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:801418208fb37c1335f9477bd6e99851df9d60e22aa05d671094e83f16578eba",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-AUDIT-20261105",
+      "kind": "audit_operation",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:fc1f692fa35ef979b3499498304ed5f0f836ad8fa0c65d5110334b86ef64249f",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-G1-20261105",
+      "kind": "g1",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:c122ba21fe84acb76d9a51f31ac44550b35dace4a9ca377614a4303d2503c50c",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-G2-20261105",
+      "kind": "g2",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:c122ba21fe84acb76d9a51f31ac44550b35dace4a9ca377614a4303d2503c50c",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-G3-20261105",
+      "kind": "g3",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:c122ba21fe84acb76d9a51f31ac44550b35dace4a9ca377614a4303d2503c50c",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
+    },
+    {
+      "ref": "OWNER-ROUTE-FIX2-G4-20261105",
+      "kind": "g4",
+      "repo_id": 1318645969,
+      "full_name": "yohi/ocr-app",
+      "subject_sha256": "sha256:c122ba21fe84acb76d9a51f31ac44550b35dace4a9ca377614a4303d2503c50c",
+      "issued_at": "2026-11-05T13:44:13.783Z",
+      "expires_at": "2026-11-12T11:03:17.989Z"
     }
   ],
   "activations": [
     {
       "repo_id": 1318645969,
       "full_name": "yohi/ocr-app",
-      "issued_at": "2026-11-05T13:25:02.742Z",
+      "issued_at": "2026-11-05T13:44:13.783Z",
       "expires_at": "2026-11-12T11:03:17.989Z",
       "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
       "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
       "mode": "shadow",
       "approval_refs": [
-        "OWNER-ROUTE-OPERATION-20261105",
-        "OWNER-ROUTE-SECURITY-20261105",
-        "OWNER-ROUTE-AUDIT-20261105",
-        "OWNER-ROUTE-G1-20261105"
+        "OWNER-ROUTE-FIX2-OPERATION-20261105",
+        "OWNER-ROUTE-FIX2-SECURITY-20261105",
+        "OWNER-ROUTE-FIX2-AUDIT-20261105",
+        "OWNER-ROUTE-FIX2-G1-20261105"
       ]
     },
     {
       "repo_id": 1318645969,
       "full_name": "yohi/ocr-app",
-      "issued_at": "2026-11-05T13:25:02.742Z",
+      "issued_at": "2026-11-05T13:44:13.783Z",
       "expires_at": "2026-11-12T11:03:17.989Z",
       "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
       "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
       "mode": "enforce",
       "approval_refs": [
-        "OWNER-ROUTE-OPERATION-20261105",
-        "OWNER-ROUTE-SECURITY-20261105",
-        "OWNER-ROUTE-AUDIT-20261105",
-        "OWNER-ROUTE-G1-20261105",
-        "OWNER-ROUTE-G2-20261105",
-        "OWNER-ROUTE-G3-20261105",
-        "OWNER-ROUTE-G4-20261105"
+        "OWNER-ROUTE-FIX2-OPERATION-20261105",
+        "OWNER-ROUTE-FIX2-SECURITY-20261105",
+        "OWNER-ROUTE-FIX2-AUDIT-20261105",
+        "OWNER-ROUTE-FIX2-G1-20261105",
+        "OWNER-ROUTE-FIX2-G2-20261105",
+        "OWNER-ROUTE-FIX2-G3-20261105",
+        "OWNER-ROUTE-FIX2-G4-20261105"
       ]
     }
   ],

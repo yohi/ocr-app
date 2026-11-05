@@ -1,0 +1,22 @@
+{
+  "schema_version": "1",
+  "ref": "OWNER-ROUTE-FIX2-SECURITY-20261105",
+  "kind": "security",
+  "issuer": "owner",
+  "owner_decision": "approve",
+  "repo_id": 1318645969,
+  "full_name": "yohi/ocr-app",
+  "allowed_modes": [
+    "shadow",
+    "enforce"
+  ],
+  "allowed_effects": [
+    "routing"
+  ],
+  "source_manifest_sha256": "sha256:c122ba21fe84acb76d9a51f31ac44550b35dace4a9ca377614a4303d2503c50c",
+  "policy_sha256": "sha256:9463ad4c40a7dc489a54ecd7894737a733d925ba3bd49bd5a9f13b3ee09f4bb2",
+  "catalog_sha256": "sha256:dd64cedda2ba908b7cc327ec114aaee4012683fcb6b3fc64d254ecfcaf954110",
+  "issued_at": "2026-11-05T13:44:13.783Z",
+  "expires_at": "2026-11-12T11:03:17.989Z",
+  "revocation_ref": "OWNER-ROUTE-FIX2-SECURITY-20261105"
+}

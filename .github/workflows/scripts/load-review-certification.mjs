@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
-import { isAbsolute, normalize, resolve, sep } from 'node:path';
+import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 
 const EVIDENCE_LIMIT = 65_536;
 const CLI_LIMIT = 256 * 1024 * 1024;
@@ -62,6 +62,29 @@ function readEvidenceBytes(path, expectedHash, readEvidence) {
   if (!(Buffer.isBuffer(bytes) || bytes instanceof Uint8Array) || bytes.byteLength > EVIDENCE_LIMIT
     || sha256(bytes) !== expectedHash) return certificationFailure();
   return Buffer.from(bytes);
+}
+
+export function createRoutingEvidenceReader({ trustedRoot, fileSystem = { lstatSync, readFileSync, realpathSync } } = {}) {
+  if (typeof trustedRoot !== 'string' || !trustedRoot) return certificationFailure();
+  const configRoot = resolve(trustedRoot, '.github/workflows/config');
+  const evidenceRoot = resolve(configRoot, 'routing-evidence');
+  return path => {
+    try {
+      validateEvidencePath(path);
+      const file = resolve(configRoot, path);
+      const relativePath = relative(evidenceRoot, file);
+      if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) return certificationFailure();
+      const stat = fileSystem.lstatSync(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) return certificationFailure();
+      const realRoot = fileSystem.realpathSync(evidenceRoot);
+      const realFile = fileSystem.realpathSync(file);
+      const realRelativePath = relative(realRoot, realFile);
+      if (realRelativePath === '..' || realRelativePath.startsWith(`..${sep}`) || isAbsolute(realRelativePath)) return certificationFailure();
+      return fileSystem.readFileSync(file);
+    } catch {
+      return certificationFailure();
+    }
+  };
 }
 
 function findApproval(registry, reference, kind, subjectDigest, repoIdentity, now) {
