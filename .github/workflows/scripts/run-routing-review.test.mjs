@@ -62,7 +62,7 @@ function input(overrides = {}) {
       evaluateStartup: () => ({ authorized: true }),
       resolveModels: () => ({ primaryModelId: 'certified-primary', allowedFallbackModels: ['certified-fallback'] }),
       trustedInputs: { needsModel: true, catalog: { models: [{ model_id: 'certified-primary', certification_status: 'certified', capability_tier: 'deep', allowed_fallbacks: ['certified-fallback'] }, { model_id: 'certified-fallback', certification_status: 'certified', capability_tier: 'deep' }] } },
-      readInstalledCliIdentity: async () => ({ binarySha256: 'verified-binary', resolvedPath: '/attested/bin/agy' }),
+      readInstalledCliIdentity: async () => ({ binarySha256: '0'.repeat(64), resolvedPath: '/attested/bin/agy' }),
       createRecorder: async () => ({ onAttemptEvent: () => {}, runAttemptId: 'a'.repeat(32), seal: () => {} }),
       writeResult: async () => undefined,
       writeOutput: async () => undefined,
@@ -399,7 +399,7 @@ test('off runs in a clean process with routing dependencies unavailable', () => 
   assert.equal(child.status, 0, child.stderr);
 });
 
-test.todo('RED 3-2: enforce should check CLI identity before reading route or decision once the guard is implemented', async () => {
+test('RED 3-2: enforce checks CLI identity before reading route or decision and fails closed on identity error', async () => {
   const order = [];
   const fixture = input({
     env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
@@ -412,4 +412,64 @@ test.todo('RED 3-2: enforce should check CLI identity before reading route or de
   const result = await runRoutingReview(fixture.args);
   assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
   assert.deepEqual(order, ['auth', 'startup', 'identity']);
+});
+
+test('RED 3-2: enforce rejects a malformed CLI identity before reading route or decision', async () => {
+  const order = [];
+  const outputs = [];
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+    readInstalledCliIdentity: async () => { order.push('identity'); return { binarySha256: 'not-a-hash', resolvedPath: '/attested/bin/agy' }; },
+    readRoute: async () => { order.push('route'); return { selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: [], reviewable_file_count: 2, status: 'prepared' }; },
+    readDecision: async () => { order.push('decision'); return fixture.decision; },
+    writeOutput: async value => outputs.push(value),
+  });
+  const result = await runRoutingReview(fixture.args);
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+  assert.deepEqual(order, ['identity']);
+  assert.equal(fixture.calls.length, 0);
+  assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
+});
+
+test('RED 3-2: enforce CLI identity failure suppresses Host and publish output', async () => {
+  const outputs = [];
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+    readInstalledCliIdentity: async () => { throw new Error('REVIEW_CLI_UNAVAILABLE'); },
+    writeOutput: async value => outputs.push(value),
+  });
+  const result = await runRoutingReview(fixture.args);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.message, 'ROUTING_ACTIVATION_DENIED');
+  assert.equal(fixture.calls.length, 0);
+  assert.deepEqual(outputs, ['ROUTE_GUARD_FAILED=true']);
+});
+
+test('RED 3-2: enforce verifies CLI identity before route and decision in the success path', async () => {
+  const order = [];
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'enforce', RUNNER_TEMP: '/tmp/run' },
+    fetchCurrentAuthorization: async () => { order.push('auth'); return { registry: {}, operationalDossiers: {} }; },
+    evaluateStartup: () => { order.push('startup'); return { authorized: true }; },
+    readInstalledCliIdentity: async () => { order.push('identity'); return { binarySha256: '0'.repeat(64), resolvedPath: '/attested/bin/agy' }; },
+    readRoute: async () => { order.push('route'); return { selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: ['certified-fallback'], reviewable_file_count: 2, status: 'prepared' }; },
+    readDecision: async () => { order.push('decision'); return fixture.decision; },
+  });
+  await runRoutingReview(fixture.args);
+  assert.equal(fixture.calls.length, 1);
+  assert.deepEqual(order, ['auth', 'startup', 'identity', 'route', 'decision']);
+});
+
+test('RED 3-2: off and shadow modes do not read CLI identity', async () => {
+  for (const mode of ['off', 'shadow']) {
+    let identityCalls = 0;
+    const fixture = input({
+      env: { DECISION_ROUTING_MODE: mode, RUNNER_TEMP: '/tmp/run' },
+      readInstalledCliIdentity: async () => { identityCalls++; return { binarySha256: '0'.repeat(64), resolvedPath: '/attested/bin/agy' }; },
+      ...(mode === 'shadow' ? { readRoute: async () => ({ reviewable_file_count: 0, selected_model_id: null, fallback_models: [] }) } : {}),
+    });
+    const result = await runRoutingReview(fixture.args);
+    assert.equal(result.status, 'success', `${mode}: expected success but got ${result.message}`);
+    assert.equal(identityCalls, 0, `${mode}: CLI identity must not be read`);
+  }
 });

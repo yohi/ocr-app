@@ -54,7 +54,6 @@ export async function runRoutingReview({
 
   try {
     if (!['shadow', 'enforce'].includes(mode)) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
-    const route = await readRoute();
     const authorization = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
     if (!authorization?.registry) denied('ROUTING_ACTIVATION_DENIED');
     const freshInputs = {
@@ -105,6 +104,15 @@ export async function runRoutingReview({
       }
       return result;
     };
+    let cliIdentity = null;
+    if (mode === 'enforce') {
+      cliIdentity = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
+      if (!cliIdentity || typeof cliIdentity.binarySha256 !== 'string' || !/^[0-9a-f]{64}$/.test(cliIdentity.binarySha256)
+        || typeof cliIdentity.resolvedPath !== 'string' || !cliIdentity.resolvedPath) {
+        denied('ROUTING_ACTIVATION_DENIED');
+      }
+    }
+    const route = await readRoute();
     if (!route) {
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
       return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
@@ -121,9 +129,7 @@ export async function runRoutingReview({
       denied('RUN_BINDING_INVALID');
     }
     let certification = null;
-    let cliIdentity = null;
     if (mode === 'enforce' && route.reviewable_file_count > 0) {
-      cliIdentity = await readInstalledCliIdentity({ env, targetRoot: env.TARGET_REPO_PATH });
       const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
         trustedInputs: { ...freshInputs, needsModel: true }, repoIdentity, now: now(),
         cliBinarySha256: cliIdentity.binarySha256 });
