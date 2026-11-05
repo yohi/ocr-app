@@ -481,3 +481,47 @@ test('final audit v3 accepts allowlisted_low_risk_code and preserves schema vers
   assert.equal(final.risk_floor, 'fast');
   assert.equal(validateRoutingAudit(final), final);
 });
+
+test('routing log summary reports a skipped selector and the executed review model', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  assert.equal(typeof createRoutingLogSummary, 'function');
+  const summary = createRoutingLogSummary({
+    effective_mode: 'enforce',
+    decision_status: 'not_requested',
+    egress_status: 'denied',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    executed_review_model: 'gemini-3.8-flash-medium',
+    attempted_review_models: ['gemini-3.8-flash-medium'],
+    audit_status: 'sealed',
+  });
+  assert.deepEqual(summary, {
+    effective_mode: 'enforce',
+    selection_llm_attempted: false,
+    selection_llm_succeeded: false,
+    selection_llm_status: 'not_requested',
+    selection_llm_egress_status: 'denied',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    executed_review_model: 'gemini-3.8-flash-medium',
+    attempted_review_models: ['gemini-3.8-flash-medium'],
+    audit_status: 'sealed',
+  });
+});
+
+test('routing log summary distinguishes attempted selection from actual review execution', async () => {
+  const { createRoutingLogSummary } = await import('./ocr-routing-audit.mjs');
+  assert.equal(typeof createRoutingLogSummary, 'function');
+  const summary = createRoutingLogSummary({
+    effective_mode: 'enforce',
+    decision_status: 'succeeded',
+    egress_status: 'allowed',
+    selected_review_model: 'gemini-3.8-flash-medium',
+    executed_review_model: 'claude-opus-5-5-high',
+    attempted_review_models: ['gemini-3.8-flash-medium', 'claude-opus-5-5-high'],
+    audit_status: 'sealed',
+  });
+  assert.equal(summary.selection_llm_attempted, true);
+  assert.equal(summary.selection_llm_succeeded, true);
+  assert.equal(summary.selected_review_model, 'gemini-3.8-flash-medium');
+  assert.equal(summary.executed_review_model, 'claude-opus-5-5-high');
+  assert.deepEqual(summary.attempted_review_models, ['gemini-3.8-flash-medium', 'claude-opus-5-5-high']);
+});

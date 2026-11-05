@@ -164,6 +164,12 @@ test('routing workflow entrypoints share the safe certification evidence reader'
   }
 });
 
+test('Finalize routing audit prints the structured routing summary', () => {
+  const finalizeStep = step('Finalize routing audit');
+  assert.match(finalizeStep, /createRoutingLogSummary/);
+  assert.match(finalizeStep, /OCR_ROUTING_SUMMARY/);
+});
+
 test('production shadow Host entrypoint reauthorizes absent routes with complete central authority inputs', async () => {
   const value = fixture();
   let hosts = 0;

@@ -414,7 +414,7 @@ jobs:
           import { resolve, relative, isAbsolute, sep } from 'node:path';
           try {
             const { createRunBindingFromEnv, readSelectedReviewRoute } = await import('./self-repo/.github/workflows/scripts/prepare-review-routing.mjs');
-            const { finalizeRoutingAudit, verifyValidatedResultEvidence, writeRoutingAudit } = await import('./self-repo/.github/workflows/scripts/ocr-routing-audit.mjs');
+            const { createRoutingLogSummary, finalizeRoutingAudit, verifyValidatedResultEvidence, writeRoutingAudit } = await import('./self-repo/.github/workflows/scripts/ocr-routing-audit.mjs');
             const { fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } = await import('./self-repo/.github/workflows/scripts/routing-authorization.mjs');
             const { readRoutingExecutionContext, revalidateRoutingExecutionContext } = await import('./self-repo/.github/workflows/scripts/routing-execution-context.mjs');
             const { createRoutingEvidenceReader, readInstalledCliIdentity } = await import('./self-repo/.github/workflows/scripts/load-review-certification.mjs');
@@ -455,6 +455,7 @@ jobs:
               catalog, selectedRoute: route, certifiedBundle: revalidated.certifiedBundle, runTemp: process.env.RUNNER_TEMP,
               resultSha256: resultEvidence.resultSha256 });
             writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
+            console.log(`OCR_ROUTING_SUMMARY ${JSON.stringify(createRoutingLogSummary(record))}`);
           } catch (error) {
             if (process.env.DECISION_ROUTING_MODE !== 'enforce') throw error;
             console.error('ROUTING_AUDIT_MISSING');
