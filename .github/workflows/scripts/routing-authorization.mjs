@@ -215,17 +215,23 @@ export async function fetchCurrentRoutingAuthorization({ centralRepoId, centralR
     if (registryBytes.length > 262144) return AUTHORITY_UNAVAILABLE;
     const registry = JSON.parse(registryBytes.toString('utf8'));
     if (!parseRegistry(registry) || registry.approvals.length > 128) return AUTHORITY_UNAVAILABLE;
-    const refs = new Set(registry.approvals.filter((item) => OPERATIONAL_KINDS.has(item.kind)).map((item) => item.ref));
+    const refs = [...new Set(registry.approvals.filter((item) => OPERATIONAL_KINDS.has(item.kind)).map((item) => item.ref))];
     const operationalDossiers = {};
-    for (const ref of refs) {
-      const path = `.github/workflows/config/routing-approvals/${ref}.json`;
-      const dossier = decodeContent(await getJson(`${root}/contents/${path}?ref=master`, token, fetchImpl, signal), path);
-      if (dossier.length > 65536) return AUTHORITY_UNAVAILABLE;
-      const value = JSON.parse(dossier.toString('utf8'));
-      const approval = registry.approvals.find((item) => item.ref === ref);
-      if (!approval || !exactObject(value, DOSSIER_KEYS) || value.schema_version !== '1'
-        || value.ref !== ref || value.kind !== approval.kind) return AUTHORITY_UNAVAILABLE;
-      operationalDossiers[ref] = dossier;
+    // All reads share one 10-second deadline. Batch them to avoid a serial timeout as the registry grows.
+    // Bound concurrency to avoid unbounded authenticated GitHub API traffic.
+    const batchSize = 4;
+    for (let start = 0; start < refs.length; start += batchSize) {
+      const entries = await Promise.all(refs.slice(start, start + batchSize).map(async (ref) => {
+        const path = `.github/workflows/config/routing-approvals/${ref}.json`;
+        const dossier = decodeContent(await getJson(`${root}/contents/${path}?ref=master`, token, fetchImpl, signal), path);
+        if (dossier.length > 65536) throw new Error('unavailable');
+        const value = JSON.parse(dossier.toString('utf8'));
+        const approval = registry.approvals.find((item) => item.ref === ref);
+        if (!approval || !exactObject(value, DOSSIER_KEYS) || value.schema_version !== '1'
+          || value.ref !== ref || value.kind !== approval.kind) throw new Error('unavailable');
+        return [ref, dossier];
+      }));
+      for (const [ref, dossier] of entries) operationalDossiers[ref] = dossier;
     }
     return { registry, operationalDossiers };
   } catch {
