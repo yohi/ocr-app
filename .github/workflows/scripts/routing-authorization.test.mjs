@@ -294,7 +294,7 @@ test('central authorization bounds concurrent dossier reads and fails closed on 
       return new Response(JSON.stringify({ type: 'file', path: '.github/workflows/config/routing-authorization.json',
         encoding: 'base64', content: registryBytes.toString('base64') }));
     }
-    const ref = href.split('/').at(-1).replace(/\\.json\\?ref=master$/, '');
+    const ref = href.split('/').at(-1).replace('.json?ref=master', '');
     const path = `.github/workflows/config/routing-approvals/${ref}.json`;
     const bytes = corruptDossier && ref === 'OWNER-EXTRA-3' ? Buffer.from('{}') : operationalDossiers[ref];
     assert.ok(bytes, `unexpected dossier ${ref}`);
