@@ -27,7 +27,11 @@ const DECISION_STATUSES = ['succeeded', 'unavailable', 'not_requested', 'invalid
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
 const ROUTE_STATUSES = ['prepared', 'no_reviewable_files', 'degraded', 'blocked'];
 const writtenRoutes = new Set();
-const activationDenied = () => { throw Object.assign(new Error('ROUTING_ACTIVATION_DENIED'), { code: 'ROUTING_ACTIVATION_DENIED' }); };
+const activationDenied = (stage = null) => {
+  const error = Object.assign(new Error('ROUTING_ACTIVATION_DENIED'), { code: 'ROUTING_ACTIVATION_DENIED' });
+  if (stage) error.stage = stage;
+  throw error;
+};
 
 function routeError() { throw new Error('ROUTE_SCHEMA_INVALID'); }
 function plainRecord(value) {
@@ -201,7 +205,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     };
     inputs = { ...inputsFromDisk, ...trustedInputs };
     const initialAuthority = await (inputs.fetchCurrentAuthorization ?? fetchCurrentAuthorization)(authorityParams);
-    if (!initialAuthority?.registry) activationDenied();
+    if (!initialAuthority?.registry) activationDenied('AUTHORITY_INITIAL_LOAD');
     inputs.registry = initialAuthority.registry;
     inputs.operationalDossiers = initialAuthority.operationalDossiers;
   }
@@ -243,7 +247,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   let latestAuthorization = { registry: inputs.registry, operationalDossiers: inputs.operationalDossiers };
   if (features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     latestAuthorization = await (inputs.fetchCurrentAuthorization ?? fetchCurrentAuthorization)({ ...authorityParams, now: now() });
-    if (!latestAuthorization?.registry) activationDenied();
+    if (!latestAuthorization?.registry) activationDenied('AUTHORITY_REFRESH_LOAD');
     freshStartup = globalOptIn ? { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] }
       : evaluateRoutingStartup({ mode: binding.mode,
         repoIdentity: { repo_id: repoIdentity.id, full_name: repoIdentity.full_name }, registry: latestAuthorization.registry,
