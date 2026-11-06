@@ -193,6 +193,13 @@ jobs:
           } catch (error) {
             const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
             if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
+            // Report only fixed error classes and stages; never emit raw exceptions or sensitive input.
+            const knownCodes = new Set(['ROUTING_ACTIVATION_DENIED', 'REVIEW_CERTIFICATION_INVALID',
+              'REVIEW_CLI_UNAVAILABLE', 'RUN_BINDING_MISMATCH', 'ROUTING_SOURCE_MANIFEST_INVALID', 'ROUTE_SCHEMA_INVALID']);
+            const rawCode = error?.code ?? error?.message;
+            const code = knownCodes.has(rawCode) ? rawCode : 'UNKNOWN';
+            const stage = ['AUTHORITY_INITIAL_LOAD', 'AUTHORITY_REFRESH_LOAD'].includes(error?.stage) ? error.stage : 'OTHER';
+            console.error(`ROUTING_PREPARE_DIAGNOSTIC code=${code} stage=${stage}`);
             console.error(globalOptIn ? 'DECISION_ROUTING_FAILED' : 'ROUTING_ACTIVATION_DENIED');
             process.exitCode = 1;
           }

@@ -270,6 +270,51 @@ test('central authority uses authenticated fixed-ref GETs and returns exact raw 
   assert.equal(startup.authorized, true);
 });
 
+test('central authorization bounds concurrent dossier reads and fails closed on bad dossier', async () => {
+  const { input, approvals, operationalDossiers } = fixture();
+  for (let i = 0; i < 12; i++) {
+    const ref = `OWNER-EXTRA-${i}`;
+    const dossier = { ...JSON.parse(operationalDossiers['OWNER-OWNER-OPERATION'].toString('utf8')),
+      ref, revocation_ref: ref };
+    const bytes = Buffer.from(JSON.stringify(dossier));
+    operationalDossiers[ref] = bytes;
+    approvals.push({ ...approvals[0], ref, subject_sha256: digest(bytes) });
+  }
+  const registryBytes = Buffer.from(JSON.stringify(input.registry));
+  let active = 0;
+  let peak = 0;
+  let corruptDossier = false;
+  const fetchImpl = async (url, options) => {
+    const href = String(url);
+    assert.equal(options.headers.Authorization, 'Bearer token');
+    if (href === 'https://api.github.com/repos/central/repo') {
+      return new Response(JSON.stringify({ id: 9, full_name: 'central/repo' }));
+    }
+    if (href.endsWith('/routing-authorization.json?ref=master')) {
+      return new Response(JSON.stringify({ type: 'file', path: '.github/workflows/config/routing-authorization.json',
+        encoding: 'base64', content: registryBytes.toString('base64') }));
+    }
+    const ref = href.split('/').at(-1).replace('.json?ref=master', '');
+    const path = `.github/workflows/config/routing-approvals/${ref}.json`;
+    const bytes = corruptDossier && ref === 'OWNER-EXTRA-3' ? Buffer.from('{}') : operationalDossiers[ref];
+    assert.ok(bytes, `unexpected dossier ${ref}`);
+    active++;
+    peak = Math.max(peak, active);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    active--;
+    return new Response(JSON.stringify({ type: 'file', path, encoding: 'base64', content: bytes.toString('base64') }));
+  };
+  const args = { centralRepoId: 9, centralRepoFullName: 'central/repo', protectedRef: 'master', token: 'token', fetchImpl, now };
+  const result = await fetchCurrentRoutingAuthorization(args);
+  assert.equal(Object.keys(result.operationalDossiers).length, 15);
+  assert.equal(peak, 4, 'multiple reads should overlap, but never exceed the concurrency bound');
+  assert.equal(evaluateRoutingStartup({ ...input, registry: result.registry,
+    operationalDossiers: result.operationalDossiers }).authorized, true);
+  corruptDossier = true;
+  const denied = await fetchCurrentRoutingAuthorization(args);
+  assert.deepEqual(denied, { authorized: false, reason: 'ROUTING_AUTHORITY_UNAVAILABLE' });
+});
+
 test('central authority rejects repository names that could change the GitHub API origin', async () => {
   let calls = 0;
   const result = await fetchCurrentRoutingAuthorization({
