@@ -142,9 +142,11 @@ test('always-run mutations are guarded by authorized startup', () => {
 
 test('certified review job disables native CLI auto-update for all steps', () => {
   const jobHeader = workflow.split('    steps:')[0];
-  assert.match(jobHeader, /jobs:\\n  run-ocr-review:\\n[\\s\\S]*?    env:\\n[\\s\\S]*?      AGY_CLI_DISABLE_AUTO_UPDATE: 'true'/);
+  const jobEnv = jobHeader.split('    env:')[1] ?? '';
+  assert.ok(jobHeader.includes('run-ocr-review:'));
+  assert.ok(jobEnv.includes("AGY_CLI_DISABLE_AUTO_UPDATE: 'true'"));
   assert.equal((workflow.match(/AGY_CLI_DISABLE_AUTO_UPDATE:/g) ?? []).length, 1);
-  assert.doesNotMatch(jobHeader, /AGY_CLI_DISABLE_AUTO_UPDATE: '(?:1|false)'/);
+  assert.doesNotMatch(jobEnv, /AGY_CLI_DISABLE_AUTO_UPDATE: '(?:1|false)'/);
   assert.match(step('Install pinned review tools'), /AGY_VERSION_CERTIFICATION_MISMATCH/);
   assert.match(step('Finalize routing audit'), /revalidateRoutingExecutionContext/);
 });
