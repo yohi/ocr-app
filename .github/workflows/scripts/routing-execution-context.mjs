@@ -10,8 +10,8 @@ const DENIED = 'ROUTING_ACTIVATION_DENIED';
 const LIMIT = 64 * 1024;
 const KEYS = ['schema_version', 'binding', 'repo_identity', 'authorization', 'certification_refs', 'cli_inventory_sha256', 'cli_binary_sha256'];
 
-function failure(code) {
-  throw Object.assign(new Error(code), { code });
+function failure(code, reason) {
+  throw Object.assign(new Error(code), { code, ...(reason ? { reason } : {}) });
 }
 
 function exact(value, keys) {
@@ -62,32 +62,38 @@ export function writeRoutingExecutionContext({ runTemp, context, fileSystem = { 
 
 export function readRoutingExecutionContext({ runTemp, expectedBinding, fileSystem = { lstatSync, readFileSync } }) {
   try {
-    assertRunBindingValid(expectedBinding);
+    try { assertRunBindingValid(expectedBinding); }
+    catch { return failure(INVALID, 'RUN_BINDING_MISMATCH'); }
     const path = join(runTemp, 'ocr-routing-execution-context.json');
     const stat = fileSystem.lstatSync(path);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMIT) return failure(INVALID);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > LIMIT) return failure(INVALID, 'CONTEXT_READ_INVALID');
     const bytes = fileSystem.readFileSync(path);
-    if (bytes.byteLength > LIMIT) return failure(INVALID);
+    if (bytes.byteLength > LIMIT) return failure(INVALID, 'CONTEXT_READ_INVALID');
     const context = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
-    if (!validContext(context)) return failure(INVALID);
-    assertRunBindingEquals(expectedBinding, context.binding);
+    if (!validContext(context)) return failure(INVALID, 'CONTEXT_SCHEMA_INVALID');
+    try { assertRunBindingEquals(expectedBinding, context.binding); }
+    catch { return failure(INVALID, 'RUN_BINDING_MISMATCH'); }
     return context;
-  } catch { failure(INVALID); }
+  } catch (error) {
+    if (error?.code === INVALID && ['CONTEXT_READ_INVALID', 'CONTEXT_SCHEMA_INVALID', 'RUN_BINDING_MISMATCH'].includes(error.reason)) throw error;
+    return failure(INVALID, 'CONTEXT_READ_INVALID');
+  }
 }
 
 export function revalidateRoutingExecutionContext({ context, expectedBinding, trustedInputs, repoIdentity, now, cliBinarySha256 }) {
   try {
-    if (!validContext(context)) return failure(INVALID);
-    assertRunBindingEquals(expectedBinding, context.binding);
+    if (!validContext(context)) return failure(INVALID, 'CONTEXT_SCHEMA_INVALID');
+    try { assertRunBindingEquals(expectedBinding, context.binding); }
+    catch { return failure(INVALID, 'RUN_BINDING_MISMATCH'); }
     const globalOptIn = expectedBinding.mode === 'off' && expectedBinding.decisionLlmEnabled === true;
     if (context.repo_identity.repoId !== repoIdentity.repo_id || context.repo_identity.fullName !== repoIdentity.full_name
-      || context.repo_identity.headSha !== expectedBinding.headSha
-      || !digestMatches(context.authorization.policy_sha256, trustedInputs.policySha256)
-      || !digestMatches(context.authorization.catalog_sha256, trustedInputs.catalogSha256)
-      || !digestMatches(context.authorization.source_manifest_sha256, trustedInputs.sourceManifestSha256)) return failure(INVALID);
+      || context.repo_identity.headSha !== expectedBinding.headSha) return failure(INVALID, 'REPO_IDENTITY_MISMATCH');
+    if (!digestMatches(context.authorization.policy_sha256, trustedInputs.policySha256)) return failure(INVALID, 'POLICY_DIGEST_MISMATCH');
+    if (!digestMatches(context.authorization.catalog_sha256, trustedInputs.catalogSha256)) return failure(INVALID, 'CATALOG_DIGEST_MISMATCH');
+    if (!digestMatches(context.authorization.source_manifest_sha256, trustedInputs.sourceManifestSha256)) return failure(INVALID, 'SOURCE_MANIFEST_MISMATCH');
     let startupAuthorization;
     if (globalOptIn) {
-      if (context.authorization.approval_refs.length !== 0) return failure(INVALID);
+      if (context.authorization.approval_refs.length !== 0) return failure(INVALID, 'OPT_IN_APPROVAL_REFS_INVALID');
       startupAuthorization = { authorized: true, reason: 'GLOBAL_FLAG', approvalRefs: [] };
     } else {
       startupAuthorization = evaluateRoutingStartup({
@@ -96,18 +102,21 @@ export function revalidateRoutingExecutionContext({ context, expectedBinding, tr
         policySha256: trustedInputs.policySha256, catalogSha256: trustedInputs.catalogSha256,
         sourceManifestSha256: trustedInputs.sourceManifestSha256, now,
       });
-      if (!startupAuthorization.authorized || startupAuthorization.approvalRefs.join('\0') !== context.authorization.approval_refs.join('\0')) return failure(DENIED);
+      if (!startupAuthorization.authorized || startupAuthorization.approvalRefs.join('\0') !== context.authorization.approval_refs.join('\0')) return failure(DENIED, 'STARTUP_APPROVAL_MISMATCH');
     }
-    if (trustedInputs.needsModel && (context.cli_binary_sha256 === null || context.cli_inventory_sha256 === null
-      || context.cli_binary_sha256 !== cliBinarySha256)) return failure(INVALID);
+    if (trustedInputs.needsModel) {
+      if (context.cli_binary_sha256 === null || context.cli_inventory_sha256 === null) return failure(INVALID, 'CLI_IDENTITY_MISSING');
+      if (context.cli_binary_sha256 !== cliBinarySha256) return failure(INVALID, 'CLI_DIGEST_MISMATCH');
+    }
     let certifiedBundle = null;
     if (trustedInputs.needsModel) {
       const certificationRepoIdentity = globalOptIn ? trustedInputs.certificationRepoIdentity : repoIdentity;
-      if (!certificationRepoIdentity) return failure(INVALID);
+      if (!certificationRepoIdentity) return failure(INVALID, 'CERTIFICATION_IDENTITY_MISSING');
       const verified = loadVerifiedCertification({ catalog: trustedInputs.catalog, index: trustedInputs.index,
         registry: trustedInputs.registry, repoIdentity: certificationRepoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
-      if (verified.cliAvailableModels.length === 0 || trustedInputs.index?.cli_inventory?.sha256 !== context.cli_inventory_sha256) return failure(DENIED);
-      if (context.certification_refs.some(ref => !verified.verifiedCertificationRefs.some(item => item.certification_reference === ref))) return failure(DENIED);
+      if (verified.cliAvailableModels.length === 0) return failure(DENIED, 'CERTIFICATION_VALIDATION_FAILED');
+      if (trustedInputs.index?.cli_inventory?.sha256 !== context.cli_inventory_sha256) return failure(DENIED, 'CLI_INVENTORY_DIGEST_MISMATCH');
+      if (context.certification_refs.some(ref => !verified.verifiedCertificationRefs.some(item => item.certification_reference === ref))) return failure(DENIED, 'CERTIFICATION_REFERENCE_MISMATCH');
       certifiedBundle = {
         catalog: trustedInputs.catalog,
         evidence: {
@@ -115,10 +124,10 @@ export function revalidateRoutingExecutionContext({ context, expectedBinding, tr
           cli_available_models: verified.cliAvailableModels,
         },
       };
-    } else if (context.certification_refs.length !== 0 || context.cli_inventory_sha256 !== null || context.cli_binary_sha256 !== null) return failure(INVALID);
+    } else if (context.certification_refs.length !== 0 || context.cli_inventory_sha256 !== null || context.cli_binary_sha256 !== null) return failure(INVALID, 'UNEXPECTED_MODEL_EVIDENCE');
     return { startupAuthorization, certifiedBundle };
   } catch (error) {
     if (error?.code === INVALID || error?.code === DENIED) throw error;
-    failure(DENIED);
+    return failure(DENIED, 'CERTIFICATION_VALIDATION_FAILED');
   }
 }
