@@ -585,6 +585,32 @@ test('routing log summary distinguishes attempted selection from actual review e
   assert.deepEqual(summary.attempted_review_models, ['gemini-3.8-flash-medium', 'claude-opus-5-5-high']);
 });
 
+test('audit diagnostic formatter includes only allowlisted context mismatch reasons', () => {
+  const allowedReasons = [
+    'CONTEXT_READ_INVALID', 'CONTEXT_SCHEMA_INVALID', 'RUN_BINDING_MISMATCH',
+    'REPO_IDENTITY_MISMATCH', 'POLICY_DIGEST_MISMATCH', 'CATALOG_DIGEST_MISMATCH',
+    'SOURCE_MANIFEST_MISMATCH', 'CLI_IDENTITY_MISSING', 'CLI_DIGEST_MISMATCH',
+    'OPT_IN_APPROVAL_REFS_INVALID', 'STARTUP_APPROVAL_MISMATCH',
+    'CERTIFICATION_IDENTITY_MISSING', 'CERTIFICATION_VALIDATION_FAILED',
+    'CLI_INVENTORY_DIGEST_MISMATCH', 'CERTIFICATION_REFERENCE_MISMATCH',
+    'UNEXPECTED_MODEL_EVIDENCE',
+  ];
+  for (const reason of allowedReasons) {
+    const error = Object.assign(new Error('sensitive private details'), {
+      code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason,
+    });
+    const output = formatRoutingAuditDiagnostic({ stage: 'REVALIDATE_CONTEXT', error });
+    assert.equal(output,
+      'ROUTING_AUDIT_DIAGNOSTIC code=ROUTING_EXECUTION_CONTEXT_INVALID stage=REVALIDATE_CONTEXT reason=' + reason);
+    assert.doesNotMatch(output, /sensitive|private/i);
+  }
+  const malicious = Object.assign(new Error('secret'), {
+    code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'sensitive token path',
+  });
+  assert.equal(formatRoutingAuditDiagnostic({ stage: 'REVALIDATE_CONTEXT', error: malicious }),
+    'ROUTING_AUDIT_DIAGNOSTIC code=ROUTING_EXECUTION_CONTEXT_INVALID stage=REVALIDATE_CONTEXT reason=OTHER');
+});
+
 test('audit diagnostics expose only fixed failure codes, stages, and reasons', () => {
   const known = Object.assign(new Error('AUDIT_EVENT_INVALID'), { reason: 'attempt_chain_unavailable' });
   assert.equal(

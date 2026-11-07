@@ -235,3 +235,63 @@ test('cleanup failure does not replace normalized write failure', () => {
   assert.throws(() => writeRoutingExecutionContext({ runTemp: '/tmp/run', context, fileSystem }),
     { code: 'ROUTING_EXECUTION_CONTEXT_INVALID' });
 });
+
+
+test('context revalidation classifies each trusted identity and digest mismatch without leaking values', () => {
+  const trustedInputs = authorizedInputs(false);
+  const valid = contextFor(trustedInputs);
+  const options = { context: valid, expectedBinding: binding, trustedInputs,
+    repoIdentity: { repo_id: 10, full_name: 'org/repo' }, now, cliBinarySha256: null };
+  const mismatchCases = [
+    ['CONTEXT_SCHEMA_INVALID', { context: { ...valid, extra: 'sensitive data' } }],
+    ['RUN_BINDING_MISMATCH', { expectedBinding: { ...binding, runAttempt: binding.runAttempt + 1 } }],
+    ['REPO_IDENTITY_MISMATCH', { repoIdentity: { repo_id: 11, full_name: 'org/repo' } }],
+    ['POLICY_DIGEST_MISMATCH', { trustedInputs: { ...trustedInputs, policySha256: 'sha256:' + 'c'.repeat(64) } }],
+    ['CATALOG_DIGEST_MISMATCH', { trustedInputs: { ...trustedInputs, catalogSha256: 'sha256:' + 'c'.repeat(64) } }],
+    ['SOURCE_MANIFEST_MISMATCH', { trustedInputs: { ...trustedInputs, sourceManifestSha256: 'sha256:' + 'c'.repeat(64) } }],
+    ['STARTUP_APPROVAL_MISMATCH', { trustedInputs: { ...trustedInputs, registry: { schema_version: '1', approvals: [], revoked_refs: [], activations: [] } } }],
+    ['UNEXPECTED_MODEL_EVIDENCE', { context: { ...valid, cli_binary_sha256: hash } }],
+  ];
+  for (const [reason, changes] of mismatchCases) {
+    assert.throws(() => revalidateRoutingExecutionContext({ ...options, ...changes }), err =>
+      err.code === (reason === 'STARTUP_APPROVAL_MISMATCH' ? 'ROUTING_ACTIVATION_DENIED' : 'ROUTING_EXECUTION_CONTEXT_INVALID')
+      && err.reason === reason
+      && err.message === err.code, reason);
+  }
+});
+
+test('context read and CLI fingerprint mismatch retain fail-closed errors with safe reason codes', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'routing-context-reason-'));
+  try {
+    assert.throws(() => readRoutingExecutionContext({ runTemp: dir, expectedBinding: binding }), {
+      code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'CONTEXT_READ_INVALID',
+    });
+    writeRoutingExecutionContext({ runTemp: dir, context });
+    assert.throws(() => readRoutingExecutionContext({ runTemp: dir, expectedBinding: { ...binding, runAttempt: 3 } }), {
+      code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'RUN_BINDING_MISMATCH',
+    });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+
+  const trustedInputs = authorizedInputs(true);
+  const options = { context: contextFor(trustedInputs, false), expectedBinding: binding, trustedInputs,
+    repoIdentity: { repo_id: 10, full_name: 'org/repo' }, now, cliBinarySha256: hash };
+  assert.throws(() => revalidateRoutingExecutionContext({ ...options, cliBinarySha256: 'c'.repeat(64) }), {
+    code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'CLI_DIGEST_MISMATCH',
+  });
+  assert.throws(() => revalidateRoutingExecutionContext({ ...options,
+    context: { ...options.context, cli_binary_sha256: null } }), {
+    code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'CLI_IDENTITY_MISSING',
+  });
+});
+
+test('off-mode opt-in rejects unexpected approval refs with a fixed diagnostic reason', () => {
+  const trustedInputs = authorizedInputs(false);
+  const optedInBinding = { ...binding, mode: 'off', decisionLlmEnabled: true };
+  const contextWithRefs = { ...contextFor(trustedInputs), binding: optedInBinding };
+  assert.throws(() => revalidateRoutingExecutionContext({
+    context: contextWithRefs, expectedBinding: optedInBinding, trustedInputs,
+    repoIdentity: { repo_id: 10, full_name: 'org/repo' }, now, cliBinarySha256: null,
+  }), {
+    code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'OPT_IN_APPROVAL_REFS_INVALID',
+  });
+});
