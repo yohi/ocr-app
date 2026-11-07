@@ -151,8 +151,8 @@ test('certified CLI installer verifies both digests and refuses malformed or mis
   ], { env: { ...process.env, HOME: home }, encoding: 'utf8' });
   try {
     fs.mkdirSync(payloadDir);
-    fs.writeFileSync(join(payloadDir, 'agy'), payload);
-    const tar = spawnSync('tar', ['-czf', archive, '-C', payloadDir, 'agy'], { encoding: 'utf8' });
+    fs.writeFileSync(join(payloadDir, 'antigravity'), payload);
+    const tar = spawnSync('tar', ['-czf', archive, '-C', payloadDir, 'antigravity'], { encoding: 'utf8' });
     assert.equal(tar.status, 0, tar.stderr);
     const archiveDigest = digest(fs.readFileSync(archive));
     const binaryDigest = digest(payload);
@@ -172,10 +172,19 @@ test('certified CLI installer verifies both digests and refuses malformed or mis
     assert.match(wrongBinary.stderr, /AGY_BINARY_DIGEST_MISMATCH/);
     assert.equal(fs.existsSync(destination), false);
 
+    const legacy = join(root, 'legacy.tar.gz');
+    fs.writeFileSync(join(payloadDir, 'agy'), payload);
+    const legacyTar = spawnSync('tar', ['-czf', legacy, '-C', payloadDir, 'agy'], { encoding: 'utf8' });
+    assert.equal(legacyTar.status, 0, legacyTar.stderr);
+    const rejectLegacy = run(digest(fs.readFileSync(legacy)), binaryDigest, legacy);
+    assert.notEqual(rejectLegacy.status, 0);
+    assert.match(rejectLegacy.stderr, /AGY_ARCHIVE_STRUCTURE_INVALID/);
+    assert.equal(fs.existsSync(destination), false);
+
     fs.mkdirSync(join(payloadDir, 'extra'));
-    fs.writeFileSync(join(payloadDir, 'extra/agy'), payload);
+    fs.writeFileSync(join(payloadDir, 'extra/antigravity'), payload);
     const ambiguous = join(root, 'ambiguous.tar.gz');
-    const doubleTar = spawnSync('tar', ['-czf', ambiguous, '-C', payloadDir, 'agy', 'extra/agy'], { encoding: 'utf8' });
+    const doubleTar = spawnSync('tar', ['-czf', ambiguous, '-C', payloadDir, 'antigravity', 'extra/antigravity'], { encoding: 'utf8' });
     assert.equal(doubleTar.status, 0, doubleTar.stderr);
     const reject = run(digest(fs.readFileSync(ambiguous)), binaryDigest, ambiguous);
     assert.notEqual(reject.status, 0);
