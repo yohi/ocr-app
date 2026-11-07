@@ -92,6 +92,22 @@ test('finalizer binds validated-result step output to current raw bytes', () => 
   assert.match(finalizer, /resultSha256:\s*resultEvidence\.resultSha256/);
 });
 
+test('audit finalizer logs only normalized stage and code without relaxing fail-closed', () => {
+  const finalizer = step('Finalize routing audit');
+  for (const stage of ['LOAD_INPUTS', 'VALIDATE_RESULT', 'REFRESH_AUTHORITY',
+    'REVALIDATE_CONTEXT', 'FINALIZE_RECORD', 'WRITE_AUDIT', 'LOG_SUMMARY']) {
+    assert.ok(finalizer.includes(stage), `missing audit stage ${stage}`);
+  }
+  assert.match(finalizer, /formatRoutingAuditDiagnostic/);
+  assert.match(finalizer, /formatDiagnostic\(\{ stage: auditStage, error \}\)/);
+  assert.match(finalizer, /ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=LOAD_INPUTS reason=OTHER/);
+  assert.match(finalizer, /console\.error\('ROUTING_AUDIT_MISSING'\)/);
+  assert.match(finalizer, /process\.exitCode = 1/);
+  assert.doesNotMatch(finalizer, /console\.error\(error\)|console\.error\(error\?\.message\)/);
+  assert.match(finalizer, /revalidateRoutingExecutionContext/);
+  assert.match(finalizer, /writeRoutingAudit/);
+});
+
 test('enforce has one publish boundary and legacy posting is off or shadow only', () => {
   const enforcePublishers = workflow.match(/publish-routing-review\.mjs/g) ?? [];
   assert.equal(enforcePublishers.length, 1);
