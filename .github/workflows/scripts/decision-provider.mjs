@@ -2,6 +2,7 @@ import { assertRunBindingValid, assertSerializedRunBindingMatches } from './ocr-
 import { validateDecisionState } from './build-decision-state.mjs';
 
 const URL = 'https://openrouter.ai/api/alpha/decisions';
+export const DECISION_MODEL_ID = 'inception/mercury-decide:free';
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const REASONS = Object.freeze({
   denied: 'egress_denied', invalid: 'invalid_input', missingKey: 'missing_api_key',
@@ -84,7 +85,7 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
       redirect: 'error',
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        model: 'inception/mercury-decide:free',
+        model: DECISION_MODEL_ID,
         state: decisionState,
         questions: { review_strategy: {
           type: 'choice',
