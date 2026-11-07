@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const workflow = fs.readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'utf8');
@@ -116,5 +121,67 @@ test('always-run mutations are guarded by authorized startup', () => {
   for (const [name, ifCondition] of [['Check Run completion', checkUpdate], ['result artifact upload', debugUpload]]) {
     assert.doesNotMatch(ifCondition, /ROUTING_START_AUTHORIZED\s*==\s*'true'|PUBLISH_AUTHORIZED\s*==\s*'true'/,
       `${name} must run independently of authorization success`);
+  }
+});
+
+test('review workflow pins the official CLI release to the existing approved inventory', () => {
+  const installStep = step('Install pinned review tools');
+  const inventory = JSON.parse(fs.readFileSync(new URL('../config/routing-evidence/pro-cli-inventory-20261105.json', import.meta.url), 'utf8'));
+  assert.equal(inventory.cli_version, '1.5.1');
+  assert.match(installStep, /AGY_VERSION: '1\.5\.1'/);
+  assert.match(installStep, /AGY_ARCHIVE_SHA256: '2a64ccfc5f6679c253769f0760614af5de04d8dc1eeeec9b9752ba4c8dd92250'/);
+  assert.ok(installStep.includes("AGY_BINARY_SHA256: '" + inventory.cli_binary_sha256 + "'"));
+  assert.match(installStep, /releases\/download\/\$\{AGY_VERSION\}\/agy_cli_linux_x64\.tar\.gz/);
+  assert.match(installStep, /AGY_VERSION_CERTIFICATION_MISMATCH/);
+  assert.match(installStep, /install-certified-agy\.sh/);
+  assert.doesNotMatch(installStep, /cli\/install\.sh|releases\/latest/);
+});
+
+test('certified CLI installer verifies both digests and refuses malformed or mismatched artifacts', () => {
+  const root = fs.mkdtempSync(join(tmpdir(), 'agy-install-test-'));
+  const script = fileURLToPath(new URL('./install-certified-agy.sh', import.meta.url));
+  const home = join(root, 'home');
+  const payloadDir = join(root, 'payload');
+  const destination = join(home, '.local/bin/agy');
+  const archive = join(root, 'agy.tar.gz');
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const payload = Buffer.from('#!/bin/sh\necho fixture\n');
+  const run = (archiveDigest, binaryDigest, archivePath = archive) => spawnSync('bash', [
+    script, archivePath, archiveDigest, binaryDigest, destination,
+  ], { env: { ...process.env, HOME: home }, encoding: 'utf8' });
+  try {
+    fs.mkdirSync(payloadDir);
+    fs.writeFileSync(join(payloadDir, 'agy'), payload);
+    const tar = spawnSync('tar', ['-czf', archive, '-C', payloadDir, 'agy'], { encoding: 'utf8' });
+    assert.equal(tar.status, 0, tar.stderr);
+    const archiveDigest = digest(fs.readFileSync(archive));
+    const binaryDigest = digest(payload);
+    const success = run(archiveDigest, binaryDigest);
+    assert.equal(success.status, 0, success.stderr);
+    assert.deepEqual(fs.readFileSync(destination), payload);
+    assert.ok((fs.statSync(destination).mode & 0o111) !== 0);
+
+    fs.rmSync(destination);
+    const wrongArchive = run('0'.repeat(64), binaryDigest);
+    assert.notEqual(wrongArchive.status, 0);
+    assert.match(wrongArchive.stderr, /AGY_ARCHIVE_DIGEST_MISMATCH/);
+    assert.equal(fs.existsSync(destination), false);
+
+    const wrongBinary = run(archiveDigest, '0'.repeat(64));
+    assert.notEqual(wrongBinary.status, 0);
+    assert.match(wrongBinary.stderr, /AGY_BINARY_DIGEST_MISMATCH/);
+    assert.equal(fs.existsSync(destination), false);
+
+    fs.mkdirSync(join(payloadDir, 'extra'));
+    fs.writeFileSync(join(payloadDir, 'extra/agy'), payload);
+    const ambiguous = join(root, 'ambiguous.tar.gz');
+    const doubleTar = spawnSync('tar', ['-czf', ambiguous, '-C', payloadDir, 'agy', 'extra/agy'], { encoding: 'utf8' });
+    assert.equal(doubleTar.status, 0, doubleTar.stderr);
+    const reject = run(digest(fs.readFileSync(ambiguous)), binaryDigest, ambiguous);
+    assert.notEqual(reject.status, 0);
+    assert.match(reject.stderr, /AGY_ARCHIVE_STRUCTURE_INVALID/);
+    assert.equal(fs.existsSync(destination), false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
