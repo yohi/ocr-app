@@ -121,13 +121,30 @@ jobs:
         env:
           OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6'
           OCR_NO_UPDATE: '1'
+          AGY_VERSION: '1.5.1'
+          AGY_ARCHIVE_SHA256: '2a64ccfc5f6679c253769f0760614af5de04d8dc1eeeec9b9752ba4c8dd92250'
+          AGY_BINARY_SHA256: '72738cf0445918483956a5f0da33abdfcfb21a12dd9a421fd57d063782826669'
         run: |
+          set -euo pipefail
           npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION
           export PATH="$HOME/.local/bin:$PATH"
           node self-repo/.github/workflows/scripts/compare-opencodereview-version.mjs
-          curl --proto '=https' --tlsv1.2 -fsSL https://antigravity.google/cli/install.sh -o /tmp/install-agy.sh
-          bash /tmp/install-agy.sh --dir "$HOME/.local/bin"
-          rm -f /tmp/install-agy.sh
+          # Fail closed if the pinned release does not match the existing certified CLI inventory.
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const inventory = JSON.parse(readFileSync('self-repo/.github/workflows/config/routing-evidence/pro-cli-inventory-20261105.json', 'utf8'));
+          if (inventory.cli_version !== process.env.AGY_VERSION || inventory.cli_binary_sha256 !== process.env.AGY_BINARY_SHA256) {
+            console.error('AGY_VERSION_CERTIFICATION_MISMATCH');
+            process.exit(1);
+          }
+          NODE
+          archive="$RUNNER_TEMP/agy_cli_linux_x64_${AGY_VERSION}.tar.gz"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 --max-time 180 \
+            "https://github.com/google-antigravity/antigravity-cli/releases/download/${AGY_VERSION}/agy_cli_linux_x64.tar.gz" \
+            --output "$archive"
+          bash self-repo/.github/workflows/scripts/install-certified-agy.sh \
+            "$archive" "$AGY_ARCHIVE_SHA256" "$AGY_BINARY_SHA256" "$HOME/.local/bin/agy"
+          rm -f -- "$archive"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Validate deterministic review selection
