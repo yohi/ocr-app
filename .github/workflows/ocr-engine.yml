@@ -19,6 +19,8 @@ jobs:
     env:
       DECISION_ROUTING_MODE: ${{ vars.DECISION_ROUTING_MODE || 'off' }}
       DECISION_LLM_ENABLED: ${{ vars.DECISION_LLM_ENABLED || 'false' }}
+      # Keep the certified CLI binary immutable throughout the review and audit lifecycle.
+      AGY_CLI_DISABLE_AUTO_UPDATE: 'true'
     steps:
       - name: Checkout trusted workflow repository
         uses: actions/checkout@v4
