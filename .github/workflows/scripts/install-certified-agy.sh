@@ -30,7 +30,7 @@ fi
 
 candidate_entry=''
 while IFS= read -r entry; do
-  if [[ "$entry" == 'agy' || "$entry" == './agy' || "$entry" == */agy ]]; then
+  if [[ "$entry" == 'antigravity' || "$entry" == './antigravity' || "$entry" == */antigravity ]]; then
     if [[ -n "$candidate_entry" || "$entry" == /* || "$entry" == *'/../'* || "$entry" == '../'* ]]; then
       echo 'AGY_ARCHIVE_STRUCTURE_INVALID' >&2
       exit 1
