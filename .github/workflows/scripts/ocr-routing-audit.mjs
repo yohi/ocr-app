@@ -85,6 +85,28 @@ export function validateRoutingAudit(record) {
   return record;
 }
 
+// Diagnostic values are fixed enums: never print raw exceptions, paths, tokens, or attempt payloads.
+const AUDIT_DIAGNOSTIC_STAGES = new Set([
+  'LOAD_INPUTS', 'VALIDATE_RESULT', 'REFRESH_AUTHORITY', 'REVALIDATE_CONTEXT',
+  'FINALIZE_RECORD', 'WRITE_AUDIT', 'LOG_SUMMARY',
+]);
+const AUDIT_DIAGNOSTIC_CODES = new Set([
+  'ROUTING_AUTHORITY_UNAVAILABLE', 'ROUTING_EXECUTION_CONTEXT_INVALID',
+  'ROUTING_ACTIVATION_DENIED', 'REVIEW_CERTIFICATION_INVALID', 'REVIEW_CLI_UNAVAILABLE',
+  'RUN_BINDING_INVALID', 'RUN_BINDING_MISMATCH', 'AUDIT_SCHEMA_INVALID',
+  'AUDIT_EVENT_INVALID', 'AUDIT_MODEL_NOT_CERTIFIED', 'AUDIT_ALREADY_WRITTEN',
+  'ROUTE_SCHEMA_INVALID', 'ROUTING_SOURCE_MANIFEST_INVALID', 'ENOENT', 'ERR_MODULE_NOT_FOUND',
+]);
+const AUDIT_DIAGNOSTIC_REASONS = new Set(['attempt_chain_unavailable', 'attempt_chain_invalid']);
+
+export function formatRoutingAuditDiagnostic({ stage, error } = {}) {
+  const safeStage = AUDIT_DIAGNOSTIC_STAGES.has(stage) ? stage : 'OTHER';
+  const safeCode = AUDIT_DIAGNOSTIC_CODES.has(error?.code) ? error.code
+    : AUDIT_DIAGNOSTIC_CODES.has(error?.message) ? error.message : 'UNKNOWN';
+  const safeReason = AUDIT_DIAGNOSTIC_REASONS.has(error?.reason) ? error.reason : 'OTHER';
+  return `ROUTING_AUDIT_DIAGNOSTIC code=${safeCode} stage=${safeStage} reason=${safeReason}`;
+}
+
 export function createRoutingLogSummary(record) {
   validateRoutingAudit(record);
   return Object.freeze({
