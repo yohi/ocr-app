@@ -457,9 +457,12 @@ jobs:
           import { execFileSync } from 'node:child_process';
           import { createHash } from 'node:crypto';
           import { resolve, relative, isAbsolute, sep } from 'node:path';
+          let auditStage = 'LOAD_INPUTS';
+          let formatDiagnostic = null;
           try {
             const { createRunBindingFromEnv, readSelectedReviewRoute } = await import('./self-repo/.github/workflows/scripts/prepare-review-routing.mjs');
-            const { createRoutingLogSummary, finalizeRoutingAudit, verifyValidatedResultEvidence, writeRoutingAudit } = await import('./self-repo/.github/workflows/scripts/ocr-routing-audit.mjs');
+            const { createRoutingLogSummary, finalizeRoutingAudit, verifyValidatedResultEvidence, writeRoutingAudit, formatRoutingAuditDiagnostic } = await import('./self-repo/.github/workflows/scripts/ocr-routing-audit.mjs');
+            formatDiagnostic = formatRoutingAuditDiagnostic;
             const { fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } = await import('./self-repo/.github/workflows/scripts/routing-authorization.mjs');
             const { readRoutingExecutionContext, revalidateRoutingExecutionContext } = await import('./self-repo/.github/workflows/scripts/routing-execution-context.mjs');
             const { createRoutingEvidenceReader, readInstalledCliIdentity } = await import('./self-repo/.github/workflows/scripts/load-review-certification.mjs');
@@ -471,6 +474,7 @@ jobs:
             const attempts = fs.existsSync(attemptsPath) ? fs.readFileSync(attemptsPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
             const routingState = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ocr-routing-state.json`, 'utf8'));
             const route = readSelectedReviewRoute({ runBinding, runTemp: process.env.RUNNER_TEMP });
+            auditStage = 'VALIDATE_RESULT';
             const resultBytes = fs.readFileSync('/tmp/ocr-result.json');
             const result = JSON.parse(resultBytes.toString('utf8'));
             const resultEvidence = verifyValidatedResultEvidence({ rawBytes: resultBytes,
@@ -481,6 +485,7 @@ jobs:
             const proposedReviewModel = route.proposed_strategy === null ? null : catalog.strategies[route.proposed_strategy]?.preferred_model_id ?? null;
             const trustedRoot = resolve('self-repo');
             const digest = path => `sha256:${createHash('sha256').update(fs.readFileSync(path)).digest('hex')}`;
+            auditStage = 'REFRESH_AUTHORITY';
             const current = await fetchCurrentRoutingAuthorization({ centralRepoId: Number(execFileSync('gh', ['api', `repos/${process.env.GITHUB_REPOSITORY}`, '--jq', '.id'], commandOptions).trim()),
               centralRepoFullName: process.env.GITHUB_REPOSITORY, protectedRef: 'master', token: process.env.CENTRAL_GITHUB_TOKEN, fetchImpl: fetch, now: new Date().toISOString() });
             if (!current?.registry) throw new Error('ROUTING_AUTHORITY_UNAVAILABLE');
@@ -494,15 +499,19 @@ jobs:
               index: JSON.parse(fs.readFileSync(resolve(trustedRoot, '.github/workflows/config/review-certification-index.json'), 'utf8')),
               sourceManifestSha256: hashRoutingSourceManifest({ trustedRoot, readFile: path => fs.readFileSync(resolve(trustedRoot, path)),
                 listTrackedPaths: root => execFileSync('git', ['-C', root, 'ls-files', '-z'], commandOptions).split('\0').filter(Boolean) }) };
+            auditStage = 'REVALIDATE_CONTEXT';
             const cli = trustedInputs.needsModel ? readInstalledCliIdentity({ env: process.env, targetRoot: resolve('target-repo') }) : null;
             const revalidated = revalidateRoutingExecutionContext({ context: readRoutingExecutionContext({ runTemp: process.env.RUNNER_TEMP, expectedBinding: runBinding }),
               expectedBinding: runBinding, trustedInputs, repoIdentity: { repo_id: repositoryId, full_name: process.env.TARGET_REPO }, now: new Date().toISOString(), cliBinarySha256: cli?.binarySha256 ?? null });
+            auditStage = 'FINALIZE_RECORD';
             const record = finalizeRoutingAudit({ decision, attempts, reviewResult: result,
               validation: { status: resultEvidence.reviewValidationStatus }, headCheck: { status: process.env.HEAD_STATUS }, runBinding,
               policy: { repoId: repositoryId, repo: process.env.TARGET_REPO, prNumber: Number(process.env.PR_NUMBER), ...routingState, ownerApprovalRef: routingState.owner_approval_ref, selectedReviewModel: route.selected_model_id, proposedReviewModel },
               catalog, selectedRoute: route, certifiedBundle: revalidated.certifiedBundle, runTemp: process.env.RUNNER_TEMP,
               resultSha256: resultEvidence.resultSha256 });
+            auditStage = 'WRITE_AUDIT';
             writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
+            auditStage = 'LOG_SUMMARY';
             console.log(`OCR_ROUTING_SUMMARY ${JSON.stringify({
               ...createRoutingLogSummary(record),
               opencodereview_version_expected: process.env.OPENCODEREVIEW_VERSION_EXPECTED ?? null,
@@ -512,6 +521,9 @@ jobs:
           } catch (error) {
             const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
             if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
+            console.error(formatDiagnostic
+              ? formatDiagnostic({ stage: auditStage, error })
+              : 'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=LOAD_INPUTS reason=OTHER');
             console.error('ROUTING_AUDIT_MISSING');
             process.exitCode = 1;
           }
