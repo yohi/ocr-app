@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import {
   createRoutingLogSummary,
+  formatRoutingAuditDiagnostic,
   createRoutingDecisionRecord,
   writeRoutingDecision,
   createAttemptRecorder,
@@ -582,4 +583,31 @@ test('routing log summary distinguishes attempted selection from actual review e
   assert.equal(summary.selected_review_model, 'gemini-3.8-flash-medium');
   assert.equal(summary.executed_review_model, 'claude-opus-5-5-high');
   assert.deepEqual(summary.attempted_review_models, ['gemini-3.8-flash-medium', 'claude-opus-5-5-high']);
+});
+
+test('audit diagnostics expose only fixed failure codes, stages, and reasons', () => {
+  const known = Object.assign(new Error('AUDIT_EVENT_INVALID'), { reason: 'attempt_chain_unavailable' });
+  assert.equal(
+    formatRoutingAuditDiagnostic({ stage: 'FINALIZE_RECORD', error: known }),
+    'ROUTING_AUDIT_DIAGNOSTIC code=AUDIT_EVENT_INVALID stage=FINALIZE_RECORD reason=attempt_chain_unavailable',
+  );
+  assert.equal(
+    formatRoutingAuditDiagnostic({ stage: 'REVALIDATE_CONTEXT', error: Object.assign(new Error('secret'), { code: 'ROUTING_ACTIVATION_DENIED' }) }),
+    'ROUTING_AUDIT_DIAGNOSTIC code=ROUTING_ACTIVATION_DENIED stage=REVALIDATE_CONTEXT reason=OTHER',
+  );
+  assert.equal(
+    formatRoutingAuditDiagnostic({ stage: 'WRITE_AUDIT', error: Object.assign(new Error('path'), { code: 'ENOENT' }) }),
+    'ROUTING_AUDIT_DIAGNOSTIC code=ENOENT stage=WRITE_AUDIT reason=OTHER',
+  );
+  const unknown = formatRoutingAuditDiagnostic({
+    stage: 'SECRET_STAGE:/secrets/token', error: Object.assign(new Error('Bearer secret-token'), {
+      code: 'TOKEN_SECRET', reason: 'private/path',
+    }),
+  });
+  assert.equal(unknown, 'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=OTHER reason=OTHER');
+  assert.doesNotMatch(unknown, /secret|Bearer|private|TOKEN_SECRET/i);
+  assert.equal(
+    formatRoutingAuditDiagnostic({}),
+    'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=OTHER reason=OTHER',
+  );
 });
