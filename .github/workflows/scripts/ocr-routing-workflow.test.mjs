@@ -12,6 +12,21 @@ const routingReview = fs.readFileSync(new URL('./run-routing-review.mjs', import
 const step = name => workflow.split(`- name: ${name}`)[1]?.split('\n      - name:')[0] ?? '';
 const condition = name => step(name).match(/^        if: (.+)$/m)?.[1] ?? '';
 
+test('Actions Summary displays decision settings and evidence-backed reviewer model without changing the gate', () => {
+  const summary = step('Write LLM model summary');
+  assert.match(summary, /if: always\(\) && steps\.target\.outputs\.internal == 'true'/);
+  assert.match(summary, /continue-on-error: true/);
+  assert.match(summary, /GITHUB_RUN_ID: \u0024\{\{ github\.run_id \}\}/);
+  assert.match(summary, /GITHUB_RUN_ATTEMPT: \u0024\{\{ github\.run_attempt \}\}/);
+  assert.match(summary, /COMMIT_SHA: \u0024\{\{ github\.event\.client_payload\.commit_sha \}\}/);
+  assert.match(summary, /DECISION_LLM_ENABLED: \u0024\{\{ env\.DECISION_LLM_ENABLED \}\}/);
+  assert.match(summary, /OCR_LLM_MODEL:/);
+  assert.match(summary, /write-model-summary\.mjs/);
+  assert.doesNotMatch(summary, /gh api|curl|publish-routing-review|post-ocr-comments/);
+  assert.match(step('Finalize routing audit'), /writeRoutingAudit/);
+  assert.match(step('Update Check Run completed'), /update-check-run\.mjs/);
+});
+
 test('off mode retains legacy Host and skips routing steps', () => {
   assert.match(workflow, /DECISION_ROUTING_MODE/);
   assert.match(step('Run Antigravity review host'), /runRoutingReview/);
