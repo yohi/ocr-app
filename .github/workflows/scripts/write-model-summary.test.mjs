@@ -59,7 +59,7 @@ test('untrusted model IDs cannot inject markdown into the GitHub Summary', () =>
   assert.match(summary, /レビュー実行モデル（監査記録） \| 未確認/);
 });
 
-test('summary refuses malformed or unbound runtime records without throwing', () => {
+test('summary refuses malformed or unbound runtime records without throwing', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'ocr-model-summary-'));
   try {
     mkdirSync(join(dir, 'ocr-routing'));
@@ -67,7 +67,7 @@ test('summary refuses malformed or unbound runtime records without throwing', ()
       workflow_run_id: '123', executed_review_model: 'fake-model',
     }));
     writeFileSync(join(dir, 'ocr-routing', 'decision.json'), 'not-json');
-    const summary = renderModelSummary({ env: {
+    const summary = await renderModelSummary({ env: {
       GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1', COMMIT_SHA: 'a'.repeat(40),
       DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', RUNNER_TEMP: dir,
       OCR_LLM_MODEL: 'gemini-3.8-flash-medium',
