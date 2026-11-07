@@ -32,15 +32,31 @@ function readValidatedRecord(runTemp, filename, binding, validate) {
 
 export function formatModelSummary({ mode, enabled, configuredReviewModel, decision = null, selectedRoute = null, audit = null } = {}) {
   const decisionEnabled = enabled === 'true';
-  const decisionSetting = enabled === 'true' ? '有効' : enabled === 'false' ? '無効' : UNKNOWN;
+  let decisionSetting = UNKNOWN;
+  if (enabled === 'true') {
+    decisionSetting = '有効';
+  } else if (enabled === 'false') {
+    decisionSetting = '無効';
+  }
   const chosen = selectedRoute?.selected_model_id ?? audit?.selected_review_model ?? null;
   const actual = audit?.executed_review_model ?? null;
-  const attempts = audit === null ? UNKNOWN : audit.attempted_review_models?.length
-    ? audit.attempted_review_models.map(model).join(', ') : 'なし';
-  const status = decision ? enumValue(decision.decision_status, DECISION_STATUSES)
-    : enabled === 'false' ? '未要求（無効）' : UNKNOWN;
-  const egress = decision ? enumValue(decision.egress_status, EGRESS_STATUSES)
-    : enabled === 'false' ? '未要求（無効）' : UNKNOWN;
+  let attempts = UNKNOWN;
+  if (audit !== null) {
+    if (audit.attempted_review_models?.length) {
+      attempts = audit.attempted_review_models.map(model).join(', ');
+    } else {
+      attempts = 'なし';
+    }
+  }
+  let status = UNKNOWN;
+  let egress = UNKNOWN;
+  if (decision) {
+    status = enumValue(decision.decision_status, DECISION_STATUSES);
+    egress = enumValue(decision.egress_status, EGRESS_STATUSES);
+  } else if (enabled === 'false') {
+    status = '未要求（無効）';
+    egress = '未要求（無効）';
+  }
   const routeSource = selectedRoute ? enumValue(selectedRoute.route_source, ROUTE_SOURCES) : UNKNOWN;
   const rows = [
     ['判断特化LLM', decisionSetting],
