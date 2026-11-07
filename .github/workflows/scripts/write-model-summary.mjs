@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 import { DECISION_MODEL_ID } from './decision-provider.mjs';
 import { createRunBindingFromEnv, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
-import { readSelectedReviewRoute } from './prepare-review-routing.mjs';
 import { validateRoutingDecisionRecord, validateRoutingAudit } from './ocr-routing-audit.mjs';
 
 const MAX_BYTES = 64 * 1024;
@@ -72,7 +71,7 @@ export function formatModelSummary({ mode, enabled, configuredReviewModel, decis
   ].join('\n');
 }
 
-export function renderModelSummary({ env = process.env } = {}) {
+export async function renderModelSummary({ env = process.env } = {}) {
   let binding = null;
   try { binding = createRunBindingFromEnv(env); } catch { /* No trusted run binding: show configuration only. */ }
   const runTemp = env.RUNNER_TEMP;
@@ -80,7 +79,9 @@ export function renderModelSummary({ env = process.env } = {}) {
   const audit = readValidatedRecord(runTemp, 'final.json', binding, validateRoutingAudit);
   let selectedRoute = null;
   try {
-    if (binding && typeof runTemp === 'string' && runTemp) {
+    if (binding && typeof runTemp === 'string' && runTemp && fs.existsSync(join(runTemp, 'ocr-selected-route.json'))) {
+      // Lazy import: legacy runs may never install the routing module's Ajv dependency.
+      const { readSelectedReviewRoute } = await import('./prepare-review-routing.mjs');
       selectedRoute = readSelectedReviewRoute({ runBinding: binding, runTemp });
     }
   } catch { /* A missing or invalid route must never be presented as selected. */ }
@@ -96,7 +97,7 @@ if (import.meta.url === 'file://' + process.argv[1]) {
   try {
     const outputPath = process.env.GITHUB_STEP_SUMMARY;
     if (typeof outputPath !== 'string' || !outputPath) throw new Error('missing summary path');
-    fs.appendFileSync(outputPath, renderModelSummary(), 'utf8');
+    fs.appendFileSync(outputPath, await renderModelSummary(), 'utf8');
   } catch {
     console.error('MODEL_SUMMARY_UNAVAILABLE');
     process.exitCode = 1;
