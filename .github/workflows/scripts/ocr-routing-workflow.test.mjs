@@ -12,6 +12,20 @@ const routingReview = fs.readFileSync(new URL('./run-routing-review.mjs', import
 const step = name => workflow.split(`- name: ${name}`)[1]?.split('\n      - name:')[0] ?? '';
 const condition = name => step(name).match(/^        if: (.+)$/m)?.[1] ?? '';
 
+test('PR Summary publisher receives configured reviewer model in off, shadow, and enforce paths', () => {
+  const legacy = step('Post review comments');
+  const enforce = step('Publish enforce review');
+  assert.match(legacy, /OCR_LLM_MODEL:/);
+  assert.match(enforce, /OCR_LLM_MODEL:/);
+  assert.match(legacy, /post-ocr-comments\.mjs/);
+  assert.match(enforce, /postReview/);
+  assert.match(legacy, /EXPECTED_SHA:/);
+  assert.match(enforce, /COMMIT_SHA:/);
+  // Display reporting must not affect existing review authorization or publishing.
+  assert.match(legacy, /steps\.finalize-routing\.outcome == 'success'/);
+  assert.match(enforce, /steps\.routing-gate\.outputs\.PUBLISH_AUTHORIZED == 'true'/);
+});
+
 test('Actions Summary displays decision settings and evidence-backed reviewer model without changing the gate', () => {
   const summary = step('Write LLM model summary');
   assert.match(summary, /if: always\(\) && steps\.target\.outputs\.internal == 'true'/);
