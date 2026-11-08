@@ -8,7 +8,7 @@ import { classifyPRRisk } from './classify-pr-review-risk.mjs';
 import { buildDecisionState } from './build-decision-state.mjs';
 import { authorizeDecisionEgress } from './authorize-decision-egress.mjs';
 import { readCheckoutIdentity } from './read-checkout-identity.mjs';
-import { requestReviewDecision } from './decision-provider.mjs';
+import { requestReviewDecision, formatDecisionDiagnostic } from './decision-provider.mjs';
 import { selectReviewRoute } from './select-review-model.mjs';
 import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
@@ -268,6 +268,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   }
   if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
+    console.info(formatDecisionDiagnostic(decision));
   }
   const resolved = selectReviewRoute({ mode: binding.mode, decisionLlmEnabled, features, decision,
     certifiedCatalog: needsModel ? verifiedBundle : catalog,

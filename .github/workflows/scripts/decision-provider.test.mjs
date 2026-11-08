@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestReviewDecision } from './decision-provider.mjs';
+import { requestReviewDecision, formatDecisionDiagnostic } from './decision-provider.mjs';
 
 const state = {
   schema_version: '1', all_changed_file_count_bucket: '1-5', reviewable_file_count_bucket: '1-5',
@@ -111,5 +111,93 @@ test('sent body contains only the 15 DecisionState/v1 keys and no raw diff or pa
   for (const forbidden of ['all_changed_files', 'ocr_reviewable_paths', 'head_sha', 'diff', 'pr_title', 'raw']) {
     assert.equal(Object.hasOwn(body.state, forbidden), false, forbidden);
     assert.equal(Object.hasOwn(body, forbidden), false, forbidden);
+  }
+});
+
+
+test('safe failure diagnostics distinguish HTTP status without response body or tokens', async () => {
+  for (const httpStatus of [401, 403, 429, 500, 503]) {
+    const result = await invoke({}, async () => ({
+      ok: false, status: httpStatus,
+      text: async () => { throw new Error('HTTP_BODY_SECRET_SENTINEL'); },
+      headers: { authorization: 'Bearer HEADER_SECRET_SENTINEL' },
+    }));
+    assert.equal(result.status, 'decision_unavailable');
+    assert.equal(result.reason, 'http_error');
+    assert.equal(result.failureClass, 'http_error');
+    assert.equal(result.httpStatus, httpStatus);
+    const log = formatDecisionDiagnostic(result);
+    assert.match(log, /^DECISION_LLM_DIAGNOSTIC status=decision_unavailable reason=http_error failure_class=http_error http_status=[0-9]+ latency_ms=[0-9]+$/);
+    assert.ok(log.includes('http_status=' + httpStatus));
+    assert.doesNotMatch(log, /SECRET_SENTINEL|Bearer/);
+  }
+});
+
+test('safe failure diagnostics distinguish timeout from transport exceptions', async () => {
+  const timeout = await invoke({}, async () => { throw new DOMException('SENSITIVE_TIMEOUT_SENTINEL', 'TimeoutError'); });
+  const transport = await invoke({}, async () => { throw new Error('SENSITIVE_TRANSPORT_SENTINEL'); });
+  assert.equal(timeout.reason, 'request_failed');
+  assert.equal(timeout.failureClass, 'timeout');
+  assert.equal(transport.reason, 'request_failed');
+  assert.equal(transport.failureClass, 'transport_error');
+  assert.match(formatDecisionDiagnostic(timeout), /failure_class=timeout/);
+  assert.match(formatDecisionDiagnostic(transport), /failure_class=transport_error/);
+  assert.doesNotMatch(formatDecisionDiagnostic(timeout), /SENSITIVE/);
+  assert.doesNotMatch(formatDecisionDiagnostic(transport), /SENSITIVE/);
+});
+
+test('safe failure diagnostics distinguish response read, JSON parse, and schema validation', async () => {
+  const read = await invoke({}, async () => ({
+    ok: true, text: async () => { throw new Error('SENSITIVE_READ_SENTINEL'); },
+  }));
+  const json = await invoke({}, async () => ({ ok: true, text: async () => '{not json SENSITIVE_JSON_SENTINEL' }));
+  const schema = await invoke({}, async () => response({ answers: { review_strategy: { type: 'text', choice: 'fast' } } }));
+  const tooLarge = await invoke({}, async () => ({ ok: true, text: async () => 'x'.repeat(1024 * 1024 + 1) }));
+  for (const [value, kind] of [
+    [read, 'response_read_error'], [json, 'response_json_invalid'],
+    [schema, 'response_schema_invalid'], [tooLarge, 'response_too_large'],
+  ]) {
+    assert.equal(value.status, 'invalid_response');
+    assert.equal(value.reason, 'invalid_response');
+    assert.equal(value.failureClass, kind);
+    assert.ok(formatDecisionDiagnostic(value).includes('failure_class=' + kind));
+    assert.doesNotMatch(formatDecisionDiagnostic(value), /SENSITIVE_SENTINEL|SENSITIVE_|x{40}/);
+  }
+});
+
+test('sanitized diagnostics never echo unexpected provider fields', async () => {
+  const unavailable = await invoke({ apiKey: '' });
+  assert.equal(unavailable.reason, 'missing_api_key');
+  assert.match(formatDecisionDiagnostic(unavailable), /status=decision_unavailable reason=missing_api_key failure_class=not_sent http_status=none/);
+  const good = await invoke();
+  assert.match(formatDecisionDiagnostic(good), /status=decision_available reason=none failure_class=none http_status=none/);
+  const hostile = formatDecisionDiagnostic({
+    status: 'INJECTED_STATUS_SECRET', reason: 'INJECTED_REASON_SECRET',
+    failureClass: 'INJECTED_FAILURE_SECRET', httpStatus: 'INJECTED_HTTP_SECRET',
+    latencyMs: Number.POSITIVE_INFINITY, message: 'INJECTED_MESSAGE_SECRET',
+  });
+  assert.equal(hostile, 'DECISION_LLM_DIAGNOSTIC status=unknown reason=unknown failure_class=unknown http_status=none latency_ms=unknown');
+});
+
+test('safe failure diagnostics identify known transport causes without echoing codes or exceptions', async () => {
+  for (const [causeCode, expectedClass] of [
+    ['UND_ERR_CONNECT_TIMEOUT', 'timeout'],
+    ['ETIMEDOUT', 'timeout'],
+    ['ENOTFOUND', 'dns_error'],
+    ['EAI_AGAIN', 'dns_error'],
+    ['CERT_HAS_EXPIRED', 'tls_error'],
+    ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'tls_error'],
+    ['ECONNREFUSED', 'connection_error'],
+    ['ECONNRESET', 'connection_error'],
+    ['UNEXPECTED_SECRET_SENTINEL', 'transport_error'],
+  ]) {
+    const result = await invoke({}, async () => {
+      throw Object.assign(new Error('SENSITIVE_TRANSPORT_SENTINEL'), { cause: { code: causeCode } });
+    });
+    assert.equal(result.status, 'decision_unavailable');
+    assert.equal(result.failureClass, expectedClass);
+    const log = formatDecisionDiagnostic(result);
+    assert.ok(log.includes('failure_class=' + expectedClass));
+    assert.doesNotMatch(log, /SENSITIVE|SENTINEL|UND_ERR|ECONN|ENOTFOUND|CERT_HAS_EXPIRED/);
   }
 });
