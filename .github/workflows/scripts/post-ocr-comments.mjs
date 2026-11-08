@@ -17,6 +17,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { fetchUniqueReviewComments } from './deduplicate-review-comments.mjs';
 import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs';
+import { renderModelSummary } from './write-model-summary.mjs';
 
 class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
@@ -160,7 +161,7 @@ function wrapInCodeBlock(body, language = '') {
   return `${fence}${language}\n${body}\n${fence}`;
 }
 
-function buildSummarySection(comments, reviewMetadata, changedFiles = []) {
+function buildSummarySection(comments, reviewMetadata, changedFiles = [], modelSummary = '') {
   const countsByPath = new Map();
   for (const comment of comments) {
     countsByPath.set(comment.path, (countsByPath.get(comment.path) || 0) + 1);
@@ -196,6 +197,7 @@ function buildSummarySection(comments, reviewMetadata, changedFiles = []) {
     '## 📋 OpenCodeReview Summary',
     SUMMARY_MARKER,
     '',
+    ...(modelSummary ? [modelSummary.trimEnd(), ''] : []),
     ...noFindingsSection,
     ...(noFindingsSection.length > 0 ? ['',] : []),
     `${comments.length} 件のコメント / ${countsByPath.size} ファイル${elapsed}`,
@@ -220,10 +222,10 @@ function buildCombinedCodeBlock(comments, maxTranscriptLength) {
   return wrapInCodeBlock(transcript, 'text');
 }
 
-function buildSummaryBody(comments, reviewMetadata, changedFiles) {
+function buildSummaryBody(comments, reviewMetadata, changedFiles, modelSummary = '') {
   const MAX_LENGTH = 65536;
   const footer = '\n\n---\n*Posted by OpenCodeReview*';
-  const summarySection = buildSummarySection(comments, reviewMetadata, changedFiles);
+  const summarySection = buildSummarySection(comments, reviewMetadata, changedFiles, modelSummary);
   const separator = '\n\n';
 
   // Calculate initial max transcript length assuming minimal fence (```)
@@ -295,8 +297,8 @@ async function postFailureComment({ authorizeBeforeMutation, expectedSha, github
 }
 
 
-async function postSummaryComment({ authorizeBeforeMutation, botLogin, changedFiles, comments, expectedSha, githubApi, outputPath, reviewMetadata, prNumber }) {
-  const body = buildSummaryBody(comments, reviewMetadata, changedFiles);
+async function postSummaryComment({ authorizeBeforeMutation, botLogin, changedFiles, comments, expectedSha, githubApi, modelSummary, outputPath, reviewMetadata, prNumber }) {
+  const body = buildSummaryBody(comments, reviewMetadata, changedFiles, modelSummary);
   const existing = [];
   for (let page = 1; ; page++) {
     const response = await githubApi('GET', `/issues/${prNumber}/comments?per_page=100&page=${page}`);
@@ -599,6 +601,14 @@ export async function run({
     changedFiles = [...filesMap.keys()];
   }
 
+  let modelSummary = '';
+  try {
+    modelSummary = await renderModelSummary({ env: { ...env, COMMIT_SHA: expectedSha ?? env.EXPECTED_SHA } });
+  } catch {
+    // Summary display must not alter the existing review publication outcome.
+    console.warn('PR_MODEL_SUMMARY_UNAVAILABLE');
+  }
+
   return postSummaryComment({
     authorizeBeforeMutation,
     botLogin,
@@ -606,6 +616,7 @@ export async function run({
     comments: summaryComments,
     expectedSha,
     githubApi,
+    modelSummary,
     outputPath,
     reviewMetadata: {
       coverage: result.coverage,
