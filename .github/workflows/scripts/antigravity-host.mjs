@@ -52,6 +52,22 @@ function sanitizeProgress(value) {
   return sanitize(cleaned);
 }
 
+// Only fixed classifications reach Actions logs; never include stdout, stderr, prompts or error text.
+function describeOutputFormat(stdout) {
+  const trimmed = String(stdout ?? '').trim();
+  if (!trimmed) return 'empty';
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json_like';
+  if (trimmed.includes('\n{')) return 'mixed_or_stream';
+  return 'text';
+}
+
+function describePayloadFailure(error, stdout) {
+  if (!String(stdout ?? '').trim()) return 'empty_stdout';
+  if (error?.message === 'Response text is empty') return 'empty_response';
+  if (error instanceof SyntaxError || error?.message === 'No valid JSON object found in response') return 'json_parse_failed';
+  return 'invalid_envelope';
+}
+
 function failure(mode, message) {
   if (mode === THREAD_MODE) {
     return {
@@ -324,7 +340,12 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
       flushProgress();
       if (code !== 0) {
         const errorDetail = stderr.trim() ? `: ${stderr.trim()}` : '';
-        finish({ error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`) });
+        finish({
+          error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`),
+          failureKind: 'process_exit',
+          exitCode: Number.isInteger(code) ? code : null,
+          exitSignaled: signal !== null && signal !== undefined,
+        });
         return;
       }
       try {
@@ -332,7 +353,12 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
         finish({ parsed });
       } catch (err) {
         const errorDetail = stderr.trim() ? ` (stderr: ${stderr.trim()})` : '';
-        finish({ error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`), failureKind: 'invalid_output' });
+        finish({
+          error: new Error(`Antigravity host returned malformed JSON: ${err.message}${errorDetail}`),
+          failureKind: 'invalid_output',
+          outputFormat: describeOutputFormat(stdout),
+          failureReason: describePayloadFailure(err, stdout),
+        });
       }
     });
     child.stdin.once('error', error => {
@@ -373,6 +399,7 @@ async function runMode({
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
   printTimeoutMs,
   onProgress,
+  onDiagnostic = line => console.error(line),
   executablePath,
   executableIdentity,
   targetRoot,
@@ -456,6 +483,45 @@ async function runMode({
   const models = [effectiveModel, ...fallbackCandidates]
     .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
   const progressSink = certifiedRoute ? undefined : onProgress;
+  const emitSafeFailureDiagnostic = (childResult, validatedResult, attemptIndex) => {
+    if (!certifiedRoute) return;
+    let stage = 'host_execution';
+    let reason = 'host_error';
+    let outputFormat = 'unknown';
+    let exitCode = 'na';
+    if (childResult.failureKind === 'process_exit') {
+      stage = 'process_exit';
+      reason = childResult.exitSignaled ? 'terminated_by_signal' : 'nonzero_exit';
+      exitCode = Number.isInteger(childResult.exitCode) && childResult.exitCode >= 0 && childResult.exitCode <= 255
+        ? String(childResult.exitCode) : 'na';
+    } else if (childResult.failureKind === 'spawn_failed') {
+      stage = 'spawn';
+      reason = 'spawn_failed';
+    } else if (childResult.failureKind === 'timeout') {
+      stage = 'timeout';
+      reason = 'timeout';
+    } else if (childResult.failureKind === 'invalid_output') {
+      stage = 'payload_parse';
+      reason = ['empty_stdout', 'empty_response', 'json_parse_failed', 'invalid_envelope']
+        .includes(childResult.failureReason) ? childResult.failureReason : 'invalid_envelope';
+      outputFormat = ['empty', 'json_like', 'mixed_or_stream', 'text']
+        .includes(childResult.outputFormat) ? childResult.outputFormat : 'unknown';
+    } else if (!childResult.error && !validatedResult) {
+      stage = 'schema_validation';
+      reason = 'invalid_schema';
+      outputFormat = 'parsed_json';
+    } else if (validatedResult?.status === 'failed') {
+      stage = 'model_result';
+      reason = 'failed_status';
+      outputFormat = 'parsed_json';
+    }
+    // The entire line consists of static enums, a bounded exit code and our attempt counter.
+    try {
+      onDiagnostic(`ANTIGRAVITY_HOST_DIAGNOSTIC stage=${stage} reason=${reason} output_format=${outputFormat} exit_code=${exitCode} attempt=${attemptIndex}`);
+    } catch {
+      // Diagnostic logging is best effort; it never changes authorization or review results.
+    }
+  };
 
   const attempts = Math.max(1, maxRetries + 1);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
@@ -527,6 +593,9 @@ async function runMode({
       if (routingMode === 'shadow' || certifiedRoute) {
         emitEvent('attempt_completed', currentIndex, normalizeAntigravityModel(currentModel), attemptResult, Date.now() - startedAt, null);
         if (certifiedRoute && auditIncomplete) return fixedFailure('AUDIT_INCOMPLETE');
+      }
+      if (!validatedResult || validatedResult.status === 'failed') {
+        emitSafeFailureDiagnostic(childResult, validatedResult, currentIndex);
       }
       if (validatedResult) return complete(validatedResult);
 
