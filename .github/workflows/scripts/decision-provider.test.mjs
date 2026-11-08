@@ -178,3 +178,26 @@ test('sanitized diagnostics never echo unexpected provider fields', async () => 
   });
   assert.equal(hostile, 'DECISION_LLM_DIAGNOSTIC status=unknown reason=unknown failure_class=unknown http_status=none latency_ms=unknown');
 });
+
+test('safe failure diagnostics identify known transport causes without echoing codes or exceptions', async () => {
+  for (const [causeCode, expectedClass] of [
+    ['UND_ERR_CONNECT_TIMEOUT', 'timeout'],
+    ['ETIMEDOUT', 'timeout'],
+    ['ENOTFOUND', 'dns_error'],
+    ['EAI_AGAIN', 'dns_error'],
+    ['CERT_HAS_EXPIRED', 'tls_error'],
+    ['UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'tls_error'],
+    ['ECONNREFUSED', 'connection_error'],
+    ['ECONNRESET', 'connection_error'],
+    ['UNEXPECTED_SECRET_SENTINEL', 'transport_error'],
+  ]) {
+    const result = await invoke({}, async () => {
+      throw Object.assign(new Error('SENSITIVE_TRANSPORT_SENTINEL'), { cause: { code: causeCode } });
+    });
+    assert.equal(result.status, 'decision_unavailable');
+    assert.equal(result.failureClass, expectedClass);
+    const log = formatDecisionDiagnostic(result);
+    assert.ok(log.includes('failure_class=' + expectedClass));
+    assert.doesNotMatch(log, /SENSITIVE|SENTINEL|UND_ERR|ECONN|ENOTFOUND|CERT_HAS_EXPIRED/);
+  }
+});
