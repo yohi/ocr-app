@@ -794,6 +794,7 @@ jobs:
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           if [ -f "/tmp/ocr-result.json" ]; then
             node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
