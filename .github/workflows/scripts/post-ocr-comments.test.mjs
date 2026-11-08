@@ -497,6 +497,7 @@ test('PR Summary includes configured decision model without claiming unsealed re
   const requests = installHttpsMock([
     { data: [], status: 200 },
     { data: [], status: 200 },
+    { data: { head: { sha: 'a'.repeat(40) } }, status: 200 },
     { data: {}, status: 201 },
   ]);
   const exitCode = await run({
