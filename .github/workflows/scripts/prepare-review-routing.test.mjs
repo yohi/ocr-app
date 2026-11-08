@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { chmodSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { createHash } from 'node:crypto';
 import { hashRoutingSourceManifest } from './routing-authorization.mjs';
 import {
@@ -221,6 +221,7 @@ test('off mode with the global flag selects a centrally certified model without 
   const sha = 'a'.repeat(40);
   const oldSha = 'b'.repeat(40);
   let decisionPosts = 0;
+  const diagnosticLog = mock.method(console, 'info', () => {});
   try {
     const result = await prepareRoutingStep({ env: environment, trustedInputs: fixture.trust, now: () => fixture.now,
       fetchRepoIdentity: async ({ fullName }) => fullName === targetRepo
@@ -229,9 +230,7 @@ test('off mode with the global flag selects a centrally certified model without 
       fetchImpl: async (url, options) => {
         if (options.method === 'POST') {
           decisionPosts++;
-          return { ok: true, json: async () => ({ answers: { review_strategy: {
-            type: 'choice', choice: 'deep', probabilities: { fast: 0.05, deep: 0.95 }, confidence: 0.95,
-          } } }) };
+          return { ok: false, status: 429, text: async () => { throw new Error('PRIVATE_HTTP_BODY'); } };
         }
         return { ok: true, json: async () => ({ id: targetId, full_name: targetRepo, private: true, visibility: 'private' }) };
       },
@@ -242,8 +241,17 @@ test('off mode with the global flag selects a centrally certified model without 
     assert.equal(result.route.effective_mode, 'off');
     assert.equal(result.route.selected_model_id, 'certified-primary');
     assert.equal(result.decisionRecord.decision_llm_enabled, true);
+    assert.equal(result.decisionRecord.decision_status, 'unavailable');
+    assert.equal(result.route.route_source, 'deterministic_fallback');
     assert.equal(result.egressStatus, 'allowed');
-  } finally { rmSync(runTemp, { recursive: true, force: true }); }
+    const diagnosticLines = diagnosticLog.mock.calls.map(call => call.arguments.join(' '));
+    assert.equal(diagnosticLines.length, 1);
+    assert.match(diagnosticLines[0], /^DECISION_LLM_DIAGNOSTIC status=decision_unavailable reason=http_error failure_class=http_error http_status=429 latency_ms=[0-9]+$/);
+    assert.doesNotMatch(diagnosticLines[0], /PRIVATE_HTTP_BODY/);
+  } finally {
+    diagnosticLog.mock.restore();
+    rmSync(runTemp, { recursive: true, force: true });
+  }
 });
 
 for (const mode of ['shadow', 'enforce']) {
