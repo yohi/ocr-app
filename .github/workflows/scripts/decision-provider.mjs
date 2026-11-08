@@ -10,7 +10,7 @@ const REASONS = Object.freeze({
 });
 const STATUSES = new Set(['decision_available', 'decision_unavailable', 'invalid_response', 'egress_denied']);
 const FAILURE_CLASSES = new Set([
-  'none', 'not_sent', 'timeout', 'transport_error', 'http_error',
+  'none', 'not_sent', 'timeout', 'dns_error', 'tls_error', 'connection_error', 'transport_error', 'http_error',
   'response_too_large', 'response_read_error', 'response_json_invalid', 'response_schema_invalid',
 ]);
 const KNOWN_REASONS = new Set(['none', ...Object.values(REASONS)]);
@@ -18,6 +18,17 @@ const KNOWN_REASONS = new Set(['none', ...Object.values(REASONS)]);
 function statusCode(response) {
   const status = response?.status;
   return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
+
+function classifyTransportFailure(error) {
+  const code = error?.cause?.code;
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    || code === 'ETIMEDOUT' || code === 'UND_ERR_CONNECT_TIMEOUT') return 'timeout';
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return 'dns_error';
+  if (code === 'ECONNRESET' || code === 'ECONNREFUSED' || code === 'UND_ERR_SOCKET') return 'connection_error';
+  if (code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'
+    || code === 'DEPTH_ZERO_SELF_SIGNED_CERT') return 'tls_error';
+  return 'transport_error';
 }
 
 function result(status, reason, fields = {}) {
@@ -120,7 +131,7 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
       }),
     });
   } catch (error) {
-    const failureClass = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'timeout' : 'transport_error';
+    const failureClass = classifyTransportFailure(error);
     return result('decision_unavailable', REASONS.request, { failureClass, latencyMs: Date.now() - started });
   }
   if (!response?.ok) return result('decision_unavailable', REASONS.http, {
