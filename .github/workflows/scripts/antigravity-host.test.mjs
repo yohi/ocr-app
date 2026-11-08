@@ -1198,7 +1198,7 @@ test('certified Antigravity failures emit bounded stage-only diagnostics without
     assert.equal(result.message, 'REVIEW_EXECUTION_FAILED', scenario.name);
     assert.deepEqual(diagnostics, [`ANTIGRAVITY_HOST_DIAGNOSTIC ${scenario.expected}`], scenario.name);
     assert.equal(events[1].result,
-      scenario.name === 'malformed JSON' || scenario.name === 'invalid schema' ? 'invalid_output' : 'transport_error',
+      scenario.name === 'nonzero exit' ? 'transport_error' : 'invalid_output',
       scenario.name);
     assert.ok(!JSON.stringify(diagnostics).includes(secret), scenario.name);
     assert.ok(!JSON.stringify(diagnostics).includes('private raw stdout'), scenario.name);
