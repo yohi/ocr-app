@@ -8,9 +8,34 @@ const REASONS = Object.freeze({
   denied: 'egress_denied', invalid: 'invalid_input', missingKey: 'missing_api_key',
   request: 'request_failed', http: 'http_error', response: 'invalid_response',
 });
+const STATUSES = new Set(['decision_available', 'decision_unavailable', 'invalid_response', 'egress_denied']);
+const FAILURE_CLASSES = new Set([
+  'none', 'not_sent', 'timeout', 'transport_error', 'http_error',
+  'response_too_large', 'response_read_error', 'response_json_invalid', 'response_schema_invalid',
+]);
+const KNOWN_REASONS = new Set(['none', ...Object.values(REASONS)]);
+
+function statusCode(response) {
+  const status = response?.status;
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+}
 
 function result(status, reason, fields = {}) {
-  return { status, choice: fields.choice ?? null, probabilities: fields.probabilities ?? null, confidence: fields.confidence ?? null, latencyMs: fields.latencyMs ?? null, reason };
+  return { status, choice: fields.choice ?? null, probabilities: fields.probabilities ?? null,
+    confidence: fields.confidence ?? null, latencyMs: fields.latencyMs ?? null, reason,
+    failureClass: fields.failureClass ?? (reason === null ? 'none' : 'not_sent'),
+    httpStatus: fields.httpStatus ?? null };
+}
+
+// Fixed vocabulary only: never include raw exceptions, headers, URLs, response bodies, or API keys.
+export function formatDecisionDiagnostic(decision) {
+  const status = STATUSES.has(decision?.status) ? decision.status : 'unknown';
+  const reason = KNOWN_REASONS.has(decision?.reason ?? 'none') ? decision.reason ?? 'none' : 'unknown';
+  const failureClass = FAILURE_CLASSES.has(decision?.failureClass) ? decision.failureClass : 'unknown';
+  const httpStatus = statusCode({ status: decision?.httpStatus });
+  const elapsed = decision?.latencyMs;
+  const latencyMs = Number.isSafeInteger(elapsed) && elapsed >= 0 && elapsed <= 3_600_000 ? elapsed : 'unknown';
+  return `DECISION_LLM_DIAGNOSTIC status=${status} reason=${reason} failure_class=${failureClass} http_status=${httpStatus ?? 'none'} latency_ms=${latencyMs}`;
 }
 
 function validExpectedBinding(binding) {
@@ -94,21 +119,30 @@ export async function requestReviewDecision({ decisionState, grant, expectedBind
         } },
       }),
     });
-  } catch {
-    return result('decision_unavailable', REASONS.request, { latencyMs: Date.now() - started });
+  } catch (error) {
+    const failureClass = error?.name === 'TimeoutError' || error?.name === 'AbortError' ? 'timeout' : 'transport_error';
+    return result('decision_unavailable', REASONS.request, { failureClass, latencyMs: Date.now() - started });
   }
-  if (!response?.ok) return result('decision_unavailable', REASONS.http, { latencyMs: Date.now() - started });
+  if (!response?.ok) return result('decision_unavailable', REASONS.http, {
+    failureClass: 'http_error', httpStatus: statusCode(response), latencyMs: Date.now() - started,
+  });
+  let rawText;
+  try {
+    rawText = await readBoundedText(response);
+  } catch (error) {
+    const failureClass = error?.message === 'response too large' ? 'response_too_large' : 'response_read_error';
+    return result('invalid_response', REASONS.response, { failureClass, latencyMs: Date.now() - started });
+  }
   let payload;
   try {
-    const text = await readBoundedText(response);
-    payload = JSON.parse(text);
+    payload = JSON.parse(rawText);
   } catch {
-    return result('invalid_response', REASONS.response, { latencyMs: Date.now() - started });
+    return result('invalid_response', REASONS.response, { failureClass: 'response_json_invalid', latencyMs: Date.now() - started });
   }
   try {
     const normalized = parseAnswer(payload);
     return result('decision_available', null, { ...normalized, latencyMs: Date.now() - started });
   } catch {
-    return result('invalid_response', REASONS.response, { latencyMs: Date.now() - started });
+    return result('invalid_response', REASONS.response, { failureClass: 'response_schema_invalid', latencyMs: Date.now() - started });
   }
 }
