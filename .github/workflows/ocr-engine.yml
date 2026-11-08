@@ -724,6 +724,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
           OCR_RESULT_PATH: /tmp/ocr-result.json
         run: |
           node --input-type=module - <<'EOF'
