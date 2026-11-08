@@ -475,13 +475,52 @@ test('posts one Summary issue comment with generated counts and all valid findin
   // Then
   assert.equal(exitCode, 0);
   assert.equal(requests.length, 4);
-  assert.deepEqual(requests[3], {
-    method: 'POST',
-    path: '/repos/owner/repo/issues/123/comments',
-    body: {
-      body: '## 📋 OpenCodeReview Summary\n<!-- antigravity-ocr-summary -->\n\n2 件のコメント / 2 ファイル / 所要時間: 1m2s\n\n| ファイル | コメント数 |\n| --- | --- |\n| `src/alpha.js` | 1 |\n| `src/beta.js` | 1 |\n\n```text\n[src/alpha.js:2]\nFirst finding\n\n[src/beta.js:4]\nSecond finding\n```\n\n---\n*Posted by OpenCodeReview*',
+  assert.equal(requests[3].method, 'POST');
+  assert.equal(requests[3].path, '/repos/owner/repo/issues/123/comments');
+  const summaryBody = requests[3].body.body;
+  assert.match(summaryBody, /^## 📋 OpenCodeReview Summary\n<!-- antigravity-ocr-summary -->/);
+  assert.match(summaryBody, /OpenCodeReview — LLM Summary/);
+  assert.match(summaryBody, /判断特化LLMモデル（設定）/);
+  assert.match(summaryBody, /レビュー実行モデル（監査記録） \| 未確定/);
+  assert.match(summaryBody, /2 件のコメント \/ 2 ファイル \/ 所要時間: 1m2s/);
+  assert.match(summaryBody, /\| `src\/alpha\.js` \| 1 \|/);
+  assert.match(summaryBody, /\| `src\/beta\.js` \| 1 \|/);
+  assert.match(summaryBody, /\[src\/alpha\.js:2\]\nFirst finding/);
+  assert.match(summaryBody, /\[src\/beta\.js:4\]\nSecond finding/);
+  assert.match(summaryBody, /\n\n---\n\*Posted by OpenCodeReview\*$/);
+});
+
+test('PR Summary includes configured decision model without claiming unsealed review execution', async () => {
+  const resultPath = await createResultFile({ comments: [], summary: {} });
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ocr-summary-evidence-'));
+  temporaryDirectories.push(directory);
+  const requests = installHttpsMock([
+    { data: [], status: 200 },
+    { data: [], status: 200 },
+    { data: {}, status: 201 },
+  ]);
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    expectedSha: 'a'.repeat(40),
+    env: {
+      DECISION_ROUTING_MODE: 'off',
+      DECISION_LLM_ENABLED: 'true',
+      GITHUB_RUN_ID: '123',
+      GITHUB_RUN_ATTEMPT: '1',
+      RUNNER_TEMP: directory,
+      OCR_LLM_MODEL: 'gemini-3.8-flash-medium',
     },
+    authorizeBeforeMutation: async () => true,
   });
+  assert.equal(exitCode, 0);
+  const body = requests.at(-1).body.body;
+  assert.match(body, /判断特化LLM \| 有効/);
+  assert.match(body, /判断特化LLMモデル（設定） \| `inception\/mercury-decide:free`/);
+  assert.match(body, /レビュー既定モデル（設定） \| `gemini-3\.8-flash-medium`/);
+  assert.match(body, /レビュー実行モデル（監査記録） \| 未確定（有効な監査記録なし）/);
+  assert.doesNotMatch(body, /レビュー実行モデル（監査記録） \| `gemini-3\.8-flash-medium`/);
+  assert.match(body, /0 件のコメント \/ 0 ファイル/);
 });
 
 test('posts a zero-finding Summary when every finding was already posted', async () => {
