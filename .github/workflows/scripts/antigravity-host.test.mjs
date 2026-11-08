@@ -1153,3 +1153,80 @@ test('off-mode decision opt-in uses the attested model and records certified att
   assert.equal(result.status, 'success');
   assert.deepEqual(events.map(event => event.event), ['attempt_started', 'attempt_completed', 'host_completed']);
 });
+
+
+test('certified Antigravity failures emit bounded stage-only diagnostics without leaking child output', async () => {
+  const secret = 'ghp_sensitive-child-output-should-never-appear';
+  const scenarios = [
+    {
+      name: 'nonzero exit',
+      output: 'private raw stdout',
+      options: { stderr: `authorization=${secret}`, exitCode: 17 },
+      expected: 'stage=process_exit reason=nonzero_exit output_format=unknown exit_code=17 attempt=1',
+    },
+    {
+      name: 'empty stdout',
+      output: '',
+      options: { stderr: `Bearer ${secret}` },
+      expected: 'stage=payload_parse reason=empty_stdout output_format=empty exit_code=na attempt=1',
+    },
+    {
+      name: 'malformed JSON',
+      output: '{broken-json',
+      options: { stderr: `Bearer ${secret}` },
+      expected: 'stage=payload_parse reason=json_parse_failed output_format=json_like exit_code=na attempt=1',
+    },
+    {
+      name: 'invalid schema',
+      output: JSON.stringify({ ...validReview, coverage: 'not-a-number' }),
+      options: { stderr: `authorization=${secret}` },
+      expected: 'stage=schema_validation reason=invalid_schema output_format=parsed_json exit_code=na attempt=1',
+    },
+  ];
+  for (const scenario of scenarios) {
+    const diagnostics = [];
+    const events = [];
+    const result = await runHost({
+      prompt: `Review ${secret}`, cwd: '/tmp/trusted', routingMode: 'enforce',
+      model: 'cert-primary', modelCatalog: certifiedCatalog, fallbackModels: [],
+      ...attestedExecutable(), maxRetries: 0,
+      onAttemptEvent: event => events.push(event),
+      onDiagnostic: line => diagnostics.push(line),
+      spawn: spawnWith(scenario.output, scenario.options),
+    });
+    assert.equal(result.status, 'failed', scenario.name);
+    assert.equal(result.message, 'REVIEW_EXECUTION_FAILED', scenario.name);
+    assert.deepEqual(diagnostics, [`ANTIGRAVITY_HOST_DIAGNOSTIC ${scenario.expected}`], scenario.name);
+    assert.equal(events[1].result,
+      scenario.name === 'nonzero exit' ? 'transport_error' : 'invalid_output',
+      scenario.name);
+    assert.ok(!JSON.stringify(diagnostics).includes(secret), scenario.name);
+    assert.ok(!JSON.stringify(diagnostics).includes('private raw stdout'), scenario.name);
+    assert.ok(!JSON.stringify(diagnostics).includes('authorization='), scenario.name);
+    assert.deepEqual(Object.keys(events[1]).sort(),
+      ['schema_version', 'run_attempt_id', 'attempt_index', 'event', 'model', 'result', 'timestamp', 'duration_ms', 'host_status'].sort());
+  }
+});
+
+test('certified Antigravity success emits no failure diagnostic', async () => {
+  const diagnostics = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    modelCatalog: certifiedCatalog, fallbackModels: [], ...attestedExecutable(), maxRetries: 0,
+    onAttemptEvent: () => {}, onDiagnostic: line => diagnostics.push(line),
+    spawn: spawnWith(JSON.stringify(validReview)),
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(diagnostics, []);
+});
+
+test('certified diagnostic sink failure cannot change the review verdict', async () => {
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce', model: 'cert-primary',
+    modelCatalog: certifiedCatalog, fallbackModels: [], ...attestedExecutable(), maxRetries: 0,
+    onAttemptEvent: () => {}, onDiagnostic: () => { throw new Error('log unavailable'); },
+    spawn: spawnWith('{invalid-json'),
+  });
+  assert.equal(result.status, 'failed');
+  assert.equal(result.message, 'REVIEW_EXECUTION_FAILED');
+});
