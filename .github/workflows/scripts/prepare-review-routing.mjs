@@ -267,7 +267,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       cliAvailableModels: verified.cliAvailableModels } };
   }
   if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
-    decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, fetchImpl, timeoutMs: 5000 });
+    decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, apiUrl: env.DECISION_LLM_API_URL, modelId: env.DECISION_LLM_MODEL_ID, fetchImpl, timeoutMs: 5000 });
     console.info(formatDecisionDiagnostic(decision));
   }
   const resolved = selectReviewRoute({ mode: binding.mode, decisionLlmEnabled, features, decision,
