@@ -355,6 +355,24 @@ LLM を設定します。
 >
 > `OCR_LLM_AUTH_HEADER_NAME`（認証ヘッダー）と `OCR_LLM_EXTRA_HEADERS`（追加ヘッダー）を両方設定した場合は、ワークフロー内で両者がカンマ区切りでマージされ、`ocr config set llm.extra_headers` が一度だけ実行されて既存のヘッダー設定が単一の文字列として更新されます。
 
+### 判断特化LLM（Decisions API）の設定
+
+判断特化LLMはレビューを実行するLLMとは別に、PRメタデータからレビュー戦略を選択します。
+`DECISION_LLM_ENABLED=true` で有効化されます。
+
+| 名前 | 種別 | 説明 |
+| --- | --- | --- |
+| `DECISION_OPENROUTER_API_KEY` | Secret | OpenRouter APIキー（既存のSecret） |
+| `DECISION_LLM_API_URL` | Variable | Decisions APIのURL。未設定時は `https://openrouter.ai/api/alpha/decisions` |
+| `DECISION_LLM_MODEL_ID` | Variable | 判断モデルID。未設定時は従来の `inception/mercury-decide:free` |
+
+例: ActionsのRepository Variablesへ `DECISION_LLM_MODEL_ID=parallel/decisions-fast:free` を登録するとモデルを切り替えられます。
+`OCR_LLM_MODEL` はレビュー実行モデル用であり、判断モデル設定には影響しません。
+
+**送信先制限**: 既存のegress許可はOpenRouter専用です。別のAPI URLは `egress_denied` となり、APIキーを送信しません。
+別のプロバイダーへ直接接続する場合は、明示的な許可ポリシー変更が別途必要です。
+既存のモデルIDは後方互換性のためデフォルトに残していますが、その利用可能性は保証されません。
+
 #### 設定例：Anthropic
 
 | 名前 | 値の例 |
