@@ -198,6 +198,8 @@ jobs:
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           OPENROUTER_API_KEY: ${{ secrets.DECISION_OPENROUTER_API_KEY }}
+          DECISION_LLM_API_URL: ${{ vars.DECISION_LLM_API_URL || 'https://openrouter.ai/api/alpha/decisions' }}
+          DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: |
           npm ci --prefix self-repo/.github/workflows --ignore-scripts
           node --input-type=module - <<'EOF'
