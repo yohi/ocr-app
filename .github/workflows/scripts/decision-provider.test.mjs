@@ -14,7 +14,8 @@ const grant = { schema_version: '1', allowed: true, reason: 'authorized', visibi
 const answer = { answers: { review_strategy: { type: 'choice', choice: 'fast', probabilities: { fast: 0.8, deep: 0.2 }, confidence: 0.8 } } };
 const response = (body = answer, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body) });
 const FIXED_REASONS = new Set(['egress_denied', 'invalid_input', 'missing_api_key', 'request_failed', 'http_error', 'invalid_response']);
-const invoke = (overrides = {}, fetchImpl = async () => response()) => requestReviewDecision({ decisionState: state, grant, expectedBinding, apiKey: 'secret-test-key', fetchImpl, ...overrides });
+const invoke = (overrides = {}, fetchImpl = async () => response()) => requestReviewDecision({ decisionState: state, grant, expectedBinding, apiKey: 'secret-test-key',
+  apiUrl: 'https://openrouter.ai/api/alpha/decisions', modelId: 'inception/mercury-decide:free', fetchImpl, ...overrides });
 
 test('missing key denies without a request', async () => {
   let calls = 0;
@@ -47,7 +48,7 @@ for (const [label, changes, expected] of [
   });
 }
 
-test('posts the fixed free decision request once and normalizes success', async () => {
+test('posts the configured decision request once and normalizes success', async () => {
   const calls = [];
   const result = await invoke({}, async (url, options) => { calls.push({ url, options }); return response(); });
   assert.equal(calls.length, 1);
@@ -64,6 +65,30 @@ test('posts the fixed free decision request once and normalizes success', async 
   assert.equal(result.status, 'decision_available');
   assert.equal(result.choice, 'fast');
 });
+
+test('uses a configured alternative free Decisions model', async () => {
+  const calls = [];
+  const result = await invoke({ modelId: 'parallel/decisions-fast:free' },
+    async (url, options) => { calls.push({ url, options }); return response(); });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://openrouter.ai/api/alpha/decisions');
+  assert.equal(JSON.parse(calls[0].options.body).model, 'parallel/decisions-fast:free');
+  assert.equal(result.status, 'decision_available');
+});
+
+for (const [label, settings, expectedStatus] of [
+  ['unapproved destination', { apiUrl: 'https://example.com/api/alpha/decisions' }, 'egress_denied'],
+  ['alternate path', { apiUrl: 'https://openrouter.ai/api/alpha/decisions/' }, 'egress_denied'],
+  ['missing model', { modelId: '' }, 'decision_unavailable'],
+  ['malformed model', { modelId: 'invalid model' }, 'decision_unavailable'],
+]) {
+  test(`rejects ${label} without HTTP`, async () => {
+    let requests = 0;
+    const result = await invoke(settings, async () => { requests++; return response(); });
+    assert.equal(requests, 0);
+    assert.equal(result.status, expectedStatus);
+  });
+}
 
 for (const [label, run] of [
   ['timeout', async () => { throw new DOMException('aborted', 'TimeoutError'); }],
