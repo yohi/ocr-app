@@ -215,6 +215,7 @@ test('off mode with the global flag selects a centrally certified model without 
   const targetRepo = 'justice/repo';
   const targetId = 2;
   const environment = { ...env('off'), DECISION_LLM_ENABLED: 'true', GITHUB_REPOSITORY: 'owner/repo',
+    DECISION_LLM_API_URL: 'https://openrouter.ai/api/alpha/decisions', DECISION_LLM_MODEL_ID: 'parallel/decisions-fast:free',
     RUNNER_TEMP: runTemp, OCR_PREVIEW_PATH: join(runTemp, 'preview.json'), BASE_REF: 'main', TARGET_REPO: targetRepo,
     GITHUB_TOKEN: 'target-app-token', CENTRAL_GITHUB_TOKEN: 'central-token', OPENROUTER_API_KEY: 'test-key' };
   writeFileSync(environment.OCR_PREVIEW_PATH, JSON.stringify({ reviewable_files: [{ path: 'src/example.js' }] }));
@@ -230,6 +231,8 @@ test('off mode with the global flag selects a centrally certified model without 
       fetchImpl: async (url, options) => {
         if (options.method === 'POST') {
           decisionPosts++;
+          assert.equal(url, environment.DECISION_LLM_API_URL);
+          assert.equal(JSON.parse(options.body).model, environment.DECISION_LLM_MODEL_ID);
           return { ok: false, status: 429, text: async () => { throw new Error('PRIVATE_HTTP_BODY'); } };
         }
         return { ok: true, json: async () => ({ id: targetId, full_name: targetRepo, private: true, visibility: 'private' }) };
