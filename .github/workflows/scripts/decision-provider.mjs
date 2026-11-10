@@ -1,8 +1,8 @@
 import { assertRunBindingValid, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { validateDecisionState } from './build-decision-state.mjs';
 
-const URL = 'https://openrouter.ai/api/alpha/decisions';
-export const DECISION_MODEL_ID = 'inception/mercury-decide:free';
+const ALLOWED_DECISION_API_URL = 'https://openrouter.ai/api/alpha/decisions';
+const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._:+-]*$/;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const REASONS = Object.freeze({
   denied: 'egress_denied', invalid: 'invalid_input', missingKey: 'missing_api_key',
@@ -106,22 +106,25 @@ async function readBoundedText(response) {
   return text;
 }
 
-export async function requestReviewDecision({ decisionState, grant, expectedBinding, apiKey, fetchImpl, timeoutMs = 5000 }) {
+export async function requestReviewDecision({ decisionState, grant, expectedBinding, apiKey, apiUrl, modelId, fetchImpl, timeoutMs = 5000 }) {
   try { validateDecisionState(decisionState); } catch { return result('decision_unavailable', REASONS.invalid); }
   if (!validExpectedBinding(expectedBinding) || !validGrant(grant, expectedBinding)) return result('egress_denied', REASONS.denied);
+  // The existing egress grant authorizes OpenRouter only, regardless of configured URL.
+  if (apiUrl !== ALLOWED_DECISION_API_URL) return result('egress_denied', REASONS.denied);
+  if (typeof modelId !== 'string' || modelId.length > 128 || !MODEL_ID_PATTERN.test(modelId)) return result('decision_unavailable', REASONS.invalid);
   if (typeof apiKey !== 'string' || apiKey.length === 0) return result('decision_unavailable', REASONS.missingKey);
   if (typeof fetchImpl !== 'function' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return result('decision_unavailable', REASONS.invalid);
 
   const started = Date.now();
   let response;
   try {
-    response = await fetchImpl(URL, {
+    response = await fetchImpl(apiUrl, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       redirect: 'error',
       signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
-        model: DECISION_MODEL_ID,
+        model: modelId,
         state: decisionState,
         questions: { review_strategy: {
           type: 'choice',
