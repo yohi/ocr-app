@@ -507,6 +507,7 @@ test('PR Summary includes configured decision model without claiming unsealed re
     env: {
       DECISION_ROUTING_MODE: 'off',
       DECISION_LLM_ENABLED: 'true',
+      DECISION_LLM_MODEL_ID: 'parallel/decisions-fast:free',
       GITHUB_RUN_ID: '123',
       GITHUB_RUN_ATTEMPT: '1',
       RUNNER_TEMP: directory,
@@ -517,7 +518,7 @@ test('PR Summary includes configured decision model without claiming unsealed re
   assert.equal(exitCode, 0);
   const body = requests.at(-1).body.body;
   assert.match(body, /判断特化LLM \| 有効/);
-  assert.match(body, /判断特化LLMモデル（設定） \| `inception\/mercury-decide:free`/);
+  assert.ok(body.includes('判断特化LLMモデル（設定） | `parallel/decisions-fast:free`'));
   assert.match(body, /レビュー既定モデル（設定） \| `gemini-3\.8-flash-medium`/);
   assert.match(body, /レビュー実行モデル（監査記録） \| 未確定（有効な監査記録なし）/);
   assert.doesNotMatch(body, /レビュー実行モデル（監査記録） \| `gemini-3\.8-flash-medium`/);

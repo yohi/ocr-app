@@ -798,6 +798,7 @@ jobs:
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
+          DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: |
           if [ -f "/tmp/ocr-result.json" ]; then
             node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
@@ -848,4 +849,5 @@ jobs:
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
+          DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: node self-repo/.github/workflows/scripts/write-model-summary.mjs

@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import fs from 'node:fs';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DECISION_MODEL_ID } from './decision-provider.mjs';
 import { formatModelSummary, renderModelSummary } from './write-model-summary.mjs';
 
 test('summary labels decision configuration and the configured reviewer separately', () => {
   const summary = formatModelSummary({
-    mode: 'off', enabled: 'true', configuredReviewModel: 'gemini-3.8-flash-medium',
+    mode: 'off', enabled: 'true', configuredDecisionModel: 'parallel/decisions-fast:free',
+    configuredReviewModel: 'gemini-3.8-flash-medium',
     decision: { decision_status: 'succeeded', egress_status: 'allowed' },
     selectedRoute: { selected_model_id: 'claude-opus-5-5-high', route_source: 'model_decision' },
   });
   assert.match(summary, /判断特化LLM \| 有効/);
-  assert.ok(summary.includes(DECISION_MODEL_ID));
+  assert.ok(summary.includes('判断特化LLMモデル（設定） | `parallel/decisions-fast:free`'));
   assert.match(summary, /判断結果 \| `succeeded`/);
   assert.match(summary, /判断API送信状態 \| `allowed`/);
   assert.match(summary, /レビュー既定モデル（設定） \| `gemini-3\.8-flash-medium`/);
@@ -50,6 +49,7 @@ test('untrusted model IDs cannot inject markdown into the GitHub Summary', () =>
   const secret = 'SECRET_SENTINEL';
   const summary = formatModelSummary({
     mode: 'not-a-mode', enabled: 'bad-value',
+    configuredDecisionModel: 'test\n| ' + secret + ' |',
     configuredReviewModel: 'test\n| ' + secret + ' |',
     selectedRoute: { selected_model_id: 'bad' + String.fromCharCode(96) + secret, route_source: 'bad\n' + secret },
     audit: { executed_review_model: 'bad\n' + secret, attempted_review_models: ['bad\n' + secret] },
@@ -80,8 +80,18 @@ test('summary refuses malformed or unbound runtime records without throwing', as
   }
 });
 
-test('decision model display stays aligned with the provider request configuration', () => {
-  const provider = fs.readFileSync(new URL('./decision-provider.mjs', import.meta.url), 'utf8');
-  assert.match(provider, /model: DECISION_MODEL_ID/);
-  assert.equal(DECISION_MODEL_ID, 'inception/mercury-decide:free');
+test('decision model display reflects the effective Actions environment', async () => {
+  const summary = await renderModelSummary({ env: {
+    DECISION_ROUTING_MODE: 'off',
+    DECISION_LLM_ENABLED: 'true',
+    DECISION_LLM_MODEL_ID: 'parallel/decisions-fast:free',
+    OCR_LLM_MODEL: 'gemini-3.8-flash-medium',
+  } });
+  assert.ok(summary.includes('判断特化LLMモデル（設定） | `parallel/decisions-fast:free`'));
+  assert.ok(summary.includes('レビュー既定モデル（設定） | `gemini-3.8-flash-medium`'));
+});
+
+test('missing configured decision model is not reported as a fixed provider model', () => {
+  const summary = formatModelSummary({ mode: 'off', enabled: 'true' });
+  assert.ok(summary.includes('判断特化LLMモデル（設定） | 未確認'));
 });
