@@ -84,6 +84,10 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install routing validator dependencies
+        if: steps.target.outputs.internal == 'true' && (env.DECISION_ROUTING_MODE != 'off' || env.DECISION_LLM_ENABLED == 'true')
+        run: npm ci --prefix self-repo/.github/workflows --ignore-scripts
+
       - name: Authorize routing start
         id: routing-start
         if: steps.target.outputs.internal == 'true' && (env.DECISION_ROUTING_MODE == 'shadow' || env.DECISION_ROUTING_MODE == 'enforce')
@@ -201,7 +205,6 @@ jobs:
           DECISION_LLM_API_URL: ${{ vars.DECISION_LLM_API_URL || 'https://openrouter.ai/api/alpha/decisions' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: |
-          npm ci --prefix self-repo/.github/workflows --ignore-scripts
           node --input-type=module - <<'EOF'
           import { execFileSync } from 'node:child_process';
           try {

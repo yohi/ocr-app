@@ -78,6 +78,20 @@ test('shadow fallback requires startup approval and handles absent prepared rout
   assert.doesNotMatch(step('Update Check Run completed'), /ROUTING_START_AUTHORIZED != 'true'/);
 });
 
+test('routing validator dependencies are installed before authorization and context preparation', () => {
+  const install = step('Install routing validator dependencies');
+  const command = 'npm ci --prefix self-repo/.github/workflows --ignore-scripts';
+  assert.ok(install.includes(command));
+  assert.ok(install.includes("env.DECISION_ROUTING_MODE != 'off'"));
+  assert.ok(install.includes("env.DECISION_LLM_ENABLED == 'true'"));
+  const installIndex = workflow.indexOf('- name: Install routing validator dependencies');
+  assert.ok(installIndex >= 0);
+  assert.ok(installIndex < workflow.indexOf('- name: Authorize routing start'));
+  assert.ok(installIndex < workflow.indexOf('- name: Prepare trusted review context'));
+  assert.equal(workflow.split(command).length - 1, 1);
+  assert.doesNotMatch(step('Prepare dynamic routing'), /npm ci/);
+});
+
 test('non-off startup requires positive authorization and shadow does not ignore failure', () => {
   assert.match(step('Prepare dynamic routing'), /ROUTING_START_AUTHORIZED == 'true'/);
   assert.match(step('Run Antigravity review host'), /ROUTING_START_AUTHORIZED == 'true'/);

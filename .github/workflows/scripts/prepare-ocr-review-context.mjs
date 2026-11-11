@@ -4,7 +4,8 @@ import { promisify } from 'node:util';
 
 const execFile = promisify(nodeExecFile);
 const DEFAULT_MAX_DIFF_CHARS = 500_000;
-const DIFF_CONTEXT_LINES = '80';
+// Only reduce surrounding context; every changed line must remain present.
+const DIFF_CONTEXT_LEVELS = ['80', '20', '3', '0'];
 
 function isSafeReviewPath(filePath) {
   return typeof filePath === 'string' && filePath.length > 0 &&
@@ -109,16 +110,35 @@ export async function buildReviewContext({
     rulePath,
     ...paths,
   ], { cwd });
-  const diff = await runCommand('git', [
-    'diff',
-    '--no-ext-diff',
-    '--no-color',
-    `--unified=${DIFF_CONTEXT_LINES}`,
-    `origin/${baseRef}...${commitSha}`,
-  ], { cwd });
-
-  if (typeof diff !== 'string') throw new Error('Git diff output is invalid');
-  if (diff.length > maxDiffChars) throw new Error('Review diff is too large');
+  let diff = null;
+  for (const contextLines of DIFF_CONTEXT_LEVELS) {
+    let candidate;
+    try {
+      candidate = await runCommand('git', [
+        // Do not let pathspec magic expand the selected reviewable files.
+        '--literal-pathspecs',
+        'diff',
+        '--no-ext-diff',
+        '--no-color',
+        `--unified=${contextLines}`,
+        `origin/${baseRef}...${commitSha}`,
+        '--',
+        ...paths,
+      ], { cwd });
+    } catch (error) {
+      // A bounded stdout buffer may overflow with high surrounding context.
+      if (error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') continue;
+      throw error;
+    }
+    if (typeof candidate !== 'string') throw new Error('Git diff output is invalid');
+    if (candidate.length === 0) throw new Error('Review diff is empty for reviewable files');
+    if (candidate.length <= maxDiffChars) {
+      diff = candidate;
+      break;
+    }
+  }
+  // Never truncate changed lines or misrepresent partial review coverage.
+  if (diff === null) throw new Error('Review diff is too large');
 
   return {
     base_ref: baseRef,
@@ -143,7 +163,7 @@ export async function main({ env = process.env } = {}) {
     cwd: process.cwd(),
   });
   fs.writeFileSync(outputPath, JSON.stringify(context));
-  console.log(`Prepared OCR review context for ${context.reviewable_files.length} file(s)`);
+  console.log(`Prepared OCR review context for ${context.reviewable_files.length} file(s); diff_chars=${context.diff.length}`);
   return context;
 }
 
