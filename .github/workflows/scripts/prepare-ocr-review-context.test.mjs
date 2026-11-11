@@ -34,7 +34,7 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
       }
       return [
         'diff --git a/README.md b/README.md\n+changed',
-        'diff --git a/_mk/system.mk b/_mk/system.mk\n+cpu-power-agent-hint:',
+        'diff --git a/docs/example.md b/docs/example.md\n+docs change',
       ].join('\n');
     },
   });
@@ -52,7 +52,7 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
     rules: { schema_version: '1', groups: [{ group_id: 1, rule: 'review' }] },
     diff: [
       'diff --git a/README.md b/README.md\n+changed',
-      'diff --git a/_mk/system.mk b/_mk/system.mk\n+cpu-power-agent-hint:',
+      'diff --git a/docs/example.md b/docs/example.md\n+docs change',
     ].join('\n'),
   });
   assert.deepEqual(calls, [
@@ -73,11 +73,15 @@ test('buildReviewContext prepares rules and diff for the selected files', async 
     {
       command: 'git',
       args: [
+        '--literal-pathspecs',
         'diff',
         '--no-ext-diff',
         '--no-color',
         '--unified=80',
         `origin/master...${commitSha}`,
+        '--',
+        'README.md',
+        'docs/example.md',
       ],
       options: { cwd: 'target-repo' },
     },
@@ -138,6 +142,88 @@ test('buildReviewContext rejects an oversized diff instead of truncating review 
     }),
     /diff is too large/i,
   );
+});
+
+test('oversized high-context diff retries with less context without dropping changed lines', async () => {
+  const levels = [];
+  const context = await buildReviewContext({
+    preview: { reviewable_files: [{ path: 'src/reviewed.ts' }] },
+    baseRef: 'master', commitSha, rulePath: '../rules.json', cwd: 'target-repo',
+    maxDiffChars: 20,
+    runCommand: async (command, args) => {
+      if (command === 'ocr') return '{"schema_version":"1","groups":[]}';
+      const level = args.find(arg => arg.startsWith('--unified='));
+      levels.push(level);
+      return level === '--unified=80' ? 'x'.repeat(21) : 'complete diff';
+    },
+  });
+  assert.deepEqual(levels, ['--unified=80', '--unified=20']);
+  assert.equal(context.diff, 'complete diff');
+  assert.equal(context.reviewable_files.length, 1);
+});
+
+test('oversized diff remains a hard failure even with zero context', async () => {
+  const levels = [];
+  await assert.rejects(() => buildReviewContext({
+    preview: { reviewable_files: [{ path: 'src/reviewed.ts' }] },
+    baseRef: 'master', commitSha, rulePath: '../rules.json', cwd: 'target-repo',
+    maxDiffChars: 4,
+    runCommand: async (command, args) => {
+      if (command === 'ocr') return '{"schema_version":"1","groups":[]}';
+      levels.push(args.find(arg => arg.startsWith('--unified=')));
+      return '12345';
+    },
+  }), /Review diff is too large/);
+  assert.deepEqual(levels, ['--unified=80', '--unified=20', '--unified=3', '--unified=0']);
+});
+
+test('git stdout buffer overflow retries but unrelated git errors fail closed', async () => {
+  const input = { preview: { reviewable_files: [{ path: 'README.md' }] },
+    baseRef: 'master', commitSha, rulePath: '../rules.json', cwd: 'target-repo' };
+  let attempts = 0;
+  const context = await buildReviewContext({ ...input,
+    runCommand: async command => {
+      if (command === 'ocr') return '{"schema_version":"1","groups":[]}';
+      attempts++;
+      if (attempts === 1) throw Object.assign(new Error('stdout maxBuffer exceeded'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' });
+      return 'complete diff';
+    },
+  });
+  assert.equal(context.diff, 'complete diff');
+  assert.equal(attempts, 2);
+  attempts = 0;
+  await assert.rejects(() => buildReviewContext({ ...input,
+    runCommand: async command => {
+      if (command === 'ocr') return '{"schema_version":"1","groups":[]}';
+      attempts++;
+      throw Object.assign(new Error('git failed'), { code: 'EACCES' });
+    },
+  }), /git failed/);
+  assert.equal(attempts, 1);
+});
+
+test('pathspec magic is passed literally and cannot expand the review scope', async () => {
+  const gitCommands = [];
+  await buildReviewContext({
+    preview: { reviewable_files: [{ path: ':(glob)**' }] },
+    baseRef: 'master', commitSha, rulePath: '../rules.json', cwd: 'target-repo',
+    runCommand: async (command, args) => {
+      if (command === 'ocr') return '{"schema_version":"1","groups":[]}';
+      gitCommands.push(args);
+      return 'diff --git a/:(glob)** b/:(glob)**';
+    },
+  });
+  assert.equal(gitCommands.length, 1);
+  assert.equal(gitCommands[0][0], '--literal-pathspecs');
+  assert.deepEqual(gitCommands[0].slice(-2), ['--', ':(glob)**']);
+});
+
+test('empty diff with reviewable files is rejected', async () => {
+  await assert.rejects(() => buildReviewContext({
+    preview: { reviewable_files: [{ path: 'README.md' }] },
+    baseRef: 'master', commitSha, rulePath: '../rules.json', cwd: 'target-repo',
+    runCommand: async command => command === 'ocr' ? '{"schema_version":"1","groups":[]}' : '',
+  }), /Review diff is empty/);
 });
 
 test('CLI context preparation uses the workflow step working directory', async () => {
