@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import { join } from 'node:path';
-import { DECISION_MODEL_ID } from './decision-provider.mjs';
 import { createRunBindingFromEnv, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { validateRoutingDecisionRecord, validateRoutingAudit } from './ocr-routing-audit.mjs';
 
@@ -30,7 +29,7 @@ function readValidatedRecord(runTemp, filename, binding, validate) {
   }
 }
 
-export function formatModelSummary({ mode, enabled, configuredReviewModel, decision = null, selectedRoute = null, audit = null } = {}) {
+export function formatModelSummary({ mode, enabled, configuredDecisionModel, configuredReviewModel, decision = null, selectedRoute = null, audit = null } = {}) {
   const decisionEnabled = enabled === 'true';
   let decisionSetting = UNKNOWN;
   if (enabled === 'true') {
@@ -60,7 +59,7 @@ export function formatModelSummary({ mode, enabled, configuredReviewModel, decis
   const routeSource = selectedRoute ? enumValue(selectedRoute.route_source, ROUTE_SOURCES) : UNKNOWN;
   const rows = [
     ['判断特化LLM', decisionSetting],
-    ['判断特化LLMモデル（設定）', model(DECISION_MODEL_ID)],
+    ['判断特化LLMモデル（設定）', model(configuredDecisionModel)],
     ['判断特化LLM経路', 'OpenRouter Decisions API'],
     ['判断結果', status],
     ['判断API送信状態', egress],
@@ -104,6 +103,7 @@ export async function renderModelSummary({ env = process.env } = {}) {
   return formatModelSummary({
     mode: env.DECISION_ROUTING_MODE,
     enabled: env.DECISION_LLM_ENABLED,
+    configuredDecisionModel: env.DECISION_LLM_MODEL_ID,
     configuredReviewModel: env.OCR_LLM_MODEL || 'gemini-3.8-flash-medium',
     decision, selectedRoute, audit,
   });

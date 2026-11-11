@@ -16,6 +16,7 @@ test('PR Summary publisher receives configured reviewer model in off, shadow, an
   const legacy = step('Post review comments');
   const enforce = step('Publish enforce review');
   assert.match(legacy, /OCR_LLM_MODEL:/);
+  assert.ok(legacy.includes('DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID'));
   assert.match(enforce, /OCR_LLM_MODEL:/);
   assert.match(legacy, /post-ocr-comments\.mjs/);
   assert.match(enforce, /postReview/);
@@ -35,6 +36,7 @@ test('Actions Summary displays decision settings and evidence-backed reviewer mo
   assert.match(summary, /COMMIT_SHA: \u0024\{\{ github\.event\.client_payload\.commit_sha \}\}/);
   assert.match(summary, /DECISION_LLM_ENABLED: \u0024\{\{ env\.DECISION_LLM_ENABLED \}\}/);
   assert.match(summary, /OCR_LLM_MODEL:/);
+  assert.ok(summary.includes('DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID'));
   assert.match(summary, /write-model-summary\.mjs/);
   assert.doesNotMatch(summary, /gh api|curl|publish-routing-review|post-ocr-comments/);
   assert.match(step('Finalize routing audit'), /writeRoutingAudit/);
