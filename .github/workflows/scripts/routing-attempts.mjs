@@ -73,15 +73,18 @@ export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBund
   const attemptedModels = order.completed.map(event => event.model);
   let prior = 0;
   let inTerminal = false;
+  const seenStandard = new Set();
   const available = certifiedBundle?.evidence?.cli_available_models;
   for (const model of attemptedModels) {
     const index = allowed.indexOf(model);
     // The final default is permitted only after the normal fallback chain,
     // only in off+Decision mode, and never as a model not pinned in the catalog.
-    if (!inTerminal && index < prior && advisory && model === terminal && prior === allowed.length - 1) inTerminal = true;
-    if (!inTerminal && index === -1 && advisory && model === terminal && prior === allowed.length - 1) inTerminal = true;
+    if (!inTerminal && index < prior && advisory && model === terminal &&
+        prior === allowed.length - 1 && seenStandard.size === allowed.length) inTerminal = true;
+    if (!inTerminal && index === -1 && advisory && model === terminal &&
+        prior === allowed.length - 1 && seenStandard.size === allowed.length) inTerminal = true;
     if (inTerminal ? model !== terminal : index < prior) invalid();
-    if (!inTerminal) prior = index;
+    if (!inTerminal) { prior = index; seenStandard.add(index); }
     if (certifiedBundle && (!Array.isArray(available) || !available.includes(model))) invalid();
     const entry = certifiedBundle?.catalog?.models?.find(item => item.model_id === model);
     const required = selectedRoute.selected_strategy ?? selectedRoute.proposed_strategy;
