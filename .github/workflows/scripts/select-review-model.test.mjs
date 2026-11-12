@@ -152,11 +152,26 @@ test('off mode is rejected rather than invoking this workflow resolver', () => {
 
 test('off mode applies a valid decision only with the bound decision LLM opt-in', () => {
   const optedInBinding = { ...runBinding, mode: 'off', decisionLlmEnabled: true };
+  const pinnedCatalog = structuredClone(certifiedCatalog);
+  pinnedCatalog.models = pinnedCatalog.models.map((model, index) => ({
+    ...model, certification_reference: `sha256:${String(index + 1).padStart(64, '0')}`,
+  }));
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: pinnedCatalog.models.map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const pinned = { catalog: pinnedCatalog, evidence: {
+    cliAvailableModels: pinnedCatalog.models.map(model => model.model_id), index, revokedRefs: [],
+  } };
   const result = select({ mode: 'off', decisionLlmEnabled: true, runBinding: optedInBinding,
-    features: { risk_floor: 'deep' }, decision: deepResult, certifiedCatalog: certifiedBundle });
+    features: { risk_floor: 'deep' }, decision: deepResult, certifiedCatalog: pinned });
   assert.equal(result.selectedStrategy, 'deep');
-  assert.equal(result.selectedReviewModel, certifiedCatalog.strategies.deep.preferred_model_id);
+  assert.equal(result.selectedReviewModel, pinnedCatalog.strategies.deep.preferred_model_id);
   assert.throws(() => select({ mode: 'off', decisionLlmEnabled: false, runBinding: optedInBinding }), /routing_disabled/);
+  assert.throws(() => select({ mode: 'off', decisionLlmEnabled: true, runBinding: optedInBinding,
+    features: { risk_floor: 'deep' }, decision: deepResult,
+    certifiedCatalog: { ...pinned, evidence: { ...pinned.evidence, revokedRefs: ['OWNER-CLI'] } },
+  }), /review_model_unavailable/);
 });
 
 test('returned route strings reject newline injection and model IDs are bounded', () => {

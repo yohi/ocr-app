@@ -209,7 +209,7 @@ test('off mode performs no routing I/O or network request', async () => {
   assert.equal(networkCalls, 0);
 });
 
-test('off mode with the global flag selects a centrally certified model without target activation', async () => {
+test('off mode with the global flag uses pinned allowlisted models despite expired approvals', async () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-global-opt-in-'));
   const fixture = certificationFixture();
   const targetRepo = 'justice/repo';
@@ -224,7 +224,7 @@ test('off mode with the global flag selects a centrally certified model without 
   let decisionPosts = 0;
   const diagnosticLog = mock.method(console, 'info', () => {});
   try {
-    const result = await prepareRoutingStep({ env: environment, trustedInputs: fixture.trust, now: () => fixture.now,
+    const result = await prepareRoutingStep({ env: environment, trustedInputs: fixture.trust, now: () => '2028-01-01T00:00:00.000Z',
       fetchRepoIdentity: async ({ fullName }) => fullName === targetRepo
         ? { id: targetId, full_name: targetRepo } : { id: 1, full_name: 'owner/repo' },
       readCliIdentity: async () => ({ binarySha256: hash(fixture.binary) }),
@@ -243,6 +243,10 @@ test('off mode with the global flag selects a centrally certified model without 
     assert.equal(decisionPosts, 1);
     assert.equal(result.route.effective_mode, 'off');
     assert.equal(result.route.selected_model_id, 'certified-primary');
+    const context = JSON.parse(readFileSync(join(runTemp, 'ocr-routing-execution-context.json'), 'utf8'));
+    assert.deepEqual(context.certification_refs, []);
+    assert.equal(context.cli_inventory_sha256, fixture.trust.index.cli_inventory.sha256);
+    assert.equal(context.cli_binary_sha256, hash(fixture.binary));
     assert.equal(result.decisionRecord.decision_llm_enabled, true);
     assert.equal(result.decisionRecord.decision_status, 'unavailable');
     assert.equal(result.route.route_source, 'deterministic_fallback');

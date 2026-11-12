@@ -1,6 +1,7 @@
 import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
 import { readInstalledCliIdentity as defaultReadInstalledCliIdentity } from './load-review-certification.mjs';
+import { resolvePinnedModels, resolveCertifiedModels } from './validate-review-model-catalog.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 import { assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
@@ -94,9 +95,10 @@ export async function runRoutingReview({
       const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
       const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
       const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs ?? evidence?.verifiedCertificationRefs,
-        cliAvailableModels: [...available] };
-      const resolver = resolveModels ?? (await import('./validate-review-model-catalog.mjs')).resolveCertifiedModels;
-      const resolved = resolver({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
+        cliAvailableModels: [...available],
+        ...(globalOptIn ? { index: evidence?.index, revokedRefs: evidence?.revokedRefs } : {}) };
+      const resolver = resolveModels ?? (globalOptIn ? resolvePinnedModels : resolveCertifiedModels);
+      const resolved = resolver(globalOptIn ? freshInputs.catalog : { ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
       if (resolved.primaryModelId !== route.selected_model_id
         || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
       return { ...freshInputs.catalog, models };

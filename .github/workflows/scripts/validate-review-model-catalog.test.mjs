@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   resolveCertifiedModels,
+  resolvePinnedModels,
   validateCatalogSemantics,
   validateCatalogShape,
 } from './validate-review-model-catalog.mjs';
@@ -213,4 +214,39 @@ test('RED 3-1: rejects preferred/fallback references to a model with a mismatche
   const oldRef = structuredClone(catalog);
   oldRef.models[1].catalog_version = '0.9.0';
   assert.throws(() => validateCatalogSemantics(oldRef, evidence), /catalog_version_mismatch/);
+});
+
+test('off-mode pinned resolver selects only allowlisted models from exact CLI snapshot', () => {
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: catalog.models.filter(model => model.certification_reference !== null).map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const available = { cliAvailableModels: catalog.models.map(model => model.model_id),
+    index, revokedRefs: [] };
+  assert.deepEqual(resolvePinnedModels(catalog, 'deep', available), {
+    primaryModelId: 'claude-opus-5-5-high',
+    allowedFallbackModels: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
+    capabilityTier: 'deep',
+  });
+  for (const missing of ['claude-opus-5-5-high', 'gemini-4-argon-high']) {
+    assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+      cliAvailableModels: available.cliAvailableModels.filter(model => model !== missing),
+    }), /review_model_unavailable/);
+  }
+  const pendingPrimary = structuredClone(catalog);
+  pendingPrimary.models.find(model => model.model_id === 'claude-opus-5-5-high').certification_status = 'pending';
+  pendingPrimary.models.find(model => model.model_id === 'claude-opus-5-5-high').certification_reference = null;
+  assert.throws(() => resolvePinnedModels(pendingPrimary, 'deep', available), /review_model_unavailable/);
+  const pendingFallback = structuredClone(catalog);
+  pendingFallback.models.find(model => model.model_id === 'gemini-4-argon-high').certification_status = 'pending';
+  pendingFallback.models.find(model => model.model_id === 'gemini-4-argon-high').certification_reference = null;
+  assert.throws(() => resolvePinnedModels(pendingFallback, 'deep', available), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'invalid', available), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-CLI'],
+  }), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-claude-opus-5-5-high'],
+  }), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', { cliAvailableModels: ['claude-opus-5-5-high'] }), /review_model_unavailable/);
 });

@@ -4,7 +4,7 @@ import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { loadVerifiedCertification, readInstalledCliIdentity } from './load-review-certification.mjs';
+import { loadVerifiedCertification, loadPinnedCliInventory, readInstalledCliIdentity } from './load-review-certification.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const NOW = '2026-01-01T00:00:00.000Z';
@@ -310,4 +310,27 @@ test('RED 3-2: rejects a CLI binary digest mismatch against the installed execut
     refreshCertification(f);
     assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
   } finally { cleanup(f); }
+});
+
+test('off-mode snapshot works after certification expiry but rejects CLI mismatch and tampering', () => {
+  const f = fixture();
+  const params = { index: f.index, readEvidence: f.readEvidence, cliBinarySha256: hash(f.binary) };
+  try {
+    // No synthetic date is passed: a pinned snapshot is not a time-valid approval.
+    const pinned = loadPinnedCliInventory(params);
+    assert.deepEqual(pinned.cliAvailableModels, ['model-a']);
+    assert.equal(pinned.inventorySha256, f.index.cli_inventory.sha256);
+    assert.throws(() => verify(f, { now: '2028-01-01T00:00:00.000Z' }),
+      { message: 'REVIEW_CERTIFICATION_INVALID' });
+    assert.throws(() => loadPinnedCliInventory({ ...params, cliBinarySha256: 'f'.repeat(64) }),
+      { message: 'REVIEW_CERTIFICATION_INVALID' });
+    assert.throws(() => loadPinnedCliInventory({ ...params,
+      index: { ...f.index, cli_inventory: { ...f.index.cli_inventory, sha256: 'f'.repeat(64) } } }),
+    { message: 'REVIEW_CERTIFICATION_INVALID' });
+    f.inventory.models = ['model-a', 'model-a'];
+    refreshInventory(f);
+    assert.throws(() => loadPinnedCliInventory(params), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally {
+    cleanup(f);
+  }
 });
