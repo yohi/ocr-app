@@ -637,3 +637,70 @@ test('audit diagnostics expose only fixed failure codes, stages, and reasons', (
     'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=OTHER reason=OTHER',
   );
 });
+
+test('off+Decision terminal default is auditable but does not claim deep-tier quality', () => {
+  const cloned = structuredClone(certifiedRealCatalog);
+  cloned.models = cloned.models.map((model, index) => ({
+    ...model, certification_reference: `sha256:${String(index + 1).padStart(64, '0')}`,
+  }));
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: cloned.models.map(item => ({
+      sha256: item.certification_reference.slice(7), approval_ref: `OWNER-${item.model_id}`,
+    })) };
+  const bundle = { catalog: cloned, evidence: {
+    cli_available_models: cloned.models.map(item => item.model_id), index, revokedRefs: [],
+  } };
+  const defaultModel = cloned.strategies.fast.preferred_model_id;
+  const planned = [deepModel, ...deepPublishRoute.fallback_models, defaultModel];
+  const started = (idx, model) => event({ event: 'attempt_started', attempt_index: idx, model });
+  const completed = (idx, model, status) => event({ event: 'attempt_completed', attempt_index: idx,
+    model, result: status, duration_ms: 10 });
+  const chain = planned.flatMap((model, i) => [
+    started(i + 1, model),
+    completed(i + 1, model, i === planned.length - 1 ? 'host_validated_success' : 'model_reported_failure'),
+  ]);
+  chain.push(event({ event: 'host_completed', attempt_index: null, model: null,
+    result: null, duration_ms: null, host_status: 'success' }));
+  const selected = { ...deepPublishRoute, effective_mode: 'off', decision_llm_enabled: true };
+  assert.deepEqual(validateRoutingAttempts({ attempts: chain, selectedRoute: selected, certifiedBundle: bundle }), {
+    attemptedModels: planned, successModel: defaultModel,
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'ocr-terminal-audit-'));
+  try {
+    mkdirSync(join(dir, 'ocr-routing'));
+    writeFileSync(join(dir, 'ocr-routing', 'attempts.ndjson'), chain.map(JSON.stringify).join('\n') + '\n');
+    const run = { ...binding, mode: 'off', decisionLlmEnabled: true };
+    const record = createRoutingDecisionRecord({ runBinding: run, features, decision: { latencyMs: null, cost: null },
+      egressStatus: 'denied', route, policyVersions: versions });
+    const audited = finalizeRoutingAudit({ decision: record, attempts: chain,
+      reviewResult: { status: 'success' }, validation: { status: 'passed' },
+      headCheck: { status: 'passed' }, runBinding: run,
+      policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false },
+      catalog: cloned, selectedRoute: selected, certifiedBundle: bundle,
+      resultSha256: 'a'.repeat(64), runTemp: dir });
+    assert.equal(audited.host_success_model, defaultModel);
+    assert.equal(audited.executed_review_model, null);
+    assert.equal(audited.review_quality_measured, false);
+    assert.deepEqual(audited.attempted_review_models, planned);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+
+  // An enforce run can never use this lower-tier terminal exception.
+  assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: { ...selected, effective_mode: 'enforce', decision_llm_enabled: false },
+    certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+
+  // Missing intermediate fallback is not an eligible terminal sequence.
+  const tampered = chain.filter(entry => !['gemini-4-argon-high'].includes(entry.model));
+  const reordered = tampered.map((entry, i) => entry.event === 'host_completed'
+    ? entry : { ...entry, attempt_index: Math.ceil((i + 1) / 2) });
+  assert.throws(() => validateRoutingAttempts({
+    attempts: reordered, selectedRoute: selected, certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+
+  const revoked = { ...bundle, evidence: { ...bundle.evidence,
+    revokedRefs: [`OWNER-${defaultModel}`] } };
+  assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: selected, certifiedBundle: revoked,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+});
