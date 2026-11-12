@@ -85,8 +85,9 @@ export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBund
     if (certifiedBundle && (!Array.isArray(available) || !available.includes(model))) invalid();
     const entry = certifiedBundle?.catalog?.models?.find(item => item.model_id === model);
     const required = selectedRoute.selected_strategy ?? selectedRoute.proposed_strategy;
-    if (!entry || entry.certification_status !== 'certified' ||
-        (!inTerminal && entry.capability_tier && required && RANK[entry.capability_tier] < RANK[required])) invalid();
+    if ((!entry && certifiedBundle) ||
+        (inTerminal && (!entry || entry.certification_status !== 'certified')) ||
+        (!inTerminal && entry?.capability_tier && required && RANK[entry.capability_tier] < RANK[required])) invalid();
     if (inTerminal) {
       const evidence = certifiedBundle?.evidence;
       const matches = evidence?.index?.certifications?.filter(ref => `sha256:${ref.sha256}` === entry.certification_reference) ?? [];
