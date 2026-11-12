@@ -51,7 +51,9 @@ export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUr
     enforce && isFailure
       ? `レビューを完了できませんでした。理由: ${safeReason}.`
       : isFailure
-      ? `レビューを完了できませんでした。[PRの失敗コメントを確認](<${resultUrl}>).`
+      ? reviewUrl
+        ? `レビューを完了できませんでした。[PRの失敗コメントを確認](<${resultUrl}>).`
+        : `レビューを完了できませんでした。[対象PRを確認](<${pullRequestUrl}>). PRコメントが許可されない場合は、このChecks欄に診断を表示します。`
       : isSkipped
         ? `レビューはスキップされました。[PRを確認](<${pullRequestUrl}>).`
         : `レビューが完了しました。[レビュー概要とコメントを確認](<${resultUrl}>).`,
