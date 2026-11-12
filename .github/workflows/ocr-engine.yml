@@ -226,7 +226,7 @@ jobs:
             const stage = ['AUTHORITY_INITIAL_LOAD', 'AUTHORITY_REFRESH_LOAD'].includes(error?.stage) ? error.stage : 'OTHER';
             console.error(`ROUTING_PREPARE_DIAGNOSTIC code=${code} stage=${stage}`);
             try {
-              fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              fs.appendFileSync(process.env.GITHUB_ENV,
                 `PREPARE_FAILURE_CODE=${code}\nPREPARE_FAILURE_STAGE=${stage}\n`);
             } catch { /* Diagnostics must not change the failure verdict. */ }
             console.error(globalOptIn ? 'DECISION_ROUTING_FAILED' : 'ROUTING_ACTIVATION_DENIED');
@@ -379,7 +379,7 @@ jobs:
                 if (!diagnostic) return;
                 console.error(line);
                 try {
-                  fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+                  fs.appendFileSync(process.env.GITHUB_ENV, [
                     `HOST_DIAG_STAGE=${diagnostic.stage}`,
                     `HOST_DIAG_REASON=${diagnostic.reason}`,
                     `HOST_DIAG_FORMAT=${diagnostic.outputFormat}`,
@@ -393,7 +393,7 @@ jobs:
             attemptRecorder?.seal();
             fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
             if (result.status === 'failed' && routingEnabled) {
-              try { fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              try { fs.appendFileSync(process.env.GITHUB_ENV,
                 `HOST_FAILURE_CODE=${safeHostFailureCode(result.message)}\n`); } catch {}
             }
             if ((mode === 'enforce' || globalOptIn) && result.status === 'failed') process.exitCode = 1;
@@ -561,7 +561,7 @@ jobs:
             try {
               const { parseAuditDiagnostic } = await import('./self-repo/.github/workflows/scripts/ocr-public-failure.mjs');
               const parsed = parseAuditDiagnostic(safeDiagnostic);
-              if (parsed) fs.appendFileSync(process.env.GITHUB_OUTPUT,
+              if (parsed) fs.appendFileSync(process.env.GITHUB_ENV,
                 `AUDIT_FAILURE_CODE=${parsed.code}\nAUDIT_FAILURE_STAGE=${parsed.stage}\n`);
             } catch { /* Audit failure remains Fail-Closed. */ }
             console.error('ROUTING_AUDIT_MISSING');
@@ -835,16 +835,6 @@ jobs:
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
           OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
-          PREPARE_FAILURE_CODE: ${{ steps.prepare-routing.outputs.PREPARE_FAILURE_CODE }}
-          PREPARE_FAILURE_STAGE: ${{ steps.prepare-routing.outputs.PREPARE_FAILURE_STAGE }}
-          HOST_FAILURE_CODE: ${{ steps.host-review.outputs.HOST_FAILURE_CODE }}
-          HOST_DIAG_STAGE: ${{ steps.host-review.outputs.HOST_DIAG_STAGE }}
-          HOST_DIAG_REASON: ${{ steps.host-review.outputs.HOST_DIAG_REASON }}
-          HOST_DIAG_FORMAT: ${{ steps.host-review.outputs.HOST_DIAG_FORMAT }}
-          HOST_DIAG_EXIT: ${{ steps.host-review.outputs.HOST_DIAG_EXIT }}
-          HOST_DIAG_ATTEMPT: ${{ steps.host-review.outputs.HOST_DIAG_ATTEMPT }}
-          AUDIT_FAILURE_CODE: ${{ steps.finalize-routing.outputs.AUDIT_FAILURE_CODE }}
-          AUDIT_FAILURE_STAGE: ${{ steps.finalize-routing.outputs.AUDIT_FAILURE_STAGE }}
         run: |
           if [ -f "/tmp/ocr-result.json" ]; then
             node self-repo/.github/workflows/scripts/post-ocr-comments.mjs \
@@ -881,16 +871,6 @@ jobs:
           PUBLISH_OUTCOME: ${{ steps.publish-enforce.outcome }}
           ROUTING_START_OUTCOME: ${{ steps.routing-start.outcome }}
           ROUTING_START_FAILURE_REASON: ${{ steps.routing-start.outputs.ROUTING_START_FAILURE_REASON }}
-          PREPARE_FAILURE_CODE: ${{ steps.prepare-routing.outputs.PREPARE_FAILURE_CODE }}
-          PREPARE_FAILURE_STAGE: ${{ steps.prepare-routing.outputs.PREPARE_FAILURE_STAGE }}
-          HOST_FAILURE_CODE: ${{ steps.host-review.outputs.HOST_FAILURE_CODE }}
-          HOST_DIAG_STAGE: ${{ steps.host-review.outputs.HOST_DIAG_STAGE }}
-          HOST_DIAG_REASON: ${{ steps.host-review.outputs.HOST_DIAG_REASON }}
-          HOST_DIAG_FORMAT: ${{ steps.host-review.outputs.HOST_DIAG_FORMAT }}
-          HOST_DIAG_EXIT: ${{ steps.host-review.outputs.HOST_DIAG_EXIT }}
-          HOST_DIAG_ATTEMPT: ${{ steps.host-review.outputs.HOST_DIAG_ATTEMPT }}
-          AUDIT_FAILURE_CODE: ${{ steps.finalize-routing.outputs.AUDIT_FAILURE_CODE }}
-          AUDIT_FAILURE_STAGE: ${{ steps.finalize-routing.outputs.AUDIT_FAILURE_STAGE }}
         run: |
           node self-repo/.github/workflows/scripts/update-check-run.mjs
 
