@@ -557,3 +557,38 @@ test('RED 3-2: off and shadow modes do not read CLI identity', async () => {
     assert.equal(identityCalls, 0, `${mode}: CLI identity must not be read`);
   }
 });
+
+test('off-mode Decision LLM route remains usable after owner expiry while enforcing pinned model list', async () => {
+  const primary = certifiedCatalog.strategies.deep.preferred_model_id;
+  const fallback = certifiedCatalog.models.find(item => item.model_id === primary).allowed_fallbacks;
+  const available = certifiedCatalog.models.map(item => item.model_id);
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/repo' },
+    readRoute: async () => ({ selected_model_id: primary, selected_strategy: 'deep',
+      fallback_models: fallback, reviewable_file_count: 1, status: 'prepared' }),
+    readExecutionContext: async () => ({}),
+    fetchCurrentAuthorization: async () => ({ registry: { schema_version: '1', approvals: [], activations: [],
+      revoked_refs: [] }, operationalDossiers: {} }),
+    revalidateExecutionContext: async () => ({ certifiedBundle: { catalog: certifiedCatalog,
+      evidence: { certification_refs: [], cli_available_models: available } } }),
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'a'.repeat(64) }),
+    trustedInputs: { catalog: certifiedCatalog },
+    resolveModels: undefined,
+    now: () => '2028-01-01T00:00:00.000Z',
+    runHost: async options => {
+      assert.equal(options.model, primary);
+      assert.deepEqual(options.fallbackModels, fallback);
+      assert.equal(await options.authorizeBeforeSpawn(), true);
+      return { status: 'success' };
+    },
+  });
+  assert.equal((await runRoutingReview(fixture.args)).status, 'success');
+  const blocked = input({
+    ...fixture.args,
+    readRoute: async () => ({ selected_model_id: 'unallowlisted', selected_strategy: 'deep',
+      fallback_models: [], reviewable_file_count: 1, status: 'prepared' }),
+    runHost: async () => { throw new Error('MUST_NOT_SPAWN'); },
+  });
+  assert.equal((await runRoutingReview(blocked.args)).status, 'failed');
+  assert.deepEqual(blocked.calls, []);
+});

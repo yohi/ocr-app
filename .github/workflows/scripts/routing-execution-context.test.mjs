@@ -295,3 +295,49 @@ test('off-mode opt-in rejects unexpected approval refs with a fixed diagnostic r
     code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'OPT_IN_APPROVAL_REFS_INVALID',
   });
 });
+
+test('off-mode opt-in checks pinned inventory and digest without expired owner certification', () => {
+  const optedInBinding = { ...binding, mode: 'off', decisionLlmEnabled: true };
+  const binaryHash = 'e'.repeat(64);
+  const snapshot = Buffer.from(JSON.stringify({
+    schema_version: '1', cli_version: '1.5.1', cli_binary_sha256: binaryHash,
+    models: ['allowlisted-fast', 'allowlisted-deep'],
+    observed_at: '2026-11-05T00:00:00.000Z', expires_at: '2026-11-12T00:00:00.000Z',
+  }));
+  const inventoryHash = createHash('sha256').update(snapshot).digest('hex');
+  const trustedInputs = { ...authorizedInputs(true),
+    index: { cli_inventory: { path: 'inventory.json', sha256: inventoryHash } },
+    catalog: { models: [{ model_id: 'allowlisted-fast' }, { model_id: 'allowlisted-deep' }] },
+    readEvidence: path => {
+      assert.equal(path, 'inventory.json');
+      return snapshot;
+    } };
+  // Existing Owner approvals in fixture expired before this check.
+  const expiredAt = '2028-01-01T00:00:00.000Z';
+  const optedInContext = {
+    ...context,
+    binding: optedInBinding,
+    authorization: { ...context.authorization, approval_refs: [] },
+    certification_refs: [],
+    cli_inventory_sha256: inventoryHash,
+    cli_binary_sha256: binaryHash,
+  };
+  const args = {
+    context: optedInContext, expectedBinding: optedInBinding, trustedInputs,
+    repoIdentity: { repo_id: 10, full_name: 'org/repo' },
+    now: expiredAt, cliBinarySha256: binaryHash,
+  };
+  const result = revalidateRoutingExecutionContext(args);
+  assert.deepEqual(result.certifiedBundle.evidence.certification_refs, []);
+  assert.deepEqual(result.certifiedBundle.evidence.cli_available_models, ['allowlisted-fast', 'allowlisted-deep']);
+  assert.throws(() => revalidateRoutingExecutionContext({ ...args, cliBinarySha256: 'f'.repeat(64) }), {
+    code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'CLI_DIGEST_MISMATCH',
+  });
+  assert.throws(() => revalidateRoutingExecutionContext({
+    ...args, context: { ...optedInContext, certification_refs: ['sha256:' + 'f'.repeat(64)] },
+  }), { code: 'ROUTING_EXECUTION_CONTEXT_INVALID', reason: 'OPT_IN_CERTIFICATION_REFS_INVALID' });
+  assert.throws(() => revalidateRoutingExecutionContext({
+    ...args, trustedInputs: { ...trustedInputs,
+      index: { cli_inventory: { path: 'inventory.json', sha256: 'f'.repeat(64) } } },
+  }), { code: 'ROUTING_ACTIVATION_DENIED', reason: 'CLI_INVENTORY_DIGEST_MISMATCH' });
+});
