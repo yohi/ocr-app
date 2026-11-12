@@ -68,16 +68,32 @@ export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBund
   if (!selectedRoute || typeof selectedRoute.selected_model_id !== 'string' || !Array.isArray(selectedRoute.fallback_models)) invalid();
   const allowed = [selectedRoute.selected_model_id, ...selectedRoute.fallback_models];
   if (new Set(allowed).size !== allowed.length) invalid();
+  const advisory = selectedRoute.effective_mode === 'off' && selectedRoute.decision_llm_enabled === true;
+  const terminal = advisory ? certifiedBundle?.catalog?.strategies?.fast?.preferred_model_id : null;
   const attemptedModels = order.completed.map(event => event.model);
   let prior = 0;
+  let inTerminal = false;
   const available = certifiedBundle?.evidence?.cli_available_models;
   for (const model of attemptedModels) {
     const index = allowed.indexOf(model);
-    if (index < prior || (certifiedBundle && (!Array.isArray(available) || !available.includes(model)))) invalid();
-    prior = index;
+    // The final default is permitted only after the normal fallback chain,
+    // only in off+Decision mode, and never as a model not pinned in the catalog.
+    if (!inTerminal && index < prior && advisory && model === terminal && prior === allowed.length - 1) inTerminal = true;
+    if (!inTerminal && index === -1 && advisory && model === terminal && prior === allowed.length - 1) inTerminal = true;
+    if (inTerminal ? model !== terminal : index < prior) invalid();
+    if (!inTerminal) prior = index;
+    if (certifiedBundle && (!Array.isArray(available) || !available.includes(model))) invalid();
     const entry = certifiedBundle?.catalog?.models?.find(item => item.model_id === model);
     const required = selectedRoute.selected_strategy ?? selectedRoute.proposed_strategy;
-    if (entry?.capability_tier && required && RANK[entry.capability_tier] < RANK[required]) invalid();
+    if (!entry || entry.certification_status !== 'certified' ||
+        (!inTerminal && entry.capability_tier && required && RANK[entry.capability_tier] < RANK[required])) invalid();
+    if (inTerminal) {
+      const evidence = certifiedBundle?.evidence;
+      const matches = evidence?.index?.certifications?.filter(ref => `sha256:${ref.sha256}` === entry.certification_reference) ?? [];
+      if (matches.length !== 1 || !Array.isArray(evidence?.revokedRefs)
+        || evidence.revokedRefs.includes(matches[0].approval_ref)
+        || evidence.revokedRefs.includes(evidence.index?.cli_inventory?.approval_ref)) invalid();
+    }
   }
   return { attemptedModels, successModel: order.success?.model ?? null };
 }

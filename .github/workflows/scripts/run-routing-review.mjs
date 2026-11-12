@@ -90,7 +90,8 @@ export async function runRoutingReview({
     let sealed;
     let cliIdentity = null;
     let certification = null;
-    const verifyCertifiedRoute = async checked => {
+    const terminalDefault = env.OCR_LLM_MODEL || env.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium';
+    const verifyCertifiedRoute = async (checked, attemptedModel = null) => {
       const evidence = checked.certifiedBundle?.evidence;
       const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
       const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
@@ -101,9 +102,14 @@ export async function runRoutingReview({
       const resolved = resolver(globalOptIn ? freshInputs.catalog : { ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
       if (resolved.primaryModelId !== route.selected_model_id
         || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
+      if (globalOptIn && attemptedModel === terminalDefault) {
+        // Explicit final fallback cannot bypass pinned inventory or revocation.
+        const pinnedFast = resolvePinnedModels(freshInputs.catalog, 'fast', resolveEvidence);
+        if (terminalDefault !== pinnedFast.primaryModelId) denied('ROUTING_ACTIVATION_DENIED');
+      }
       return { ...freshInputs.catalog, models };
     };
-    const authorizeBeforeSpawn = async () => {
+    const authorizeBeforeSpawn = async attemptedModel => {
       try {
         const current = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
         if (!current?.registry) return false;
@@ -114,7 +120,7 @@ export async function runRoutingReview({
           const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
             trustedInputs: { ...freshInputs, registry: current.registry, operationalDossiers: current.operationalDossiers,
               needsModel: route.reviewable_file_count > 0 }, repoIdentity, now: now(), cliBinarySha256: currentCli.binarySha256 });
-          if (route.reviewable_file_count > 0) await verifyCertifiedRoute(checked);
+          if (route.reviewable_file_count > 0) await verifyCertifiedRoute(checked, attemptedModel);
           return true;
         }
         return evaluateStartup({
@@ -193,6 +199,7 @@ export async function runRoutingReview({
         model: route.selected_model_id,
         fallbackModels: [...route.fallback_models],
         modelCatalog: certification,
+        ...(globalOptIn ? { terminalDefaultModel: terminalDefault } : {}),
         executablePath: cliIdentity.resolvedPath,
         executableIdentity: cliIdentity,
         targetRoot: env.TARGET_REPO_PATH,

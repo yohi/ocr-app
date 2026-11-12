@@ -241,7 +241,12 @@ export function finalizeRoutingAudit(input) {
   const completedModels = order.valid ? validatedAttempts.attemptedModels.map(item => appliedRoute ? catalogModel(catalog, item, true) : item).filter(Boolean) : [];
   const attempted = [...new Set(completedModels)];
   const successfulModel = order.valid && validatedAttempts.successModel ? catalogModel(catalog, validatedAttempts.successModel, appliedRoute) : null;
-  const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' && headStatus === 'passed' && successfulModel !== null;
+  const successfulTier = catalog?.models?.find(item => item.model_id === successfulModel)?.capability_tier;
+  // A final fast-model result can be recorded, but is not a verified deep review.
+  const riskFloorMet = successfulModel === null || !selectedRoute?.selected_strategy ||
+    RANK[successfulTier] >= RANK[selectedRoute.selected_strategy];
+  const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' &&
+    headStatus === 'passed' && successfulModel !== null && riskFloorMet;
   const model = value => catalogModel(catalog, value ?? null, appliedRoute);
   const repoId = policy?.repoId ?? policy?.repo_id; const repo = policy?.repo ?? policy?.repoName; const pr = policy?.prNumber ?? policy?.pr_number;
   if (!Number.isSafeInteger(repoId) || repoId < 1 || !validRepo(repo) || !Number.isSafeInteger(pr) || pr < 1) throw new Error('AUDIT_SCHEMA_INVALID');
