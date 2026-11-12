@@ -78,3 +78,34 @@ describe('buildCheckRunUpdate', () => {
     });
   }
 });
+
+describe('safe diagnostics surfaced in PR Checks', () => {
+  it('shows the real preparation error even when later audit fails with ENOENT', () => {
+    const detail = [
+      '**失敗工程:** ルーティング準備',
+      '**診断コード:** `REVIEW_CERTIFICATION_INVALID`',
+    ].join('\n');
+    const update = buildCheckRunUpdate({
+      conclusion: 'failure', targetRepo: 'owner/repo', prNumber: '42',
+      detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123',
+      result: null, failureDiagnostic: detail, suppressUnsafeDetails: true,
+    });
+    assert.equal(update.conclusion, 'failure');
+    assert.match(update.output.summary, /失敗工程:.*ルーティング準備/);
+    assert.match(update.output.summary, /REVIEW_CERTIFICATION_INVALID/);
+    assert.doesNotMatch(update.output.summary, /ENOENT/);
+  });
+
+  it('keeps model errors and secrets out of the Check Run summary for opt-in routing', () => {
+    const secret = 'ghp_DO_NOT_PUBLISH';
+    const update = buildCheckRunUpdate({
+      conclusion: 'failure', targetRepo: 'owner/repo', prNumber: '42',
+      detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123',
+      result: { status: 'failed', message: `OAuth token: ${secret}` },
+      failureDiagnostic: '**失敗段階:** CLI出力の解析（有効なJSONを取得できませんでした）',
+      suppressUnsafeDetails: true,
+    });
+    assert.match(update.output.summary, /有効なJSONを取得できません/);
+    assert.doesNotMatch(update.output.summary, /OAuth token|ghp_DO_NOT_PUBLISH/);
+  });
+});

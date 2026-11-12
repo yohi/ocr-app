@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { publicFailureDiagnosticFromEnv } from './ocr-public-failure.mjs';
 
 const ROUTING_FAILURE_REASONS = new Set([
   'REVIEW_EXECUTION_FAILED', 'HOST_TIMEOUT', 'INVALID_REVIEW_OUTPUT', 'ROUTING_AUDIT_MISSING',
@@ -34,7 +35,7 @@ function failureDetails(result) {
   return `\n\nFailure details:\n${fence}\n${result.message}\n${fence}`;
 }
 
-export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result, enforce = false, routingFailureReason = null }) {
+export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result, enforce = false, routingFailureReason = null, failureDiagnostic = null, suppressUnsafeDetails = false }) {
   const pullRequestUrl = `https://github.com/${targetRepo}/pull/${prNumber}`;
   const resultUrl = reviewUrl || pullRequestUrl;
   const isFailure = conclusion === 'failure' || result?.status === 'failed';
@@ -50,12 +51,15 @@ export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUr
     enforce && isFailure
       ? `レビューを完了できませんでした。理由: ${safeReason}.`
       : isFailure
-      ? `レビューを完了できませんでした。[PRの失敗コメントを確認](<${resultUrl}>).`
+      ? reviewUrl
+        ? `レビューを完了できませんでした。[PRの失敗コメントを確認](<${resultUrl}>).`
+        : `レビューを完了できませんでした。[対象PRを確認](<${pullRequestUrl}>). PRコメントが許可されない場合は、このChecks欄に診断を表示します。`
       : isSkipped
         ? `レビューはスキップされました。[PRを確認](<${pullRequestUrl}>).`
         : `レビューが完了しました。[レビュー概要とコメントを確認](<${resultUrl}>).`,
     `[この実行のログを確認](<${detailsUrl}>)`,
-    enforce ? '' : failureDetails(result),
+    isFailure && typeof failureDiagnostic === 'string' ? `### 失敗原因の診断\n\n${failureDiagnostic}` : '',
+    enforce || suppressUnsafeDetails ? '' : failureDetails(result),
   ].filter(Boolean).join('\n\n');
 
   return {
@@ -79,6 +83,8 @@ export async function updateCheckRun({ env = process.env, fetchImpl = fetch } = 
     result,
     enforce: env.DECISION_ROUTING_MODE === 'enforce',
     routingFailureReason: finalRoutingFailureReason(env),
+    failureDiagnostic: publicFailureDiagnosticFromEnv(env),
+    suppressUnsafeDetails: env.DECISION_LLM_ENABLED === 'true',
   });
   const response = await fetchImpl(
     `${env.GITHUB_API_URL || 'https://api.github.com'}/repos/${env.TARGET_REPO}/check-runs/${env.CHECK_RUN_ID}`,

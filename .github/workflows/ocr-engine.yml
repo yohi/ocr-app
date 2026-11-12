@@ -207,6 +207,7 @@ jobs:
         run: |
           node --input-type=module - <<'EOF'
           import { execFileSync } from 'node:child_process';
+          import fs from 'node:fs';
           try {
             const { createRunBindingFromEnv, prepareRoutingStep } = await import('./self-repo/.github/workflows/scripts/prepare-review-routing.mjs');
             const runBinding = createRunBindingFromEnv(process.env);
@@ -224,6 +225,10 @@ jobs:
             const code = knownCodes.has(rawCode) ? rawCode : 'UNKNOWN';
             const stage = ['AUTHORITY_INITIAL_LOAD', 'AUTHORITY_REFRESH_LOAD'].includes(error?.stage) ? error.stage : 'OTHER';
             console.error(`ROUTING_PREPARE_DIAGNOSTIC code=${code} stage=${stage}`);
+            try {
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `PREPARE_FAILURE_CODE=${code}\nPREPARE_FAILURE_STAGE=${stage}\n`);
+            } catch { /* Diagnostics must not change the failure verdict. */ }
             console.error(globalOptIn ? 'DECISION_ROUTING_FAILED' : 'ROUTING_ACTIVATION_DENIED');
             process.exitCode = 1;
           }
@@ -303,6 +308,7 @@ jobs:
             const { runRoutingReview } = await import('./self-repo/.github/workflows/scripts/run-routing-review.mjs');
             const { hashRoutingSourceManifest } = await import('./self-repo/.github/workflows/scripts/routing-authorization.mjs');
             const { createRoutingEvidenceReader } = await import('./self-repo/.github/workflows/scripts/load-review-certification.mjs');
+            const { parseHostDiagnostic, safeHostFailureCode } = await import('./self-repo/.github/workflows/scripts/ocr-public-failure.mjs');
             const context = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ocr-review-context.json`, 'utf8'));
             const contextJson = JSON.stringify(context);
             const prompt = [
@@ -368,14 +374,34 @@ jobs:
               writeResult: async value => fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(value)),
               writeOutput: value => fs.appendFileSync(process.env.GITHUB_OUTPUT, `${value}\n`),
               onProgress: chunk => process.stderr.write(chunk),
+              onDiagnostic: line => {
+                const diagnostic = parseHostDiagnostic(line);
+                if (!diagnostic) return;
+                console.error(line);
+                try {
+                  fs.appendFileSync(process.env.GITHUB_ENV, [
+                    `HOST_DIAG_STAGE=${diagnostic.stage}`,
+                    `HOST_DIAG_REASON=${diagnostic.reason}`,
+                    `HOST_DIAG_FORMAT=${diagnostic.outputFormat}`,
+                    `HOST_DIAG_EXIT=${diagnostic.exitCode}`,
+                    `HOST_DIAG_ATTEMPT=${diagnostic.attempt}`,
+                    '',
+                  ].join('\n'));
+                } catch { /* Diagnostic output is best-effort. */ }
+              },
             });
             attemptRecorder?.seal();
             fs.writeFileSync('/tmp/ocr-result.json', JSON.stringify(result));
+            if (result.status === 'failed' && routingEnabled) {
+              try { fs.appendFileSync(process.env.GITHUB_ENV,
+                `HOST_FAILURE_CODE=${safeHostFailureCode(result.message)}\n`); } catch {}
+            }
             if ((mode === 'enforce' || globalOptIn) && result.status === 'failed') process.exitCode = 1;
           } catch (error) {
             const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
             if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
             console.error('REVIEW_EXECUTION_FAILED');
+            try { fs.appendFileSync(process.env.GITHUB_OUTPUT, 'HOST_FAILURE_CODE=REVIEW_EXECUTION_FAILED\n'); } catch {}
             process.exitCode = 1;
           }
           EOF
@@ -528,9 +554,16 @@ jobs:
           } catch (error) {
             const globalOptIn = process.env.DECISION_ROUTING_MODE === 'off' && process.env.DECISION_LLM_ENABLED === 'true';
             if (process.env.DECISION_ROUTING_MODE !== 'enforce' && !globalOptIn) throw error;
-            console.error(formatDiagnostic
+            const safeDiagnostic = formatDiagnostic
               ? formatDiagnostic({ stage: auditStage, error })
-              : 'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=LOAD_INPUTS reason=OTHER');
+              : 'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=LOAD_INPUTS reason=OTHER';
+            console.error(safeDiagnostic);
+            try {
+              const { parseAuditDiagnostic } = await import('./self-repo/.github/workflows/scripts/ocr-public-failure.mjs');
+              const parsed = parseAuditDiagnostic(safeDiagnostic);
+              if (parsed) fs.appendFileSync(process.env.GITHUB_ENV,
+                `AUDIT_FAILURE_CODE=${parsed.code}\nAUDIT_FAILURE_STAGE=${parsed.stage}\n`);
+            } catch { /* Audit failure remains Fail-Closed. */ }
             console.error('ROUTING_AUDIT_MISSING');
             process.exitCode = 1;
           }

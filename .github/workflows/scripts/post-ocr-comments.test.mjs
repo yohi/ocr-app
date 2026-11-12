@@ -851,7 +851,7 @@ test('posts a failure comment when OCR status is failed with a message', async (
   assert.equal(requests[0].method, 'POST');
   assert.equal(requests[0].path, '/repos/owner/repo/issues/123/comments');
   assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: LLM connection timeout.'));
-  assert.ok(requests[0].body.body.includes('If this persists, please check your LLM configuration and API key.'));
+  assert.match(requests[0].body.body, /GitHub Actionsジョブのログ/);
 });
 
 test('posts a default failure comment when OCR status is failed without a message', async () => {
@@ -866,7 +866,7 @@ test('posts a default failure comment when OCR status is failed without a messag
   assert.equal(exitCode, 1);
   assert.equal(requests.length, 1);
   assert.ok(requests[0].body.body.includes('\u274C OpenCodeReview failed: OpenCodeReview failed to complete the review.'));
-  assert.ok(requests[0].body.body.includes('If this persists, please check your LLM configuration and API key.'));
+  assert.match(requests[0].body.body, /GitHub Actionsジョブのログ/);
 });
 
 test('returns one when posting failure comment fails', async () => {
@@ -1220,4 +1220,45 @@ test('stops individual fallback after a HEAD mismatch', async () => {
   assert.equal(exitCode, 1);
   assert.equal(authorizationCalls, 2);
   assert.equal(requests.filter(request => request.method === 'POST' && request.path.endsWith('/comments')).length, 0);
+});
+
+test('authorized off-mode failure comment includes fixed diagnosis without raw provider response', async () => {
+  const secret = 'Bearer ghp_PRIVATE_TOKEN';
+  const resultPath = await createResultFile({ status: 'failed',
+    message: `Untrusted raw stderr: ${secret}`, findings: [] });
+  const requests = installHttpsMock([{ data: { id: 1 }, status: 201 }]);
+  const exitCode = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: {
+      TARGET_REPO: 'owner/repo',
+      DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true',
+      HOST_FAILURE_CODE: 'REVIEW_EXECUTION_FAILED',
+      HOST_DIAG_STAGE: 'payload_parse', HOST_DIAG_REASON: 'json_parse_failed',
+      HOST_DIAG_FORMAT: 'json_like', HOST_DIAG_EXIT: 'na', HOST_DIAG_ATTEMPT: '1',
+    },
+    authorizeBeforeMutation: async () => true,
+  });
+  assert.equal(exitCode, 1);
+  assert.equal(requests.length, 1);
+  const body = requests[0].body.body;
+  assert.match(body, /REVIEW_EXECUTION_FAILED/);
+  assert.match(body, /CLI出力の解析/);
+  assert.match(body, /有効なJSONを取得できません/);
+  assert.doesNotMatch(body, /ghp_PRIVATE_TOKEN|Untrusted raw stderr|Bearer/);
+});
+
+test('off-mode failure comment cannot bypass denied mutation authorization', async () => {
+  const resultPath = await createResultFile({ status: 'failed', message: 'REVIEW_EXECUTION_FAILED' });
+  const requests = installHttpsMock([]);
+  await assert.rejects(() => run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token',
+    env: {
+      TARGET_REPO: 'owner/repo', DECISION_ROUTING_MODE: 'off',
+      DECISION_LLM_ENABLED: 'true', HOST_FAILURE_CODE: 'REVIEW_EXECUTION_FAILED',
+    },
+    authorizeBeforeMutation: async () => false,
+  }), /ROUTING_ACTIVATION_DENIED/);
+  assert.equal(requests.length, 0);
 });
