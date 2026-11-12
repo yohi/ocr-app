@@ -217,7 +217,12 @@ test('RED 3-1: rejects preferred/fallback references to a model with a mismatche
 });
 
 test('off-mode pinned resolver selects only allowlisted models from exact CLI snapshot', () => {
-  const available = { cliAvailableModels: catalog.models.map(model => model.model_id) };
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: catalog.models.filter(model => model.certification_reference !== null).map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const available = { cliAvailableModels: catalog.models.map(model => model.model_id),
+    index, revokedRefs: [] };
   assert.deepEqual(resolvePinnedModels(catalog, 'deep', available), {
     primaryModelId: 'claude-opus-5-5-high',
     allowedFallbackModels: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
@@ -237,5 +242,11 @@ test('off-mode pinned resolver selects only allowlisted models from exact CLI sn
   pendingFallback.models.find(model => model.model_id === 'gemini-4-argon-high').certification_reference = null;
   assert.throws(() => resolvePinnedModels(pendingFallback, 'deep', available), /review_model_unavailable/);
   assert.throws(() => resolvePinnedModels(catalog, 'invalid', available), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-CLI'],
+  }), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-claude-opus-5-5-high'],
+  }), /review_model_unavailable/);
   assert.throws(() => resolvePinnedModels(catalog, 'deep', { cliAvailableModels: ['claude-opus-5-5-high'] }), /review_model_unavailable/);
 });

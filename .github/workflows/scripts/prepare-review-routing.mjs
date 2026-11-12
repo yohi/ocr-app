@@ -261,7 +261,8 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     // Still fail closed if the pinned CLI binary or catalog model allowlist differs.
     const inventory = loadPinnedCliInventory({ index: inputs.index,
       readEvidence: readEvidence ?? inputs.readEvidence, cliBinarySha256: cliIdentity.binarySha256 });
-    verifiedBundle = { catalog, evidence: { cliAvailableModels: inventory.cliAvailableModels } };
+    verifiedBundle = { catalog, evidence: { cliAvailableModels: inventory.cliAvailableModels,
+      index: inputs.index, revokedRefs: latestAuthorization.registry.revoked_refs } };
   }
   if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, apiUrl: env.DECISION_LLM_API_URL, modelId: env.DECISION_LLM_MODEL_ID, fetchImpl, timeoutMs: 5000 });

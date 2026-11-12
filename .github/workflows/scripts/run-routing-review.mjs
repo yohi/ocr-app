@@ -95,7 +95,8 @@ export async function runRoutingReview({
       const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
       const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
       const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs ?? evidence?.verifiedCertificationRefs,
-        cliAvailableModels: [...available] };
+        cliAvailableModels: [...available],
+        ...(globalOptIn ? { index: freshInputs.index, revokedRefs: freshInputs.registry?.revoked_refs } : {}) };
       const resolver = resolveModels ?? (globalOptIn ? resolvePinnedModels : resolveCertifiedModels);
       const resolved = resolver(globalOptIn ? freshInputs.catalog : { ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
       if (resolved.primaryModelId !== route.selected_model_id

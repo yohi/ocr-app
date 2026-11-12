@@ -131,6 +131,19 @@ export function resolvePinnedModels(catalog, strategy, evidence) {
       && available.includes(model.model_id)
       && tierRank[model.capability_tier] >= tierRank[strategy];
     if (![primary, ...fallbacks].every(eligible)) throw new Error('not_allowlisted');
+    // Expiration is ignored in advisory mode; explicit revocation is not.
+    // Bind the static catalog allowlist to the pinned certification index.
+    const revoked = evidence?.revokedRefs;
+    const index = evidence?.index;
+    if (!Array.isArray(revoked) || !revoked.every(ref => typeof ref === 'string')
+      || !Array.isArray(index?.certifications)
+      || typeof index?.cli_inventory?.approval_ref !== 'string'
+      || revoked.includes(index.cli_inventory.approval_ref)) throw new Error('revoked_or_unbound');
+    for (const model of [primary, ...fallbacks]) {
+      const matching = index.certifications.filter(entry => `sha256:${entry.sha256}` === model.certification_reference
+        && typeof entry.approval_ref === 'string');
+      if (matching.length !== 1 || revoked.includes(matching[0].approval_ref)) throw new Error('revoked_or_unbound');
+    }
     return {
       primaryModelId: primary.model_id,
       allowedFallbackModels: fallbacks.map(model => model.model_id),

@@ -116,7 +116,8 @@ export function revalidateRoutingExecutionContext({ context, expectedBinding, tr
         const pinned = loadPinnedCliInventory({ index: trustedInputs.index,
           readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
         certifiedBundle = { catalog: trustedInputs.catalog,
-          evidence: { certification_refs: [], cli_available_models: pinned.cliAvailableModels } };
+          evidence: { certification_refs: [], cli_available_models: pinned.cliAvailableModels,
+            index: trustedInputs.index, revokedRefs: trustedInputs.registry?.revoked_refs } };
       } else {
         const verified = loadVerifiedCertification({ catalog: trustedInputs.catalog, index: trustedInputs.index,
           registry: trustedInputs.registry, repoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
