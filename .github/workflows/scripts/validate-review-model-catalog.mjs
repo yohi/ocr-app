@@ -108,6 +108,39 @@ export function validateCatalogSemantics(catalog, { verifiedCertificationRefs, c
   validateFallbackTiers(catalog, models);
 }
 
+// The opt-in "off" route is advisory: use only models explicitly allowlisted
+// in the pinned catalog AND listed for the exact pinned CLI binary. It does not
+// assert that time-limited Owner/capability certifications remain valid.
+export function resolvePinnedModels(catalog, strategy, evidence) {
+  if (strategy !== 'fast' && strategy !== 'deep') fail('review_model_unavailable');
+  try {
+    rejectDuplicateIdentifiers(catalog?.models ?? []);
+    rejectDuplicateFallbacks(catalog?.models ?? []);
+    validateCatalogShape(catalog);
+    const byId = new Map(catalog.models.map(model => [model.model_id, model]));
+    if (catalog.models.some(model => model.catalog_version !== catalog.catalog_version)) throw new Error('version');
+    validatePreferredModels(catalog, byId);
+    for (const model of catalog.models) validateModelFallbacks(model, byId);
+    validateFallbackGraph(byId);
+    validateFallbackTiers(catalog, byId);
+    const available = evidence?.cliAvailableModels;
+    if (!Array.isArray(available) || new Set(available).size !== available.length) throw new Error('inventory');
+    const primary = byId.get(catalog.strategies[strategy].preferred_model_id);
+    const fallbacks = primary.allowed_fallbacks.map(id => byId.get(id));
+    const eligible = model => model?.certification_status === 'certified'
+      && available.includes(model.model_id)
+      && tierRank[model.capability_tier] >= tierRank[strategy];
+    if (![primary, ...fallbacks].every(eligible)) throw new Error('not_allowlisted');
+    return {
+      primaryModelId: primary.model_id,
+      allowedFallbackModels: fallbacks.map(model => model.model_id),
+      capabilityTier: primary.capability_tier,
+    };
+  } catch {
+    fail('review_model_unavailable');
+  }
+}
+
 export function resolveCertifiedModels(catalog, strategy, evidence) {
   if (strategy !== 'fast' && strategy !== 'deep') fail('review_model_unavailable');
   try {

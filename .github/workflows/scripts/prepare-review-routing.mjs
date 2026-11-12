@@ -13,7 +13,7 @@ import { selectReviewRoute } from './select-review-model.mjs';
 import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
 import { evaluateRoutingStartup, fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } from './routing-authorization.mjs';
-import { loadVerifiedCertification, readInstalledCliIdentity } from './load-review-certification.mjs';
+import { loadVerifiedCertification, loadPinnedCliInventory, readInstalledCliIdentity } from './load-review-certification.mjs';
 import { readRoutingExecutionContext, writeRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 
 const ROUTE_KEYS = Object.freeze([
@@ -257,14 +257,11 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   }
   if (globalOptIn && needsModel) {
     cliIdentity = await (readCliIdentity ?? inputs.readCliIdentity)();
-    const verified = loadVerifiedCertification({ catalog, index: inputs.index, registry: latestAuthorization.registry,
-      repoIdentity: { repo_id: centralIdentity.id, full_name: centralIdentity.full_name }, now: now(),
+    // A stale certification must not disable advisory classification in off mode.
+    // Still fail closed if the pinned CLI binary or catalog model allowlist differs.
+    const inventory = loadPinnedCliInventory({ index: inputs.index,
       readEvidence: readEvidence ?? inputs.readEvidence, cliBinarySha256: cliIdentity.binarySha256 });
-    if (verified.verifiedCertificationRefs.length === 0 || verified.cliAvailableModels.length === 0) {
-      throw new Error('REVIEW_CERTIFICATION_INVALID');
-    }
-    verifiedBundle = { catalog, evidence: { verifiedCertificationRefs: verified.verifiedCertificationRefs,
-      cliAvailableModels: verified.cliAvailableModels } };
+    verifiedBundle = { catalog, evidence: { cliAvailableModels: inventory.cliAvailableModels } };
   }
   if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, apiUrl: env.DECISION_LLM_API_URL, modelId: env.DECISION_LLM_MODEL_ID, fetchImpl, timeoutMs: 5000 });
@@ -292,7 +289,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       repo_identity: { repoId: repoIdentity.id, fullName: repoIdentity.full_name, headSha: binding.headSha },
       authorization: { policy_sha256: inputs.policySha256.slice(7), catalog_sha256: inputs.catalogSha256.slice(7),
         source_manifest_sha256: inputs.sourceManifestSha256.slice(7), approval_refs: freshStartup.approvalRefs },
-      certification_refs: verifiedBundle?.evidence.verifiedCertificationRefs.map(ref => ref.certification_reference) ?? [],
+      certification_refs: binding.mode === 'enforce' ? verifiedBundle?.evidence.verifiedCertificationRefs.map(ref => ref.certification_reference) ?? [] : [],
       cli_inventory_sha256: needsModel ? inputs.index.cli_inventory.sha256 : null,
       cli_binary_sha256: needsModel ? cliIdentity.binarySha256 : null,
     } });

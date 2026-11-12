@@ -154,6 +154,29 @@ export function loadVerifiedCertification({ catalog, index, registry, repoIdenti
   }
 }
 
+// Off-mode Decision LLM uses a pinned compatibility snapshot, not a time-valid
+// owner/model certification. Validate the content hash and exact installed CLI
+// digest. Do not represent these model IDs as freshly certified evidence.
+export function loadPinnedCliInventory({ index, readEvidence, cliBinarySha256 }) {
+  try {
+    const reference = index?.cli_inventory;
+    const bytes = readEvidenceBytes(reference?.path, reference?.sha256, readEvidence);
+    const inventory = parseJson(bytes);
+    if (!exactObject(inventory, INVENTORY_KEYS) || inventory.schema_version !== '1'
+      || typeof inventory.cli_version !== 'string' || !inventory.cli_version
+      || inventory.cli_binary_sha256 !== cliBinarySha256
+      || typeof cliBinarySha256 !== 'string' || !HASH.test(cliBinarySha256)
+      || !Array.isArray(inventory.models) || inventory.models.length === 0
+      || !inventory.models.every(model => typeof model === 'string' && model.length > 0)
+      || new Set(inventory.models).size !== inventory.models.length
+      || !validDate(inventory.observed_at) || !validDate(inventory.expires_at)
+      || Date.parse(inventory.observed_at) >= Date.parse(inventory.expires_at)) return certificationFailure();
+    return { cliAvailableModels: inventory.models.slice(), inventorySha256: sha256(bytes) };
+  } catch {
+    return certificationFailure();
+  }
+}
+
 export function readInstalledCliIdentity({ env = process.env, targetRoot, resolveExecutable, readFile = readFileSync } = {}) {
   try {
     const home = env.HOME;

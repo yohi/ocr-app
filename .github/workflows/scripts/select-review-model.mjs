@@ -1,4 +1,4 @@
-import { resolveCertifiedModels } from './validate-review-model-catalog.mjs';
+import { resolveCertifiedModels, resolvePinnedModels } from './validate-review-model-catalog.mjs';
 import { assertRunBindingValid } from './ocr-run-binding.mjs';
 
 const RANK = Object.freeze({ fast: 0, deep: 1 });
@@ -83,7 +83,7 @@ function result({ mode, strategy, source, decisionStatus, certifiedCatalog }) {
 
   let resolved;
   try {
-    resolved = resolveCertifiedModels(catalog, strategy, evidence);
+    resolved = mode === 'off' ? resolvePinnedModels(catalog, strategy, evidence) : resolveCertifiedModels(catalog, strategy, evidence);
   } catch {
     throw new Error('review_model_unavailable');
   }
