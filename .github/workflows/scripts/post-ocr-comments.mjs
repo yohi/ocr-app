@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { fetchUniqueReviewComments } from './deduplicate-review-comments.mjs';
 import { reauthorizeRoutingMutation } from './routing-mutation-authorization.mjs';
 import { renderModelSummary } from './write-model-summary.mjs';
+import { publicFailureDiagnosticFromEnv, safeHostFailureCode } from './ocr-public-failure.mjs';
 
 class CliError extends Error {}
 export const SUMMARY_MARKER = '<!-- antigravity-ocr-summary -->';
@@ -557,9 +558,13 @@ export async function run({
   }
 
   if (result.status === 'failed') {
-    const failureMessage = result.message || 'OpenCodeReview failed to complete the review.';
-    const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n` +
-      `If this persists, please check your LLM configuration and API key.`;
+    const routed = env.DECISION_LLM_ENABLED === 'true' || env.DECISION_ROUTING_MODE === 'enforce';
+    const failureMessage = routed ? safeHostFailureCode(result.message)
+      : (result.message || 'OpenCodeReview failed to complete the review.');
+    const publicDiagnostic = publicFailureDiagnosticFromEnv(env);
+    const commentBody = `❌ OpenCodeReview failed: ${failureMessage}\n\n`
+      + (publicDiagnostic ? `### 失敗原因の診断\n\n${publicDiagnostic}\n\n` : '')
+      + `原因が確定しない場合は、対応するGitHub Actionsジョブのログを確認してください。`;
     const exitCode = await postFailureComment({ authorizeBeforeMutation, expectedSha, githubApi, outputPath, prNumber: config.prNumber, message: commentBody });
     if (exitCode !== 0) {
       return exitCode;
