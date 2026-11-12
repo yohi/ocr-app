@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  parseAuditDiagnostic, parseHostDiagnostic, publicFailureDiagnosticFromEnv,
+  parseAuditDiagnostic, parseHostDiagnostic, parseAgyErrorDiagnostic, publicFailureDiagnosticFromEnv,
   safeHostFailureCode,
 } from './ocr-public-failure.mjs';
 
@@ -98,4 +98,21 @@ test('fixed code and stage allowlists cannot publish arbitrary text', () => {
   assert.doesNotMatch(detail, /Bearer|SECRET_VALUE|script/);
   assert.equal(safeHostFailureCode('RUN_BINDING_MISMATCH'), 'RUN_BINDING_MISMATCH');
   assert.equal(publicFailureDiagnosticFromEnv({}), null);
+});
+
+test('allows fixed AGY_ERROR diagnostics to name rate limit without leaking raw stderr', () => {
+  const line = 'AGY_ERROR_DIAGNOSTIC category=rate_limited status=RESOURCE_EXHAUSTED error_code=429 code_kind=http retryable=true attempt=3';
+  const parsed = parseAgyErrorDiagnostic(line);
+  assert.equal(parsed?.category, 'rate_limited');
+  const detail = publicFailureDiagnosticFromEnv({
+    HOST_FAILURE_CODE: 'MODEL_REPORTED_FAILURE',
+    HOST_DIAG_STAGE: 'process_exit', HOST_DIAG_REASON: 'nonzero_exit',
+    HOST_AGY_DIAGNOSTIC: line,
+  });
+  assert.match(detail, /レート制限または利用枠の上限/);
+  assert.match(detail, /429/);
+  assert.match(detail, /retryable=trueでも直ちに回復するとは限りません/);
+  assert.doesNotMatch(detail, /ghp_PRIVATE|raw stderr/);
+  assert.equal(parseAgyErrorDiagnostic(line + ' Bearer ghp_PRIVATE'), null);
+  assert.equal(parseAgyErrorDiagnostic(line.replace('error_code=429', 'error_code=999')), null);
 });
