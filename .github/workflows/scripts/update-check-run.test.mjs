@@ -109,3 +109,15 @@ describe('safe diagnostics surfaced in PR Checks', () => {
     assert.doesNotMatch(update.output.summary, /OAuth token|ghp_DO_NOT_PUBLISH/);
   });
 });
+
+test('successful lower-tier final fallback is visibly marked as degraded', () => {
+  const update = buildCheckRunUpdate({
+    conclusion: 'success', targetRepo: 'owner/repo', prNumber: '42',
+    detailsUrl: 'https://github.com/yohi/ocr-app/actions/runs/123',
+    result: { status: 'success', findings: [] },
+    terminalFallbackDegraded: true,
+  });
+  assert.equal(update.conclusion, 'success');
+  assert.match(update.output.summary, /Deep品質の達成は未確認/);
+  assert.match(update.output.summary, /review_quality_measured=false/);
+});

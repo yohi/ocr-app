@@ -10,7 +10,7 @@ import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import * as checkRun from './update-check-run.mjs';
 import { authorizeRoutingStart } from './authorize-routing-start.mjs';
-import { parseAuditDiagnostic, parseHostDiagnostic, safeHostFailureCode } from './ocr-public-failure.mjs';
+import { parseAuditDiagnostic, parseHostDiagnostic, parseAgyErrorDiagnostic, safeHostFailureCode } from './ocr-public-failure.mjs';
 
 const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
 
@@ -116,7 +116,7 @@ function fixture(count = 1) {
     'routing-execution-context.mjs': { readRoutingExecutionContext: () => ({}), revalidateRoutingExecutionContext: revalidate },
     'load-review-certification.mjs': { createRoutingEvidenceReader: () => () => Buffer.from('evidence'),
       readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
-    'ocr-public-failure.mjs': { parseAuditDiagnostic, parseHostDiagnostic, safeHostFailureCode },
+    'ocr-public-failure.mjs': { parseAuditDiagnostic, parseHostDiagnostic, parseAgyErrorDiagnostic, safeHostFailureCode },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
     'update-check-run.mjs': checkRun,
     'ocr-routing-audit.mjs': { createRoutingLogSummary, finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
@@ -610,4 +610,11 @@ test('failure diagnostics flow to PR Checks without relaxing the posting Gate', 
   assert.match(post, /ROUTE_GUARD_FAILED != 'true'/);
   assert.match(checks, /update-check-run\.mjs/);
   assert.match(workflow, /id: post-review[\s\S]*?if: always\(\)/);
+});
+
+test('Host step handles bounded AGY_ERROR diagnostics without publishing raw stderr', () => {
+  const host = step('Run Antigravity review host');
+  assert.match(host, /parseAgyErrorDiagnostic/);
+  assert.match(host, /HOST_AGY_DIAGNOSTIC/);
+  assert.match(host, /GITHUB_ENV/);
 });

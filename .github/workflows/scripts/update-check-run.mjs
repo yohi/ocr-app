@@ -35,7 +35,7 @@ function failureDetails(result) {
   return `\n\nFailure details:\n${fence}\n${result.message}\n${fence}`;
 }
 
-export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result, enforce = false, routingFailureReason = null, failureDiagnostic = null, suppressUnsafeDetails = false }) {
+export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUrl, detailsUrl, result, enforce = false, routingFailureReason = null, failureDiagnostic = null, suppressUnsafeDetails = false, terminalFallbackDegraded = false }) {
   const pullRequestUrl = `https://github.com/${targetRepo}/pull/${prNumber}`;
   const resultUrl = reviewUrl || pullRequestUrl;
   const isFailure = conclusion === 'failure' || result?.status === 'failed';
@@ -60,6 +60,9 @@ export function buildCheckRunUpdate({ conclusion, targetRepo, prNumber, reviewUr
     `[この実行のログを確認](<${detailsUrl}>)`,
     isFailure && typeof failureDiagnostic === 'string' ? `### 失敗原因の診断\n\n${failureDiagnostic}` : '',
     enforce || suppressUnsafeDetails ? '' : failureDetails(result),
+    !isFailure && result?.status === 'success' && terminalFallbackDegraded
+      ? '⚠️ 規定モデルによる最終レビューは成功しましたが、Deep品質の達成は未確認です。監査の review_quality_measured=false を確認してください。'
+      : '',
   ].filter(Boolean).join('\n\n');
 
   return {
@@ -85,6 +88,7 @@ export async function updateCheckRun({ env = process.env, fetchImpl = fetch } = 
     routingFailureReason: finalRoutingFailureReason(env),
     failureDiagnostic: publicFailureDiagnosticFromEnv(env),
     suppressUnsafeDetails: env.DECISION_LLM_ENABLED === 'true',
+    terminalFallbackDegraded: env.TERMINAL_FALLBACK_DEGRADED === 'true',
   });
   const response = await fetchImpl(
     `${env.GITHUB_API_URL || 'https://api.github.com'}/repos/${env.TARGET_REPO}/check-runs/${env.CHECK_RUN_ID}`,

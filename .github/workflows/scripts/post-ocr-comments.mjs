@@ -614,6 +614,10 @@ export async function run({
     console.warn('PR_MODEL_SUMMARY_UNAVAILABLE');
   }
 
+  if (env.TERMINAL_FALLBACK_DEGRADED === 'true') {
+    modelSummary += '\n⚠️ 規定モデルの最終試行が成功しましたが、要求されたDeep品質を満たしたとは判定していません。';
+  }
+
   return postSummaryComment({
     authorizeBeforeMutation,
     botLogin,
