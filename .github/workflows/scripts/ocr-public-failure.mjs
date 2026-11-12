@@ -23,6 +23,22 @@ const HOST_REASONS = new Set([
   'invalid_schema', 'failed_status',
 ]);
 const OUTPUT_FORMATS = new Set(['unknown', 'empty', 'json_like', 'mixed_or_stream', 'text', 'parsed_json']);
+const PROVIDER_CATEGORIES = new Set(['rate_limited','service_unavailable','authentication_failed',
+  'permission_denied','timeout','invalid_request','not_found','provider_error','unknown']);
+const PROVIDER_STATUSES = new Set(['RESOURCE_EXHAUSTED','UNAVAILABLE','UNAUTHENTICATED',
+  'PERMISSION_DENIED','DEADLINE_EXCEEDED','INVALID_ARGUMENT','NOT_FOUND',
+  'INTERNAL','UNKNOWN','ABORTED','CANCELLED','FAILED_PRECONDITION']);
+const PROVIDER_LABELS = Object.freeze({
+  rate_limited: 'レート制限または利用枠の上限',
+  service_unavailable: '提供元の一時的な利用不可',
+  authentication_failed: '提供元への認証失敗',
+  permission_denied: '提供元での権限拒否',
+  timeout: '提供元の処理期限超過',
+  invalid_request: '提供元に拒否されたリクエスト',
+  not_found: 'モデルまたはリソースが見つかりません',
+  provider_error: '提供元内部エラー',
+  unknown: '特定できない提供元エラー',
+});
 const AUDIT_CODES = new Set([
   'ENOENT', 'AUDIT_EVENT_INVALID', 'AUDIT_ALREADY_WRITTEN', 'AUDIT_NOT_SEALED',
   'ROUTING_AUTHORITY_UNAVAILABLE', 'ROUTING_EXECUTION_CONTEXT_INVALID',
@@ -51,6 +67,15 @@ export function parseHostDiagnostic(line) {
     stage: match[1], reason: match[2], outputFormat: match[3],
     exitCode: match[4], attempt: match[5],
   };
+}
+
+export function parseAgyErrorDiagnostic(line) {
+  if (typeof line !== 'string' || line.length > 240) return null;
+  const match = /^AGY_ERROR_DIAGNOSTIC category=([a-z_]+) status=([A-Z_]+) error_code=(na|[0-9]{1,3}) code_kind=(http|grpc|unknown) retryable=(true|false|unknown) attempt=([1-9][0-9]{0,3})$/.exec(line);
+  if (!match || !PROVIDER_CATEGORIES.has(match[1]) || !PROVIDER_STATUSES.has(match[2]) ||
+      (match[3] !== 'na' && Number(match[3]) > 599)) return null;
+  return { category: match[1], status: match[2], errorCode: match[3],
+    codeKind: match[4], retryable: match[5], attempt: match[6] };
 }
 
 export function parseAuditDiagnostic(line) {
@@ -130,6 +155,17 @@ export function publicFailureDiagnosticFromEnv(env = {}) {
       const attempt = env.HOST_DIAG_ATTEMPT;
       if (typeof attempt === 'string' && /^[1-9][0-9]{0,3}$/.test(attempt)) {
         lines.push(`**記録された試行:** ${attempt}`);
+      }
+    }
+    const provider = parseAgyErrorDiagnostic(env.HOST_AGY_DIAGNOSTIC);
+    if (provider) {
+      lines.push(`**agyの提供元エラー:** ${PROVIDER_LABELS[provider.category]}（${provider.status}）`);
+      if (provider.errorCode !== 'na') {
+        lines.push(`**提供元エラーコード:** ${provider.errorCode}（${provider.codeKind}）`);
+      }
+      lines.push(`**agyのretryable判定:** ${provider.retryable}（試行 ${provider.attempt}）`);
+      if (provider.category === 'rate_limited') {
+        lines.push('**対応:** 利用枠の回復を確認してください。retryable=trueでも直ちに回復するとは限りません。');
       }
     }
     return lines.join('\n');

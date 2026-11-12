@@ -308,7 +308,7 @@ jobs:
             const { runRoutingReview } = await import('./self-repo/.github/workflows/scripts/run-routing-review.mjs');
             const { hashRoutingSourceManifest } = await import('./self-repo/.github/workflows/scripts/routing-authorization.mjs');
             const { createRoutingEvidenceReader } = await import('./self-repo/.github/workflows/scripts/load-review-certification.mjs');
-            const { parseHostDiagnostic, safeHostFailureCode } = await import('./self-repo/.github/workflows/scripts/ocr-public-failure.mjs');
+            const { parseHostDiagnostic, parseAgyErrorDiagnostic, safeHostFailureCode } = await import('./self-repo/.github/workflows/scripts/ocr-public-failure.mjs');
             const context = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/ocr-review-context.json`, 'utf8'));
             const contextJson = JSON.stringify(context);
             const prompt = [
@@ -376,17 +376,22 @@ jobs:
               onProgress: chunk => process.stderr.write(chunk),
               onDiagnostic: line => {
                 const diagnostic = parseHostDiagnostic(line);
-                if (!diagnostic) return;
+                const agy = parseAgyErrorDiagnostic(line);
+                if (!diagnostic && !agy) return;
                 console.error(line);
                 try {
-                  fs.appendFileSync(process.env.GITHUB_ENV, [
-                    `HOST_DIAG_STAGE=${diagnostic.stage}`,
-                    `HOST_DIAG_REASON=${diagnostic.reason}`,
-                    `HOST_DIAG_FORMAT=${diagnostic.outputFormat}`,
-                    `HOST_DIAG_EXIT=${diagnostic.exitCode}`,
-                    `HOST_DIAG_ATTEMPT=${diagnostic.attempt}`,
-                    '',
-                  ].join('\n'));
+                  if (agy) {
+                    fs.appendFileSync(process.env.GITHUB_ENV, `HOST_AGY_DIAGNOSTIC=${line}\n`);
+                  } else {
+                    fs.appendFileSync(process.env.GITHUB_ENV, [
+                      `HOST_DIAG_STAGE=${diagnostic.stage}`,
+                      `HOST_DIAG_REASON=${diagnostic.reason}`,
+                      `HOST_DIAG_FORMAT=${diagnostic.outputFormat}`,
+                      `HOST_DIAG_EXIT=${diagnostic.exitCode}`,
+                      `HOST_DIAG_ATTEMPT=${diagnostic.attempt}`,
+                      '',
+                    ].join('\n'));
+                  }
                 } catch { /* Diagnostic output is best-effort. */ }
               },
             });
@@ -484,6 +489,7 @@ jobs:
           VALIDATED_RESULT_SHA256: ${{ steps.validate-review.outputs.RESULT_SHA256 }}
           VALIDATION_STATUS: ${{ steps.validate-review.outcome == 'success' && 'passed' || 'failed' }}
           HEAD_STATUS: ${{ steps.validate-head.outcome == 'success' && 'passed' || 'failed' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
