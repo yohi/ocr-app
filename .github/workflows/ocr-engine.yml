@@ -550,6 +550,12 @@ jobs:
               resultSha256: resultEvidence.resultSha256 });
             auditStage = 'WRITE_AUDIT';
             writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
+            if (record.review_validation_status === 'passed' && record.host_success_model !== null &&
+                record.executed_review_model === null && record.selected_strategy === 'deep' &&
+                record.host_success_model === catalog.strategies.fast.preferred_model_id &&
+                process.env.GITHUB_ENV) {
+              fs.appendFileSync(process.env.GITHUB_ENV, 'TERMINAL_FALLBACK_DEGRADED=true\n');
+            }
             auditStage = 'LOG_SUMMARY';
             console.log(`OCR_ROUTING_SUMMARY ${JSON.stringify({
               ...createRoutingLogSummary(record),

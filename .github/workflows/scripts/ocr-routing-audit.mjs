@@ -129,6 +129,7 @@ export function createRoutingLogSummary(record) {
     selection_llm_egress_status: record.egress_status,
     selected_review_model: record.selected_review_model,
     executed_review_model: record.executed_review_model,
+    review_quality_measured: record.review_quality_measured,
     attempted_review_models: Object.freeze([...record.attempted_review_models]),
     audit_status: record.audit_status,
   });
