@@ -10,6 +10,7 @@ import { runRoutingReview } from './run-routing-review.mjs';
 import { evaluatePublishEligibility } from './evaluate-routing-publish.mjs';
 import * as checkRun from './update-check-run.mjs';
 import { authorizeRoutingStart } from './authorize-routing-start.mjs';
+import { parseAuditDiagnostic, parseHostDiagnostic, safeHostFailureCode } from './ocr-public-failure.mjs';
 
 const finalizeRoutingAudit = input => finalizeRoutingAuditCore({ resultSha256: 'a'.repeat(64), ...input });
 
@@ -115,6 +116,7 @@ function fixture(count = 1) {
     'routing-execution-context.mjs': { readRoutingExecutionContext: () => ({}), revalidateRoutingExecutionContext: revalidate },
     'load-review-certification.mjs': { createRoutingEvidenceReader: () => () => Buffer.from('evidence'),
       readInstalledCliIdentity: () => ({ binarySha256: 'e'.repeat(64) }) },
+    'ocr-public-failure.mjs': { parseAuditDiagnostic, parseHostDiagnostic, safeHostFailureCode },
     'evaluate-routing-publish.mjs': { evaluatePublishEligibility },
     'update-check-run.mjs': checkRun,
     'ocr-routing-audit.mjs': { createRoutingLogSummary, finalizeRoutingAudit: input => finalizeRoutingAudit({ ...input, fs: fakeFs }), verifyValidatedResultEvidence,
@@ -589,4 +591,23 @@ test('production preparation captures enforce source-manifest git stderr', async
   assert.equal(result.exitCode, 1);
   assert.deepEqual(options?.stdio, ['ignore', 'pipe', 'pipe']);
   assert.deepEqual(result.logs, ['ROUTING_ACTIVATION_DENIED']);
+});
+
+test('failure diagnostics flow to PR Checks without relaxing the posting Gate', () => {
+  const prepare = step('Prepare dynamic routing');
+  const host = step('Run Antigravity review host');
+  const audit = step('Finalize routing audit');
+  const post = step('Post review comments');
+  const checks = step('Update Check Run completed');
+  assert.match(prepare, /PREPARE_FAILURE_CODE/);
+  assert.match(prepare, /PREPARE_FAILURE_STAGE/);
+  assert.match(host, /HOST_DIAG_REASON/);
+  assert.match(host, /HOST_FAILURE_CODE/);
+  assert.match(audit, /AUDIT_FAILURE_CODE/);
+  for (const text of [prepare, host, audit]) assert.match(text, /GITHUB_ENV/);
+  assert.match(post, /steps\.finalize-routing\.outcome == 'success'/);
+  assert.match(post, /steps\.reauthorize-upload\.outputs\.AUTHORIZED == 'true'/);
+  assert.match(post, /ROUTE_GUARD_FAILED != 'true'/);
+  assert.match(checks, /update-check-run\.mjs/);
+  assert.match(workflow, /id: post-review[\s\S]*?if: always\(\)/);
 });
