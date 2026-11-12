@@ -601,3 +601,44 @@ test('off-mode Decision LLM route remains usable after owner expiry while enforc
   assert.equal((await runRoutingReview(blocked.args)).status, 'failed');
   assert.deepEqual(blocked.calls, []);
 });
+
+
+test('off-mode execution denies a newly revoked model before CLI spawn', async () => {
+  const pinnedCatalog = structuredClone(certifiedCatalog);
+  pinnedCatalog.models = pinnedCatalog.models.map(model => ({
+    ...model, certification_reference: `sha256:${createHash('sha256').update(model.model_id).digest('hex')}`,
+  }));
+  const primary = pinnedCatalog.strategies.deep.preferred_model_id;
+  const fallback = pinnedCatalog.models.find(item => item.model_id === primary).allowed_fallbacks;
+  const available = pinnedCatalog.models.map(item => item.model_id);
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: pinnedCatalog.models.map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  let reads = 0;
+  const fixture = input({
+    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/repo' },
+    trustedInputs: { catalog: pinnedCatalog, index },
+    resolveModels: undefined,
+    readRoute: async () => ({ selected_model_id: primary, selected_strategy: 'deep',
+      fallback_models: fallback, reviewable_file_count: 1, status: 'prepared' }),
+    readExecutionContext: async () => ({}),
+    fetchCurrentAuthorization: async () => ({
+      registry: { schema_version: '1', approvals: [], activations: [],
+        revoked_refs: reads++ === 0 ? [] : [`OWNER-${primary}`] },
+      operationalDossiers: {},
+    }),
+    revalidateExecutionContext: async ({ trustedInputs }) => ({ certifiedBundle: {
+      catalog: pinnedCatalog,
+      evidence: { certification_refs: [], cli_available_models: available, index,
+        revokedRefs: trustedInputs.registry.revoked_refs },
+    } }),
+    readInstalledCliIdentity: async () => ({ resolvedPath: '/attested/agy', binarySha256: 'a'.repeat(64) }),
+    runHost: async options => {
+      assert.equal(await options.authorizeBeforeSpawn(), false);
+      return { status: 'failed', message: 'ROUTING_ACTIVATION_DENIED' };
+    },
+  });
+  assert.equal((await runRoutingReview(fixture.args)).status, 'failed');
+  assert.equal(reads, 2);
+});
