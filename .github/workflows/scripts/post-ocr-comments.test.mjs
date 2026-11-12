@@ -1262,3 +1262,19 @@ test('off-mode failure comment cannot bypass denied mutation authorization', asy
   }), /ROUTING_ACTIVATION_DENIED/);
   assert.equal(requests.length, 0);
 });
+
+test('approved terminal lower-tier success labels PR summary as degraded', async () => {
+  const resultPath = await createResultFile({ status: 'success', findings: [], coverage: 1 });
+  const requests = installHttpsMock([
+    { data: [], status: 200 }, { data: [], status: 200 }, { data: {}, status: 201 },
+  ]);
+  const code = await run({
+    args: ['--repo', 'owner/repo', '--pr', '123', '--result', resultPath],
+    token: 'test-token', expectedSha: undefined,
+    env: { TARGET_REPO: 'owner/repo', DECISION_ROUTING_MODE: 'off',
+      TERMINAL_FALLBACK_DEGRADED: 'true' },
+    authorizeBeforeMutation: async () => true,
+  });
+  assert.equal(code, 0);
+  assert.match(requests.at(-1).body.body, /要求されたDeep品質を満たしたとは判定していません/);
+});

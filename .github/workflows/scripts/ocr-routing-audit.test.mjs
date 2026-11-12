@@ -548,6 +548,7 @@ test('routing log summary reports a skipped selector and the executed review mod
     selection_llm_egress_status: 'denied',
     selected_review_model: 'gemini-3.8-flash-medium',
     executed_review_model: 'gemini-3.8-flash-medium',
+    review_quality_measured: true,
     attempted_review_models: ['gemini-3.8-flash-medium'],
     audit_status: 'sealed',
   });
