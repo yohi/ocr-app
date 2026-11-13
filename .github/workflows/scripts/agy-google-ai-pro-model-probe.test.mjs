@@ -91,3 +91,27 @@ test('ignores non-candidate IDs including Orchestrator labels or custom aliases'
   assert.deepEqual(report.hydrogen_listed, ['gemini-4-hydrogen-high']);
   assert.doesNotMatch(formatGoogleAiProProbeSummary(report), /Orchestrator|custom\/vendor/);
 });
+
+test('matches Human Owner observed agy 1.5.8 list of 18 without activating pending models', () => {
+  const ids = [
+    'gemini-4-argon-medium', 'gemini-4-argon-high', 'gemini-4-argon-low',
+    'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh',
+    'gemini-4-hydrogen-medium', 'gemini-4-hydrogen-low',
+    'gemini-pro-orchestrator-g1-pro',
+    'gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low',
+    'claude-opus-5-5-low', 'claude-opus-5-5-medium', 'claude-opus-5-5-high',
+    'claude-sonnet-5-5-low', 'claude-sonnet-5-5-medium', 'claude-sonnet-5-5-high',
+    'gpt-oss-120b-medium',
+  ];
+  assert.equal(ids.length, 18);
+  const report = buildGoogleAiProProbeReport({
+    source: encode(...ids), config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, [
+    'gemini-4-hydrogen-low', 'gemini-4-hydrogen-medium',
+    'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh',
+  ]);
+  assert.deepEqual(report.carbon_listed_but_plan_excluded, []);
+  assert.equal(report.production_routing_changed, false);
+  assert.equal(report.hydrogen_runtime_execution_verified, false);
+});

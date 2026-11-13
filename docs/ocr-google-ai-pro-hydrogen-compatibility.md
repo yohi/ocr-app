@@ -4,10 +4,11 @@
 
 ## 目的と確定済みの事実
 
-- **重要（2026-11-13時点）**: Google公式モデル表ではGoogle AI ProのOAuth向けにHydrogenが掲載されていない。agy v1.5.8のリリースノートではHydrogen追加の対象がGEMINI_API_KEY／AGY_ADC_AUTH／Enterprise Gatewayと説明されるため、Google AI Pro OAuthでの利用可否は**未確認**。CarbonはPro対象外、Argonは有料Proまたは対象デバイストライアル。
+- 2026-11-13にHuman Ownerのローカル環境で `agy --version` = `1.5.8`、`agy models` = **18件**（既存13件 + Hydrogen Low/Medium/High/XHigh + Orchestrator）を観測。Carbonは表示されなかった。これは**実モデル一覧の観測証拠**であり、Hydrogenの推論成功やGitHub Actions内のOAuth同等性を証明しない。
+- 公開リリースノートはAPIキー／ADC／Enterprise Gateway向けHydrogen対応を明記している。Human Ownerのローカル一覧からHydrogenが表示されることは確認できたが、**GitHub Actionsに保存された `ANTIGRAVITY_OAUTH_JSON` で同じ一覧が取得できるか**は未検証。CarbonはPro対象外。
 - agy CLI v1.5.8の公式Linux x64アーカイブSHA-256:
   `905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98`
-- Google AI ProのAntigravity OAuthで実際に`agy models`が返す内容と、Hydrogenの実行可否は**未検証**。
+- `agy models` にHydrogen 4件が表示されることはローカルで確認済み。**Hydrogenの実際の推論成功、利用枠、レビュー品質、GitHub Actions内のOAuth表示**は未検証。
 - OCR App本番はCLI v1.5.1、固定モデル13件、Decision LLM opt-in、既存の固定SHA/認可/監査を維持する（GPT-OSSを通常Fallbackからのみ除外）。
 - GPT-OSS 120Bは2026-11-18に廃止予定。**Deepの通常Fallbackからは事前除外**し、選択順を `claude-opus-5-5-high → gemini-4-argon-high → claude-sonnet-5-5-high` に短縮した。既存の固定CLIインベントリの13モデルと認定記録自体はバイト単位で維持する。
 
@@ -36,7 +37,7 @@
 
 ## 将来の適用判断（自動開始禁止）
 
-HydrogenがOAuth一覧に存在し、さらに実行・レビュー品質を確認できた場合のみ、Human Ownerの判断でCLI v1.5.8バイナリSHA、固定インベントリ、モデル認定、カタログ、Fallback方針を一括更新する。
+ローカルモデル一覧は既に確認できたため、次の実質的な必要条件は **(a) GitHub Actions OAuthでも同じモデルが見える、(b) OAuthでHydrogen Medium/Highの実推論が成功する、(c) v1.5.8のバイナリSHAを実測しヘッドレスの権限境界が保たれる、(d) 固定インベントリ・承認・監査を新バージョンに整合させる** こと。実行・レビュー品質を確認できたモデルだけ、Human Ownerの判断で有効化する。
 
 - Fast候補: `gemini-4-hydrogen-medium`
 - Deep候補: `gemini-4-hydrogen-high`
@@ -48,4 +49,4 @@ HydrogenがOAuth一覧に存在し、さらに実行・レビュー品質を確�
 
 ## 完了条件
 
-このPRでは、廃止予定モデルをDeep通常Fallbackから除外し、機密情報を漏らさずOAuth利用可能モデル・CLIハッシュを取得する経路までを完成とする。OAuth実証と本番移行は**未承認かつ未実施**。本PR作業はここで終了可能。
+このPRでは、廃止予定モデルをDeep通常Fallbackから除外し、機密情報を漏らさずOAuth利用可能モデル・CLIハッシュを取得する経路までを完成とする。Actions OAuth実証・実際のHydrogen推論・本番移行は**未実施**。本PR作業はここで終了可能。
