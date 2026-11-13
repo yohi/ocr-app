@@ -151,11 +151,11 @@ test('run binding keeps canonical run ID and freezes runner identity', () => {
   assert.equal(Object.isFrozen(binding), true);
 });
 
-test('route serializer emits the exact 16-key contract and writer seals the standalone route privately', () => {
+test('route serializer emits the exact 17-key contract and writer seals the standalone route privately', () => {
   const runTemp = mkdtempSync(join(tmpdir(), 'ocr-routing-'));
   try {
     const serialized = route();
-    assert.deepEqual(Object.keys(serialized), ['schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status', 'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id', 'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version']);
+    assert.deepEqual(Object.keys(serialized), ['schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status', 'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id', 'fallback_models', 'terminal_model_id', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version']);
     const path = join(runTemp, 'ocr-selected-route.json');
     writeSelectedReviewRoute({ runTemp, result: preparation() });
     assert.equal(statSync(path).mode & 0o777, 0o600);
@@ -164,6 +164,42 @@ test('route serializer emits the exact 16-key contract and writer seals the stan
     const invalid = { ...route(), extra: 'no' };
     assert.throws(() => loadRouteFromFile(path, { readFileSync: () => JSON.stringify(invalid) }));
   } finally { rmSync(runTemp, { recursive: true, force: true }); }
+});
+
+test('off+Decision route seals the configured terminal model and rejects missing or cross-mode values', () => {
+  const runBinding = createRunBindingFromEnv({
+    ...env('off'), DECISION_LLM_ENABLED: 'true',
+  });
+  const base = {
+    route: { status: 'prepared', reviewableCount: 1, selectedStrategy: 'deep',
+      proposedStrategy: 'deep', selectedReviewModel: 'model/deep', fallbackModels: ['model/fallback'],
+      terminalModelId: 'model/configured-terminal', routeSource: 'deterministic_fallback',
+      decisionStatus: 'unavailable' },
+    runBinding,
+    policyVersions: { policyVersion: '1.0.0', modelCatalogVersion: '1.2.0' },
+  };
+  const selected = serializeSelectedReviewRoute(base);
+  assert.equal(selected.terminal_model_id, 'model/configured-terminal');
+  assert.equal(selected.selected_model_id, 'model/deep');
+  assert.throws(() => serializeSelectedReviewRoute({
+    ...base, route: { ...base.route, terminalModelId: undefined },
+  }), { message: 'ROUTE_SCHEMA_INVALID' });
+  assert.throws(() => serializeSelectedReviewRoute({
+    ...base, route: { ...base.route, terminalModelId: 'INVALID MODEL' },
+  }), { message: 'ROUTE_SCHEMA_INVALID' });
+  assert.throws(() => loadRouteFromFile('/unused', {
+    readFileSync: () => JSON.stringify({ ...selected, terminal_model_id: null }),
+  }), { message: 'ROUTE_SCHEMA_INVALID' });
+  assert.throws(() => loadRouteFromFile('/unused', {
+    readFileSync: () => JSON.stringify({ ...selected, terminal_model_id: 'model/tampered', extra: true }),
+  }), { message: 'ROUTE_SCHEMA_INVALID' });
+  const enforce = serializeSelectedReviewRoute({
+    ...base, runBinding: createRunBindingFromEnv(env('enforce')),
+  });
+  assert.equal(enforce.terminal_model_id, null);
+  assert.throws(() => loadRouteFromFile('/unused', {
+    readFileSync: () => JSON.stringify({ ...enforce, terminal_model_id: 'model/configured-terminal' }),
+  }), { message: 'ROUTE_SCHEMA_INVALID' });
 });
 
 test('enforce route carries only selected certified execution fields', () => {
@@ -217,7 +253,8 @@ test('off mode with the global flag uses pinned allowlisted models despite expir
   const environment = { ...env('off'), DECISION_LLM_ENABLED: 'true', GITHUB_REPOSITORY: 'owner/repo',
     DECISION_LLM_API_URL: 'https://openrouter.ai/api/alpha/decisions', DECISION_LLM_MODEL_ID: 'parallel/decisions-fast:free',
     RUNNER_TEMP: runTemp, OCR_PREVIEW_PATH: join(runTemp, 'preview.json'), BASE_REF: 'main', TARGET_REPO: targetRepo,
-    GITHUB_TOKEN: 'target-app-token', CENTRAL_GITHUB_TOKEN: 'central-token', OPENROUTER_API_KEY: 'test-key' };
+    GITHUB_TOKEN: 'target-app-token', CENTRAL_GITHUB_TOKEN: 'central-token', OPENROUTER_API_KEY: 'test-key',
+    OCR_LLM_MODEL: 'certified-fallback' };
   writeFileSync(environment.OCR_PREVIEW_PATH, JSON.stringify({ reviewable_files: [{ path: 'src/example.js' }] }));
   const sha = 'a'.repeat(40);
   const oldSha = 'b'.repeat(40);
@@ -243,6 +280,7 @@ test('off mode with the global flag uses pinned allowlisted models despite expir
     assert.equal(decisionPosts, 1);
     assert.equal(result.route.effective_mode, 'off');
     assert.equal(result.route.selected_model_id, 'certified-primary');
+    assert.equal(result.route.terminal_model_id, environment.OCR_LLM_MODEL);
     const context = JSON.parse(readFileSync(join(runTemp, 'ocr-routing-execution-context.json'), 'utf8'));
     assert.deepEqual(context.certification_refs, []);
     assert.equal(context.cli_inventory_sha256, fixture.trust.index.cli_inventory.sha256);
