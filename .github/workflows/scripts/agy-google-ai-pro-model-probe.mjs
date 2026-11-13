@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 // This probe intentionally only publishes IDs pre-authorized in the static
 // profile. The CLI response is untrusted and may contain sensitive error text.
 const SHA256 = /^[a-f0-9]{64}$/;
-const MODEL_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const MAX_MODELS = 256;
 const MAX_BYTES = 256 * 1024;
 const FAIL = 'AGY_OAUTH_MODEL_PROBE_INVALID';
@@ -55,7 +54,8 @@ export function parseAgyModelsEnvelope(source) {
   const ids = new Set();
   for (const model of value.command.data.models) {
     if (!plainObject(model) || typeof model.id !== 'string'
-      || !MODEL_ID.test(model.id) || ids.has(model.id)) reject();
+      || model.id.length === 0 || model.id.length > 256
+      || /[\r\n\0]/.test(model.id) || ids.has(model.id)) reject();
     ids.add(model.id);
   }
   if (ids.size === 0) reject();

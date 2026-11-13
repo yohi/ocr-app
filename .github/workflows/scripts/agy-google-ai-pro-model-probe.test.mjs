@@ -51,7 +51,7 @@ test('success status and structured models command are both required', () => {
     command: { name: 'chat', data: { models: [{ id: 'gemini-4-hydrogen-high' }] } },
   })), /AGY_OAUTH_MODEL_PROBE_INVALID/);
   assert.throws(() => parseAgyModelsEnvelope(JSON.stringify({ status: 'SUCCESS',
-    command: { name: 'models', data: { models: [{ id: '../attack' }] } },
+    command: { name: 'models', data: { models: [{ id: 123 }] } },
   })), /AGY_OAUTH_MODEL_PROBE_INVALID/);
 });
 
@@ -80,4 +80,14 @@ test('config cannot activate Carbon or substitute an arbitrary Hydrogen candidat
   assert.throws(() => validateGoogleAiProProbeConfig({
     ...config, linux_x64_archive_sha256: 'wrong',
   }), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+});
+
+test('ignores non-candidate IDs including Orchestrator labels or custom aliases', () => {
+  const source = encode('Orchestrator (Argon)', 'custom/vendor:model-name',
+    'gemini-4-hydrogen-high');
+  const report = buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, ['gemini-4-hydrogen-high']);
+  assert.doesNotMatch(formatGoogleAiProProbeSummary(report), /Orchestrator|custom\/vendor/);
 });
