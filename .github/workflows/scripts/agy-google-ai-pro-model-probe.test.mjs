@@ -1,0 +1,123 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import {
+  buildGoogleAiProProbeReport, formatGoogleAiProProbeSummary,
+  parseAgyModelsEnvelope, validateGoogleAiProProbeConfig,
+} from './agy-google-ai-pro-model-probe.mjs';
+
+const config = JSON.parse(readFileSync(new URL('../config/google-ai-pro-hydrogen-probe.json', import.meta.url), 'utf8'));
+const sha = 'a'.repeat(64);
+const encode = (...ids) => JSON.stringify({
+  status: 'SUCCESS', command: { name: 'models',
+    data: { models: ids.map(id => ({ id, label: 'Bearer ghp_PRIVATE_TOKEN' })) } },
+  response: 'Bearer ghp_PRIVATE_TOKEN',
+});
+
+test('Google AI Pro candidate policy is fixed and excludes Carbon', () => {
+  assert.equal(validateGoogleAiProProbeConfig(config), config);
+  assert.equal(config.candidate_models.length, 4);
+  assert.equal(config.target_production.cli_version, '1.5.8');
+  assert.equal(config.target_production.linux_x64_binary_sha256, '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5');
+  assert.equal(config.target_production.fast_default_model, 'gemini-4-hydrogen-medium');
+  assert.equal(config.target_production.activation, 'requires_verified_binary_and_model_evidence');
+  assert.deepEqual(config.excluded_for_plan, [
+    'gemini-4-carbon-low', 'gemini-4-carbon-medium', 'gemini-4-carbon-high',
+  ]);
+});
+
+test('lists Hydrogen candidates with binary identity and never reports raw CLI fields', () => {
+  const source = encode('gemini-4-hydrogen-medium', 'gemini-4-hydrogen-high',
+    'gemini-3.8-flash-medium', 'claude-opus-5-5-high', 'gpt-oss-120b-medium',
+    'gemini-4-carbon-high');
+  const report = buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, ['gemini-4-hydrogen-medium', 'gemini-4-hydrogen-high']);
+  assert.deepEqual(report.hydrogen_not_listed, ['gemini-4-hydrogen-low', 'gemini-4-hydrogen-xhigh']);
+  assert.deepEqual(report.legacy_default_listed, ['gemini-3.8-flash-medium', 'claude-opus-5-5-high']);
+  assert.deepEqual(report.carbon_listed_but_plan_excluded, ['gemini-4-carbon-high']);
+  assert.equal(report.hydrogen_runtime_execution_verified, false);
+  assert.equal(report.production_routing_changed, false);
+  assert.equal(report.target_fast_default, 'gemini-4-hydrogen-medium');
+  assert.equal(report.gpt_oss_listed, true);
+  assert.equal(report.gpt_oss_sunset_date, '2026-11-18');
+  const output = formatGoogleAiProProbeSummary(report);
+  assert.match(output, /gemini-4-hydrogen-medium.*LISTED/);
+  assert.match(output, /LISTEDは利用枠/);
+  assert.doesNotMatch(output, /PRIVATE_TOKEN|Bearer|short_error|response/);
+});
+
+test('success status and structured models command are both required', () => {
+  assert.throws(() => parseAgyModelsEnvelope(JSON.stringify({ status: 'ERROR',
+    error: 'Bearer private', command: { name: 'models', data: { models: [{ id: 'gemini-4-hydrogen-high' }] } },
+  })), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+  assert.throws(() => parseAgyModelsEnvelope(JSON.stringify({ status: 'SUCCESS',
+    command: { name: 'chat', data: { models: [{ id: 'gemini-4-hydrogen-high' }] } },
+  })), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+  assert.throws(() => parseAgyModelsEnvelope(JSON.stringify({ status: 'SUCCESS',
+    command: { name: 'models', data: { models: [{ id: 123 }] } },
+  })), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+});
+
+test('does not confuse listing with availability or silently accept duplicates', () => {
+  const source = encode('gemini-4-hydrogen-high');
+  const report = buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, ['gemini-4-hydrogen-high']);
+  assert.equal(report.hydrogen_runtime_execution_verified, false);
+  assert.throws(() => parseAgyModelsEnvelope(encode('gemini-4-hydrogen-high', 'gemini-4-hydrogen-high')),
+    /AGY_OAUTH_MODEL_PROBE_INVALID/);
+  assert.throws(() => buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.7', binarySha256: sha,
+  }), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+  assert.throws(() => buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.8', binarySha256: 'not-a-digest',
+  }), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+});
+
+test('config cannot activate Carbon or substitute an arbitrary Hydrogen candidate', () => {
+  assert.throws(() => validateGoogleAiProProbeConfig({
+    ...config, candidate_models: [{ id: 'gemini-4-carbon-high', proposed_tier: 'deep' },
+      ...config.candidate_models.slice(1)],
+  }), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+  assert.throws(() => validateGoogleAiProProbeConfig({
+    ...config, linux_x64_archive_sha256: 'wrong',
+  }), /AGY_OAUTH_MODEL_PROBE_INVALID/);
+});
+
+test('ignores non-candidate IDs including Orchestrator labels or custom aliases', () => {
+  const source = encode('Orchestrator (Argon)', 'custom/vendor:model-name',
+    'gemini-4-hydrogen-high');
+  const report = buildGoogleAiProProbeReport({
+    source, config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, ['gemini-4-hydrogen-high']);
+  assert.doesNotMatch(formatGoogleAiProProbeSummary(report), /Orchestrator|custom\/vendor/);
+});
+
+test('matches Human Owner observed agy 1.5.8 list of 18 without activating pending models', () => {
+  const ids = [
+    'gemini-4-argon-medium', 'gemini-4-argon-high', 'gemini-4-argon-low',
+    'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh',
+    'gemini-4-hydrogen-medium', 'gemini-4-hydrogen-low',
+    'gemini-pro-orchestrator-g1-pro',
+    'gemini-3.8-flash-high', 'gemini-3.8-flash-medium', 'gemini-3.8-flash-low',
+    'claude-opus-5-5-low', 'claude-opus-5-5-medium', 'claude-opus-5-5-high',
+    'claude-sonnet-5-5-low', 'claude-sonnet-5-5-medium', 'claude-sonnet-5-5-high',
+    'gpt-oss-120b-medium',
+  ];
+  assert.equal(ids.length, 18);
+  const report = buildGoogleAiProProbeReport({
+    source: encode(...ids), config, cliVersion: '1.5.8', binarySha256: sha,
+  });
+  assert.deepEqual(report.hydrogen_listed, [
+    'gemini-4-hydrogen-low', 'gemini-4-hydrogen-medium',
+    'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh',
+  ]);
+  assert.deepEqual(report.carbon_listed_but_plan_excluded, []);
+  assert.equal(report.production_routing_changed, false);
+  assert.equal(report.target_fast_default, 'gemini-4-hydrogen-medium');
+  assert.equal(report.hydrogen_runtime_execution_verified, false);
+});

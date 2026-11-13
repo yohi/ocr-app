@@ -225,7 +225,7 @@ test('off-mode pinned resolver selects only allowlisted models from exact CLI sn
     index, revokedRefs: [] };
   assert.deepEqual(resolvePinnedModels(catalog, 'deep', available), {
     primaryModelId: 'claude-opus-5-5-high',
-    allowedFallbackModels: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
+    allowedFallbackModels: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'],
     capabilityTier: 'deep',
   });
   for (const missing of ['claude-opus-5-5-high', 'gemini-4-argon-high']) {

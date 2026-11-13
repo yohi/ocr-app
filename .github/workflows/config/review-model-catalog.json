@@ -21,8 +21,7 @@
       "certification_reference": "sha256:cbfbe5dd693d768548eaaa74b8d79f8ec0c451325dbd762c37d13437f15b9c75",
       "allowed_fallbacks": [
         "gemini-4-argon-high",
-        "claude-sonnet-5-5-high",
-        "gpt-oss-120b-medium"
+        "claude-sonnet-5-5-high"
       ],
       "catalog_version": "1.0.1"
     },
