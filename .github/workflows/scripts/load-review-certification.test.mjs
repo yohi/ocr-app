@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -251,6 +251,33 @@ test('reads the installed executable identity and rejects target-checkout and sw
     assert.equal(identity.binarySha256, hash(f.binary));
     assert.throws(() => readInstalledCliIdentity({ env: { HOME: f.root }, targetRoot: f.root }), { message: 'REVIEW_CLI_UNAVAILABLE' });
     assert.throws(() => readInstalledCliIdentity({ env: { HOME: f.home }, targetRoot: f.root, resolveExecutable: () => join(f.root, 'path/agy') }), { message: 'REVIEW_CLI_UNAVAILABLE' });
+  } finally { cleanup(f); }
+});
+
+test('accepts a pinned AGY executable above the old 256 MiB cap but retains the 512 MiB bound', () => {
+  const f = fixture();
+  const executable = join(f.home, '.local/bin/agy');
+  const mib = 1024 * 1024;
+  try {
+    // Sparse file tests the size gate without allocating or reading hundreds of MiB.
+    // The injected readFile isolates size validation; real calls hash actual bytes.
+    for (const size of [257 * mib, 512 * mib]) {
+      truncateSync(executable, size);
+      assert.equal(lstatSync(executable).size, size);
+      const identity = readInstalledCliIdentity({
+        env: { HOME: f.home }, targetRoot: f.root,
+        readFile: () => f.binary,
+      });
+      assert.equal(identity.resolvedPath, realpathSync(executable));
+      assert.equal(identity.binarySha256, hash(f.binary));
+    }
+    truncateSync(executable, 512 * mib + 1);
+    let reads = 0;
+    assert.throws(() => readInstalledCliIdentity({
+      env: { HOME: f.home }, targetRoot: f.root,
+      readFile: () => { reads++; return f.binary; },
+    }), { message: 'REVIEW_CLI_UNAVAILABLE' });
+    assert.equal(reads, 0, 'oversized binaries must be rejected before reading');
   } finally { cleanup(f); }
 });
 
