@@ -17,6 +17,9 @@ const encode = (...ids) => JSON.stringify({
 test('Google AI Pro candidate policy is fixed and excludes Carbon', () => {
   assert.equal(validateGoogleAiProProbeConfig(config), config);
   assert.equal(config.candidate_models.length, 4);
+  assert.equal(config.target_production.cli_version, '1.5.8');
+  assert.equal(config.target_production.fast_default_model, 'gemini-4-hydrogen-medium');
+  assert.equal(config.target_production.activation, 'requires_verified_binary_and_model_evidence');
   assert.deepEqual(config.excluded_for_plan, [
     'gemini-4-carbon-low', 'gemini-4-carbon-medium', 'gemini-4-carbon-high',
   ]);
@@ -35,6 +38,7 @@ test('lists Hydrogen candidates with binary identity and never reports raw CLI f
   assert.deepEqual(report.carbon_listed_but_plan_excluded, ['gemini-4-carbon-high']);
   assert.equal(report.hydrogen_runtime_execution_verified, false);
   assert.equal(report.production_routing_changed, false);
+  assert.equal(report.target_fast_default, 'gemini-4-hydrogen-medium');
   assert.equal(report.gpt_oss_listed, true);
   assert.equal(report.gpt_oss_sunset_date, '2026-11-18');
   const output = formatGoogleAiProProbeSummary(report);
@@ -113,5 +117,6 @@ test('matches Human Owner observed agy 1.5.8 list of 18 without activating pendi
   ]);
   assert.deepEqual(report.carbon_listed_but_plan_excluded, []);
   assert.equal(report.production_routing_changed, false);
+  assert.equal(report.target_fast_default, 'gemini-4-hydrogen-medium');
   assert.equal(report.hydrogen_runtime_execution_verified, false);
 });

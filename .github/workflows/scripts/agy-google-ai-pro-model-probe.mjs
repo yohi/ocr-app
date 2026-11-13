@@ -26,7 +26,8 @@ export function validateGoogleAiProProbeConfig(config) {
     || !SHA256.test(config.linux_x64_archive_sha256)
     || !Array.isArray(config.candidate_models) || config.candidate_models.length !== 4
     || !Array.isArray(config.excluded_for_plan) || config.excluded_for_plan.length !== 3
-    || !plainObject(config.production_defaults) || !plainObject(config.retired_soon)) reject();
+    || !plainObject(config.production_defaults) || !plainObject(config.retired_soon)
+    || !plainObject(config.target_production)) reject();
   const expected = ['gemini-4-hydrogen-low', 'gemini-4-hydrogen-medium',
     'gemini-4-hydrogen-high', 'gemini-4-hydrogen-xhigh'];
   const proposedTiers = ['fast', 'fast', 'deep', 'deep'];
@@ -39,7 +40,11 @@ export function validateGoogleAiProProbeConfig(config) {
   ].join(',') || config.production_defaults.fast !== 'gemini-3.8-flash-medium'
     || config.production_defaults.deep !== 'claude-opus-5-5-high'
     || config.retired_soon.id !== 'gpt-oss-120b-medium'
-    || config.retired_soon.effective_date !== '2026-11-18') reject();
+    || config.retired_soon.effective_date !== '2026-11-18'
+    || config.target_production.cli_version !== '1.5.8'
+    || config.target_production.fast_default_model !== 'gemini-4-hydrogen-medium'
+    || config.target_production.deep_preferred_model !== 'claude-opus-5-5-high'
+    || config.target_production.activation !== 'requires_verified_binary_and_model_evidence') reject();
   return config;
 }
 
@@ -85,6 +90,7 @@ export function buildGoogleAiProProbeReport({ source, config, cliVersion, binary
     // Listing alone cannot prove OAuth inference, quality, or Owner approval.
     hydrogen_runtime_execution_verified: false,
     production_routing_changed: false,
+    target_fast_default: config.target_production.fast_default_model,
   });
 }
 
@@ -108,7 +114,8 @@ export function formatGoogleAiProProbeSummary(report) {
   lines.push('', `- 現行のFast/Deep規定モデルの表示数: ${report.legacy_default_listed.length}/2`,
     `- GPT-OSS 120B: ${report.gpt_oss_listed ? 'LISTED（廃止予定）' : 'NOT_LISTED'} / 2026-11-18廃止予定`,
     '- **LISTEDは利用枠・実際の応答・レビュー品質を証明しません。**',
-    '- **既存のレビュー選択、CLI pin、承認・監査設定は変更していません。**', '');
+    `- アップグレード目標: \`${report.target_fast_default}\` (新CLI pin とモデル認定が揃うまで無効)`,
+    '- **CLI/model候補の表示は、本番切替やモデル認定を意味しません。**', '');
   return lines.join('\n');
 }
 

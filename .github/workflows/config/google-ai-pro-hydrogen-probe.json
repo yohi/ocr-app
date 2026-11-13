@@ -33,5 +33,11 @@
   "retired_soon": {
     "id": "gpt-oss-120b-medium",
     "effective_date": "2026-11-18"
+  },
+  "target_production": {
+    "cli_version": "1.5.8",
+    "fast_default_model": "gemini-4-hydrogen-medium",
+    "deep_preferred_model": "claude-opus-5-5-high",
+    "activation": "requires_verified_binary_and_model_evidence"
   }
 }
