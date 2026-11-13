@@ -1,9 +1,41 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { runHydrogenSmoke, validateSmokeResult, formatSmokeSummary } from './agy-google-ai-pro-hydrogen-smoke.mjs';
 
 const digest = 'a'.repeat(64);
 const ok = JSON.stringify({ status: 'SUCCESS', response: 'OK', usage: { tokens: 5 } });
+
+
+test('CLI entrypoint accepts one executable argument and rejects extras', () => {
+  const root = mkdtempSync(join(tmpdir(), 'agy-smoke-entrypoint-'));
+  try {
+    const executable = join(root, 'agy-stub');
+    const summaryPath = join(root, 'summary.md');
+    writeFileSync(executable, '#!/bin/sh\nprintf \'%s\\n\' \'{"status":"SUCCESS","response":"OK"}\'\n');
+    chmodSync(executable, 0o755);
+    const script = fileURLToPath(new URL('./agy-google-ai-pro-hydrogen-smoke.mjs', import.meta.url));
+    const options = {
+      encoding: 'utf8',
+      timeout: 10000,
+      env: { ...process.env, AGY_BINARY_SHA256: digest, RUNNER_TEMP: root, GITHUB_STEP_SUMMARY: summaryPath },
+    };
+    const result = spawnSync(process.execPath, [script, executable], options);
+    assert.equal(result.status, 0, 'the workflow invocation must execute both bounded probes');
+    const summary = readFileSync(summaryPath, 'utf8');
+    assert.match(summary, /gemini-4-hydrogen-medium\`: INFERENCE_PASS/);
+    assert.match(summary, /gemini-4-hydrogen-high\`: INFERENCE_PASS/);
+    const unexpected = spawnSync(process.execPath, [script, executable, 'extra'], options);
+    assert.equal(unexpected.status, 1);
+    assert.match(unexpected.stderr, /AGY_HYDROGEN_OAUTH_SMOKE_FAILED/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test('two fixed Hydrogen models are tried once in plan mode with redacted output', () => {
   const seen = [];
