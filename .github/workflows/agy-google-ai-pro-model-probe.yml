@@ -1,0 +1,109 @@
+name: OCR App Google AI Pro model compatibility probe
+
+# Opt-in, read-only discovery. This workflow does NOT run a review, change
+# repository variables, update authorization records, or post to target PRs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  google-ai-pro-oauth-model-probe:
+    if: github.repository == 'yohi/ocr-app'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out trusted OCR App source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Validate fixed probe contract (offline)
+        run: node --test .github/workflows/scripts/agy-google-ai-pro-model-probe.test.mjs
+
+      - name: Verify pinned agy 1.5.8 archive and inspect CLI SHA
+        id: agy
+        shell: bash
+        env:
+          AGY_ARCHIVE_SHA256: '905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98'
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/agy_cli_linux_x64_1.5.8.tar.gz"
+          bin="$RUNNER_TEMP/agy_probe_1_5_8"
+          curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 --max-time 180 \
+            'https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.8/agy_cli_linux_x64.tar.gz' \
+            --output "$archive"
+          if ! printf '%s  %s\n' "$AGY_ARCHIVE_SHA256" "$archive" | sha256sum --check --status; then
+            echo 'AGY_PROBE_ARCHIVE_DIGEST_MISMATCH' >&2
+            exit 1
+          fi
+          if ! tar -tzf "$archive" > "$RUNNER_TEMP/agy-probe-members.txt"; then
+            echo 'AGY_PROBE_ARCHIVE_STRUCTURE_INVALID' >&2
+            exit 1
+          fi
+          mapfile -t members < <(grep -E '(^|/)antigravity$' "$RUNNER_TEMP/agy-probe-members.txt" || true)
+          if [[ "${#members[@]}" -ne 1 || "${members[0]}" == /* || "${members[0]}" == *'/../'* ]]; then
+            echo 'AGY_PROBE_ARCHIVE_STRUCTURE_INVALID' >&2
+            exit 1
+          fi
+          tar -xOzf "$archive" -- "${members[0]}" > "$bin"
+          chmod 0755 "$bin"
+          binary_sha="$(sha256sum "$bin" | awk '{print $1}')"
+          version="$("$bin" --version)"
+          if [[ ! "$version" =~ ^(agy([[:space:]]+cli)?([[:space:]]+version)?[[:space:]]+)?v?1\.5\.8[[:space:]]*$ ]]; then
+            echo 'AGY_PROBE_CLI_VERSION_MISMATCH' >&2
+            exit 1
+          fi
+          printf 'executable=%s\n' "$bin" >> "$GITHUB_OUTPUT"
+          printf 'binary_sha256=%s\n' "$binary_sha" >> "$GITHUB_OUTPUT"
+          echo 'AGY_PROBE_OFFICIAL_ARCHIVE_SHA_VERIFIED'
+          rm -f "$archive" "$RUNNER_TEMP/agy-probe-members.txt"
+
+      - name: Load the existing Google OAuth credential for read-only inventory
+        id: oauth
+        shell: bash
+        env:
+          ANTIGRAVITY_OAUTH_JSON: ${{ secrets.ANTIGRAVITY_OAUTH_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ANTIGRAVITY_OAUTH_JSON" ]]; then
+            printf 'configured=false\n' >> "$GITHUB_OUTPUT"
+            printf 'AGY_OAUTH_SECRET_NOT_CONFIGURED: CLI digest verified, OAuth models not checked.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          install -d -m 0700 "$HOME/.gemini/antigravity-cli"
+          umask 077
+          printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/oauth.json"
+          printf '%s' "$ANTIGRAVITY_OAUTH_JSON" > "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+          printf 'configured=true\n' >> "$GITHUB_OUTPUT"
+
+      - name: Compare models visible through the same OAuth account
+        if: steps.oauth.outputs.configured == 'true'
+        shell: bash
+        env:
+          AGY_EXE: ${{ steps.agy.outputs.executable }}
+          AGY_BINARY_SHA256: ${{ steps.agy.outputs.binary_sha256 }}
+          AGY_CLI_DISABLE_AUTO_UPDATE: 'true'
+        run: |
+          set -euo pipefail
+          models="$RUNNER_TEMP/agy-google-ai-pro-models.json"
+          diagnostics="$RUNNER_TEMP/agy-google-ai-pro-models-stderr.txt"
+          trap 'rm -f -- "$models" "$diagnostics"' EXIT
+          if ! timeout 90s "$AGY_EXE" --output-format json models </dev/null > "$models" 2> "$diagnostics"; then
+            echo 'AGY_OAUTH_MODEL_LIST_COMMAND_FAILED' >&2
+            exit 1
+          fi
+          node .github/workflows/scripts/agy-google-ai-pro-model-probe.mjs \
+            "$models" .github/workflows/config/google-ai-pro-hydrogen-probe.json \
+            '1.5.8' "$AGY_BINARY_SHA256"
+
+      - name: Remove temporary OAuth credential copies
+        if: always()
+        shell: bash
+        run: |
+          rm -f -- "$HOME/.gemini/antigravity-cli/oauth.json" \
+            "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
