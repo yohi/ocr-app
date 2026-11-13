@@ -69,7 +69,10 @@ export function validateRoutingAttempts({ attempts, selectedRoute, certifiedBund
   const allowed = [selectedRoute.selected_model_id, ...selectedRoute.fallback_models];
   if (new Set(allowed).size !== allowed.length) invalid();
   const advisory = selectedRoute.effective_mode === 'off' && selectedRoute.decision_llm_enabled === true;
-  const terminal = advisory ? certifiedBundle?.catalog?.strategies?.fast?.preferred_model_id : null;
+  // The run-bound route is the single source for the final fallback; never infer it from the fast strategy.
+  const terminal = advisory ? selectedRoute.terminal_model_id : null;
+  if (advisory && (typeof terminal !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/.test(terminal))) invalid();
+  if (!advisory && selectedRoute.terminal_model_id != null) invalid();
   const attemptedModels = order.completed.map(event => event.model);
   let prior = 0;
   let inTerminal = false;
