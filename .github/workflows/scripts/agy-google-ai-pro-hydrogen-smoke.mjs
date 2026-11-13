@@ -78,7 +78,7 @@ export function formatSmokeSummary(outcome) {
 }
 
 function main() {
-  if (process.argv.length !== 4) throw new Error(FAIL);
+  if (process.argv.length !== 3) throw new Error(FAIL);
   const [,, executable] = process.argv;
   const sha = process.env.AGY_BINARY_SHA256;
   const report = runHydrogenSmoke({ executable: resolve(executable), cliSha256: sha });
