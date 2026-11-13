@@ -1,0 +1,10 @@
+{
+  "schema_version": "1",
+  "model_id": "gemini-4-hydrogen-high",
+  "capability_tier": "deep",
+  "catalog_version": "1.0.1",
+  "issued_at": "2026-11-13T12:19:18.911Z",
+  "expires_at": "2026-11-20T06:54:37.000Z",
+  "capability_evidence_sha256": "30abc2b01e5ddd2898505f129367a532607a9469d48fd9a9b7563dbc9b8ad6e9",
+  "cli_evidence_sha256": "a136c087bd5fec2bfb4eb116c43bfa9a3fdb5bceb23738b823fc4d48aa1b288b"
+}

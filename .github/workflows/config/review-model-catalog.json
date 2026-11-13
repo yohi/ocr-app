@@ -118,6 +118,14 @@
       "certification_reference": "sha256:0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
       "allowed_fallbacks": [],
       "catalog_version": "1.0.1"
+    },
+    {
+      "model_id": "gemini-4-hydrogen-high",
+      "capability_tier": "deep",
+      "certification_status": "certified",
+      "certification_reference": "sha256:f4788e9f3d705b8ee668e0b5d87d3db554425b5fd91bc9097b730a3c86accc27",
+      "allowed_fallbacks": [],
+      "catalog_version": "1.0.1"
     }
   ],
   "strategies": {
