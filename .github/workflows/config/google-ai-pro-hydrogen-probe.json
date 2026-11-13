@@ -1,0 +1,37 @@
+{
+  "schema_version": "1",
+  "profile": "google_ai_pro_oauth",
+  "probe_cli_version": "1.5.8",
+  "linux_x64_archive_sha256": "905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98",
+  "candidate_models": [
+    {
+      "id": "gemini-4-hydrogen-low",
+      "proposed_tier": "fast"
+    },
+    {
+      "id": "gemini-4-hydrogen-medium",
+      "proposed_tier": "fast"
+    },
+    {
+      "id": "gemini-4-hydrogen-high",
+      "proposed_tier": "deep"
+    },
+    {
+      "id": "gemini-4-hydrogen-xhigh",
+      "proposed_tier": "deep"
+    }
+  ],
+  "excluded_for_plan": [
+    "gemini-4-carbon-low",
+    "gemini-4-carbon-medium",
+    "gemini-4-carbon-high"
+  ],
+  "production_defaults": {
+    "fast": "gemini-3.8-flash-medium",
+    "deep": "claude-opus-5-5-high"
+  },
+  "retired_soon": {
+    "id": "gpt-oss-120b-medium",
+    "effective_date": "2026-11-18"
+  }
+}
