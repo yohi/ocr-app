@@ -25,7 +25,7 @@ const features = { classification_status: 'unclassified_code', risk_floor: 'deep
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const proCliModelInventory = [
   { model_id: 'gemini-3.8-flash-medium', capability_tier: 'fast', allowed_fallbacks: ['claude-opus-5-5-high', 'gemini-4-argon-high', 'claude-sonnet-5-5-high'] },
-  { model_id: 'claude-opus-5-5-high', capability_tier: 'deep', allowed_fallbacks: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'] },
+  { model_id: 'claude-opus-5-5-high', capability_tier: 'deep', allowed_fallbacks: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'] },
   { model_id: 'claude-opus-5-5-medium', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'claude-opus-5-5-low', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'claude-sonnet-5-5-high', capability_tier: 'deep', allowed_fallbacks: [] },
@@ -51,7 +51,7 @@ const certifiedRealCatalog = {
   },
   unknown_risk_strategy: 'deep',
 };
-const deepPublishRoute = { selected_model_id: deepModel, fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'], selected_strategy: 'deep', proposed_strategy: 'deep' };
+const deepPublishRoute = { selected_model_id: deepModel, fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'], selected_strategy: 'deep', proposed_strategy: 'deep' };
 const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable', proposedReviewModel: deepModel, selectedReviewModel: deepModel };
 const versions = { policyVersion: '1.0.0', modelCatalogVersion: catalogVersion };
 const decision = () => createRoutingDecisionRecord({ runBinding: binding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
@@ -92,7 +92,7 @@ test('anchors the catalog and certified publish fixture to the Pro CLI inventory
   })));
   assert.deepEqual(deepPublishRoute, {
     selected_model_id: 'claude-opus-5-5-high',
-    fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
+    fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'],
     selected_strategy: 'deep',
     proposed_strategy: 'deep',
   });

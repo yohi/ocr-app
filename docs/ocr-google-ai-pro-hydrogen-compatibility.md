@@ -4,12 +4,12 @@
 
 ## 目的と確定済みの事実
 
-- Google公式: Google AI ProはGemini 4 Hydrogenを利用可能。CarbonはPro対象外。Argonは有料Proまたは対象デバイストライアルに限る。
+- **重要（2026-11-13時点）**: Google公式モデル表ではGoogle AI ProのOAuth向けにHydrogenが掲載されていない。agy v1.5.8のリリースノートではHydrogen追加の対象がGEMINI_API_KEY／AGY_ADC_AUTH／Enterprise Gatewayと説明されるため、Google AI Pro OAuthでの利用可否は**未確認**。CarbonはPro対象外、Argonは有料Proまたは対象デバイストライアル。
 - agy CLI v1.5.8の公式Linux x64アーカイブSHA-256:
   `905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98`
 - Google AI ProのAntigravity OAuthで実際に`agy models`が返す内容と、Hydrogenの実行可否は**未検証**。
-- OCR App本番はCLI v1.5.1、固定モデル13件、Decision LLM opt-in、既存の固定SHA/認可/監査を維持する。
-- GPT-OSS 120Bは2026-11-18に廃止予定。既存Deep Fallbackへの影響は未解消として記録する。
+- OCR App本番はCLI v1.5.1、固定モデル13件、Decision LLM opt-in、既存の固定SHA/認可/監査を維持する（GPT-OSSを通常Fallbackからのみ除外）。
+- GPT-OSS 120Bは2026-11-18に廃止予定。**Deepの通常Fallbackからは事前除外**し、選択順を `claude-opus-5-5-high → gemini-4-argon-high → claude-sonnet-5-5-high` に短縮した。既存の固定CLIインベントリの13モデルと認定記録自体はバイト単位で維持する。
 
 根拠:
 - https://antigravity.google/docs/models
@@ -42,10 +42,10 @@ HydrogenがOAuth一覧に存在し、さらに実行・レビュー品質を確�
 - Deep候補: `gemini-4-hydrogen-high`
 - 規定モデル: 現行`gemini-3.8-flash-medium`を維持（変更時はPinned Fast preferredと整合させる）。
 - CarbonはGoogle AI Proで利用不可なので採用しない。
-- HydrogenがGemini共通枠を消費するなら、FlashへのFallbackが**独立した利用枠の追加**にはならない可能性がある。
+- Hydrogenが利用可能でも、専用利用枠が存在するとは確認できない。既存のFlashを最終Fallbackとして維持し、独立枠を前提にしない。
 
 実機検証なしで`certification_status=certified`にすることや、テストが存在するだけで本番モデルを切り替えることは禁止。追加レビューの自動起票や認定期限の再設定も行わない。
 
 ## 完了条件
 
-このPRでは、Google AI Proに合う候補と、機密情報を漏らさず実際のOAuth利用可能モデルおよびCLIハッシュを取得する経路までを完成とする。OAuth実証と本番移行は**未承認かつ未実施**。本PR作業はここで終了可能。
+このPRでは、廃止予定モデルをDeep通常Fallbackから除外し、機密情報を漏らさずOAuth利用可能モデル・CLIハッシュを取得する経路までを完成とする。OAuth実証と本番移行は**未承認かつ未実施**。本PR作業はここで終了可能。
