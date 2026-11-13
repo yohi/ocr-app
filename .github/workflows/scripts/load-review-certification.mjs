@@ -3,7 +3,9 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, normalize, relative, resolve, sep } from 'node:path';
 
 const EVIDENCE_LIMIT = 65_536;
-const CLI_LIMIT = 256 * 1024 * 1024;
+// AGY 1.5.8 may exceed the previous 256 MiB executable ceiling.
+// Keep a finite upper bound; the installed binary is still hashed and pinned.
+const CLI_LIMIT = 512 * 1024 * 1024;
 const HASH = /^[0-9a-f]{64}$/;
 const DATE = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 const INDEX_KEYS = ['schema_version', 'certifications', 'cli_inventory'];
