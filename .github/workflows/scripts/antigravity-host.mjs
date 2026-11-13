@@ -483,10 +483,12 @@ async function runMode({
     }
     // Only off+Decision mode can use a final default-model attempt.
     // The model is pinned to the catalog's fast preferred model, not an arbitrary ID.
-    // OCR_LLM_MODEL is an independent last-resort model, not the fast strategy's preferred model.
-    // It must still be certified in the supplied, CLI-bound catalog.
-    if (terminalEnabled && (terminalDefaultModel !== terminalModel ||
-      !eligible(byId.get(terminalModel)))) return fixedFailure('INVALID_FALLBACK_MODELS');
+    // The explicit OCR_LLM_MODEL is the final candidate. Its eligibility is
+    // checked only if reached, so an unapproved terminal model cannot prevent
+    // an otherwise valid primary review from succeeding.
+    if (terminalEnabled && terminalDefaultModel !== terminalModel) {
+      return fixedFailure('INVALID_FALLBACK_MODELS');
+    }
   } else {
     const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
     fallbackCandidates = configuredFallbackModel ? [normalizeAntigravityModel(configuredFallbackModel)] : [];
@@ -541,6 +543,13 @@ async function runMode({
   const attempts = Math.max(1, maxRetries + 1);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const currentModel = models[modelIndex];
+    // Model approval is required before, not after, the last-resort attempt.
+    if (certifiedRoute && terminalEnabled && modelIndex === models.length - 1) {
+      const entry = modelCatalog?.models?.find(item => item?.model_id === currentModel);
+      if (entry?.certification_status !== 'certified' || !['fast', 'deep'].includes(entry.capability_tier)) {
+        return fixedFailure('INVALID_FALLBACK_MODELS');
+      }
+    }
     let shouldFallback = false;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
