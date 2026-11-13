@@ -361,7 +361,7 @@ test('Given off mode with decision opt-in, When invoked, Then the certified sele
     env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/justice' },
     readRoute: async () => ({ schema_version: '1', effective_mode: 'off', decision_llm_enabled: true,
       selected_model_id: 'certified-primary', selected_strategy: 'deep', fallback_models: ['certified-fallback'],
-      reviewable_file_count: 2, status: 'prepared' }),
+      terminal_model_id: 'certified-primary', reviewable_file_count: 2, status: 'prepared' }),
     readExecutionContext: async () => ({ binding: fixture.args.expectedBinding }),
     fetchCurrentAuthorization: async () => ({ registry, operationalDossiers: {} }),
     evaluateStartup: () => { startupEvaluations++; throw new Error('target activation must not be evaluated'); },
@@ -388,6 +388,7 @@ test('Given off mode with decision opt-in, When invoked, Then the certified sele
   assert.equal(hostOptions.decisionLlmEnabled, true);
   assert.equal(hostOptions.model, 'certified-primary');
   assert.deepEqual(hostOptions.fallbackModels, ['certified-fallback']);
+  assert.equal(hostOptions.terminalDefaultModel, 'certified-primary');
   assert.equal(hostOptions.executablePath, '/attested/agy');
 });
 
@@ -574,7 +575,7 @@ test('off-mode Decision LLM route remains usable after owner expiry while enforc
     env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/repo',
       OCR_LLM_MODEL: 'gpt-oss-120b-medium' },
     readRoute: async () => ({ selected_model_id: primary, selected_strategy: 'deep',
-      fallback_models: fallback, reviewable_file_count: 1, status: 'prepared' }),
+      fallback_models: fallback, terminal_model_id: 'gpt-oss-120b-medium', reviewable_file_count: 1, status: 'prepared' }),
     readExecutionContext: async () => ({}),
     fetchCurrentAuthorization: async () => ({ registry: { schema_version: '1', approvals: [], activations: [],
       revoked_refs: [] }, operationalDossiers: {} }),
@@ -624,7 +625,7 @@ test('off-mode execution denies a newly revoked model before CLI spawn', async (
     trustedInputs: { catalog: pinnedCatalog, index },
     resolveModels: undefined,
     readRoute: async () => ({ selected_model_id: primary, selected_strategy: 'deep',
-      fallback_models: fallback, reviewable_file_count: 1, status: 'prepared' }),
+      fallback_models: fallback, terminal_model_id: primary, reviewable_file_count: 1, status: 'prepared' }),
     readExecutionContext: async () => ({}),
     fetchCurrentAuthorization: async () => ({
       registry: { schema_version: '1', approvals: [], activations: [],
