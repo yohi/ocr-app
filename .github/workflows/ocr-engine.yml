@@ -19,6 +19,8 @@ jobs:
     env:
       DECISION_ROUTING_MODE: ${{ vars.DECISION_ROUTING_MODE || 'off' }}
       DECISION_LLM_ENABLED: ${{ vars.DECISION_LLM_ENABLED || 'false' }}
+      # One configured terminal model, captured in the run-bound route before execution.
+      OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
       # Human Owner selected agy 1.5.8. Never silently return to 1.5.1.
       OCR_AGY_158_ENABLE: 'true'
       # Keep the certified CLI binary immutable throughout the review and audit lifecycle.
@@ -284,7 +286,7 @@ jobs:
           install -d "$HOME/.gemini/antigravity-cli"
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
-            "model": "${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}",
+            "model": "${{ env.OCR_LLM_MODEL }}",
             "agentMode": "",
             "enableTerminalSandbox": true,
             "toolPermission": "${{ env.OCR_AGY_158_ENABLE == 'true' && 'strict' || 'proceed-in-sandbox' }}",
@@ -313,7 +315,6 @@ jobs:
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
           ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -480,7 +481,6 @@ jobs:
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
           ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           node self-repo/.github/workflows/scripts/resolve-threads.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
@@ -517,7 +517,6 @@ jobs:
           VALIDATED_RESULT_SHA256: ${{ steps.validate-review.outputs.RESULT_SHA256 }}
           VALIDATION_STATUS: ${{ steps.validate-review.outcome == 'success' && 'passed' || 'failed' }}
           HEAD_STATUS: ${{ steps.validate-head.outcome == 'success' && 'passed' || 'failed' }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
@@ -580,7 +579,7 @@ jobs:
             writeRoutingAudit({ runTemp: process.env.RUNNER_TEMP, record, expectedBinding: runBinding });
             if (record.review_validation_status === 'passed' && record.host_success_model !== null &&
                 record.executed_review_model === null && record.selected_strategy === 'deep' &&
-                record.host_success_model === catalog.strategies.fast.preferred_model_id &&
+                record.host_success_model === route.terminal_model_id &&
                 process.env.GITHUB_ENV) {
               fs.appendFileSync(process.env.GITHUB_ENV, 'TERMINAL_FALLBACK_DEGRADED=true\n');
             }
@@ -802,7 +801,6 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           OCR_RESULT_PATH: /tmp/ocr-result.json
         run: |
           node --input-type=module - <<'EOF'
@@ -873,7 +871,6 @@ jobs:
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: |
           if [ -f "/tmp/ocr-result.json" ]; then
@@ -924,6 +921,5 @@ jobs:
           RUNNER_TEMP: ${{ runner.temp }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
-          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: node self-repo/.github/workflows/scripts/write-model-summary.mjs

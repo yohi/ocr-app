@@ -90,7 +90,7 @@ export async function runRoutingReview({
     let sealed;
     let cliIdentity = null;
     let certification = null;
-    const terminalDefault = env.OCR_LLM_MODEL || env.ANTIGRAVITY_MODEL || 'gemini-3.8-flash-medium';
+    let terminalDefault = null;
     const verifyCertifiedRoute = async (checked, attemptedModel = null) => {
       const evidence = checked.certifiedBundle?.evidence;
       const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
@@ -158,6 +158,9 @@ export async function runRoutingReview({
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
       return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
     }
+    terminalDefault = globalOptIn ? route.terminal_model_id : null;
+    if (globalOptIn && (typeof terminalDefault !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/.test(terminalDefault))) denied('ROUTING_ACTIVATION_DENIED');
     sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     let decision;
