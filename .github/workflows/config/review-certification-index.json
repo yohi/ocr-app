@@ -25,6 +25,11 @@
       "path": "routing-evidence/pro-model-certification-gpt-oss-120b-medium-20261105.json",
       "sha256": "0fc116a4ac1e4bfb81b346498482667c3ac069f8f6256f7cf5011ae7841a35a5",
       "approval_ref": "OWNER-MODEL-CERT-GPT-OSS-120B-MEDIUM-20261105"
+    },
+    {
+      "path": "routing-evidence/pro-model-certification-gemini-4-hydrogen-high-20261113.json",
+      "sha256": "f4788e9f3d705b8ee668e0b5d87d3db554425b5fd91bc9097b730a3c86accc27",
+      "approval_ref": "OWNER-MODEL-CERT-GEMINI-4-HYDROGEN-HIGH-20261113"
     }
   ],
   "cli_inventory": {
