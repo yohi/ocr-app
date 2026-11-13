@@ -571,7 +571,8 @@ test('off-mode Decision LLM route remains usable after owner expiry while enforc
       sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
     })) };
   const fixture = input({
-    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/repo' },
+    env: { DECISION_ROUTING_MODE: 'off', DECISION_LLM_ENABLED: 'true', TARGET_REPO_PATH: '/tmp/repo',
+      OCR_LLM_MODEL: 'gpt-oss-120b-medium' },
     readRoute: async () => ({ selected_model_id: primary, selected_strategy: 'deep',
       fallback_models: fallback, reviewable_file_count: 1, status: 'prepared' }),
     readExecutionContext: async () => ({}),
@@ -587,7 +588,9 @@ test('off-mode Decision LLM route remains usable after owner expiry while enforc
     runHost: async options => {
       assert.equal(options.model, primary);
       assert.deepEqual(options.fallbackModels, fallback);
-      assert.equal(await options.authorizeBeforeSpawn(), true);
+      assert.equal(options.terminalDefaultModel, 'gpt-oss-120b-medium');
+      assert.equal(await options.authorizeBeforeSpawn(primary), true);
+      assert.equal(await options.authorizeBeforeSpawn('gpt-oss-120b-medium'), true);
       return { status: 'success' };
     },
   });
