@@ -19,7 +19,7 @@ import { readRoutingExecutionContext, writeRoutingExecutionContext, revalidateRo
 const ROUTE_KEYS = Object.freeze([
   'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status',
   'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id',
-  'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
+  'fallback_models', 'terminal_model_id', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
 ]);
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
 const STRATEGIES = ['fast', 'deep', null];
@@ -56,6 +56,8 @@ function validateRoute(value) {
   modelId(value.selected_model_id, true);
   if (!Array.isArray(value.fallback_models) || value.fallback_models.length > 16 || new Set(value.fallback_models).size !== value.fallback_models.length) routeError();
   for (const fallback of value.fallback_models) modelId(fallback);
+  if (value.effective_mode === 'off') modelId(value.terminal_model_id);
+  else if (value.terminal_model_id !== null) routeError();
   for (const key of ['policy_version', 'model_catalog_version']) {
     if (typeof value[key] !== 'string' || value[key].length < 1 || value[key].length > 128 || /[\r\n]/.test(value[key])) routeError();
   }
@@ -95,6 +97,8 @@ export function serializeSelectedReviewRoute({ route, runBinding, policyVersions
     selected_strategy: route.selectedStrategy,
     selected_model_id: route.selectedModelId ?? route.selectedReviewModel ?? null,
     fallback_models: runBinding.mode === 'shadow' ? [] : [...route.fallbackModels],
+    terminal_model_id: runBinding.mode === 'off' && runBinding.decisionLlmEnabled === true
+      ? route.terminalModelId : null,
     route_source: route.routeSource,
     decision_status: route.decisionStatus,
     policy_version: policyVersions.policyVersion,
@@ -281,6 +285,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     decisionStatus: normalizedDecisionStatus,
     reviewableCount: features.reviewable_file_count,
     selectedModelId: resolved.selectedReviewModel,
+    terminalModelId: globalOptIn ? env.OCR_LLM_MODEL : null,
   };
   const serializedRoute = serializeSelectedReviewRoute({ route: routeResult, runBinding: binding, policyVersions });
   {
