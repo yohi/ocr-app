@@ -6,19 +6,19 @@
 
 - **採用する規定モデルは `gemini-4-hydrogen-medium`**。低負荷レビューと通常レビューに優先利用し、より高い推論深度が必要な実証ではHighを候補にする。
 - **採用するagy CLIバージョンは `1.5.8`**。公式Linux x64アーカイブSHAは下記固定値を利用する。
-- PR #144では既存レビューワークフローに `OCR_AGY_158_ENABLE` 切替機構を実装。新構成の実行にはv1.5.8実行ファイルSHA、対応する新CLIインベントリ、認定済みHydrogen、認定Index更新の四点を必須とする。満たさなければFail-Closed。**既定の値は`false`で、masterの既存レビューは停止しない。**
+- PR #144では既存レビューワークフローに `OCR_AGY_158_ENABLE` 切替機構を実装。新構成の実行には固定済みv1.5.8実行ファイルSHA、対応する新CLIインベントリ、認定済みHydrogen、認定Index更新の四点を必須とする。満たさなければFail-Closed。**既定の値は`false`で、masterの既存レビューは停止しない。**
 - 新構成を有効にした場合は`OCR_LLM_MODEL`の旧設定よりもHydrogen Mediumを優先し、明示的に`agentMode=""`・`toolPermission=strict`・deny-allツール設定を使用する。
 - 変更の目的は本番切替の実装と安全な移行の完成であり、証拠のないモデルを`certified`と偽装しない。現時点では実運用開始前の証拠取得が残っている。
 
 ### 残っている必須証拠
 
-1. v1.5.8の公式Linux x64アーカイブから取得した**実行ファイルSHA-256**（アーカイブSHAとは異なる）。既存の手動Probeが記録可能。ローカルの`sha256sum "$(readlink -f "$(command -v agy)")"`も補助として照合可能。
+1. **Human Ownerのローカルで観測した実行ファイルSHA-256: \`9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5\`（2026-11-13 16:37 JST）**を候補ピンとして固定済み。CLI v1.5.8のリリース・アーカイブSHAは公式確認済みだが、この作業環境からアーカイブ本体の取得ができず、**公式アーカイブ内バイナリとの一致は未検証**。GitHub Actionsのインストーラが両SHAを検証し、一方でも不一致なら実行を拒否する。
 2. GitHub ActionsのOAuth環境でHydrogen Mediumの実推論成功（スモーク実行はQuotaを消費するためOwnerが手動で選択する）。
 3. `pro-cli-inventory-20261113.json`の実測CLI SHAを固定してインデックスのDigestを更新し、Hydrogen Mediumのモデル証拠・認定Referenceを新CLIと一致させる。
 4. `review-model-catalog.json`のFast規定モデル、対応モデルの認定と新しいCLIインベントリ・Owner承認の一致。既存`enforce`については新しいCatalog/Source digestの認可が必要。
 5. PR #144ではSonarCloud Security Rating Cが観測されており、個別指摘が未特定。この状態でマージ可能とは主張しない。
 
-これらが揃う前に`OCR_AGY_158_ENABLE=true`を設定すると、CLIインストール前の検証で拒否される。バイナリSHAを空欄や旧SHAで代替しない。
+これらが揃う前に`OCR_AGY_158_ENABLE=true`を設定すると、CLIインストール前の検証で拒否される。バイナリSHAは `9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5` に固定した。ユーザーから追加のSHA設定は不要。公式バイナリと実測SHAの一致はCIインストーラがFail-Closedで検証する。
 
 ## 目的と確定済みの事実
 

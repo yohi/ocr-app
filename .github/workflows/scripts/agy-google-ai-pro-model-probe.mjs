@@ -41,6 +41,7 @@ export function validateGoogleAiProProbeConfig(config) {
     || config.production_defaults.deep !== 'claude-opus-5-5-high'
     || config.retired_soon.id !== 'gpt-oss-120b-medium'
     || config.retired_soon.effective_date !== '2026-11-18'
+    || config.target_production.linux_x64_binary_sha256 !== '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5'
     || config.target_production.cli_version !== '1.5.8'
     || config.target_production.fast_default_model !== 'gemini-4-hydrogen-medium'
     || config.target_production.deep_preferred_model !== 'claude-opus-5-5-high'

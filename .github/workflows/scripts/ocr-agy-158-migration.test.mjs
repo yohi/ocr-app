@@ -19,6 +19,8 @@ test('agy v1.5.8 and Hydrogen Medium are the explicit requested rollout target',
 test('unapproved upgrade is disabled by default, with strict hash and catalog safeguards', () => {
   assert.match(workflow, /OCR_AGY_158_ENABLE: \$\{\{ vars\.OCR_AGY_158_ENABLE \|\| 'false' \}\}/);
   assert.match(workflow, /AGY_158_BINARY_SHA256_REQUIRED/);
+  assert.match(workflow, /AGY_BINARY_SHA256:.*9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5/);
+  assert.match(workflow, /OCR_AGY_158_BINARY_SHA256: '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5'/);
   assert.match(workflow, /AGY_158_PINNED_INVENTORY_REQUIRED/);
   assert.match(workflow, /AGY_HYDROGEN_MODEL_NOT_CERTIFIED/);
   assert.match(workflow, /AGY_158_CLI_INDEX_NOT_UPDATED/);

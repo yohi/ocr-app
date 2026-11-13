@@ -18,6 +18,7 @@ test('Google AI Pro candidate policy is fixed and excludes Carbon', () => {
   assert.equal(validateGoogleAiProProbeConfig(config), config);
   assert.equal(config.candidate_models.length, 4);
   assert.equal(config.target_production.cli_version, '1.5.8');
+  assert.equal(config.target_production.linux_x64_binary_sha256, '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5');
   assert.equal(config.target_production.fast_default_model, 'gemini-4-hydrogen-medium');
   assert.equal(config.target_production.activation, 'requires_verified_binary_and_model_evidence');
   assert.deepEqual(config.excluded_for_plan, [
