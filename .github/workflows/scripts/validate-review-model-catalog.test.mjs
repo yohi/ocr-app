@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   resolveCertifiedModels,
   resolvePinnedModels,
+  isPinnedTerminalModelApproved,
   validateCatalogSemantics,
   validateCatalogShape,
 } from './validate-review-model-catalog.mjs';
@@ -249,4 +250,30 @@ test('off-mode pinned resolver selects only allowlisted models from exact CLI sn
     ...available, revokedRefs: ['OWNER-claude-opus-5-5-high'],
   }), /review_model_unavailable/);
   assert.throws(() => resolvePinnedModels(catalog, 'deep', { cliAvailableModels: ['claude-opus-5-5-high'] }), /review_model_unavailable/);
+});
+
+test('terminal OCR_LLM_MODEL can differ from fast preferred but must be pinned and unrevoked', () => {
+  const terminal = 'gpt-oss-120b-medium';
+  assert.notEqual(terminal, catalog.strategies.fast.preferred_model_id);
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: catalog.models.filter(model => model.certification_reference !== null).map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const pinned = { cliAvailableModels: catalog.models.map(model => model.model_id),
+    index, revokedRefs: [] };
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, pinned), true);
+  assert.equal(isPinnedTerminalModelApproved(catalog, 'not-in-catalog', pinned), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, cliAvailableModels: pinned.cliAvailableModels.filter(id => id !== terminal),
+  }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, revokedRefs: [`OWNER-${terminal}`],
+  }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, revokedRefs: ['OWNER-CLI'],
+  }), false);
+  const tampered = structuredClone(catalog);
+  tampered.models.find(model => model.model_id === terminal).certification_status = 'pending';
+  assert.equal(isPinnedTerminalModelApproved(tampered, terminal, pinned), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, { ...pinned, index: null }), false);
 });
