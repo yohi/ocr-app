@@ -483,8 +483,9 @@ async function runMode({
     }
     // Only off+Decision mode can use a final default-model attempt.
     // The model is pinned to the catalog's fast preferred model, not an arbitrary ID.
+    // OCR_LLM_MODEL is an independent last-resort model, not the fast strategy's preferred model.
+    // It must still be certified in the supplied, CLI-bound catalog.
     if (terminalEnabled && (terminalDefaultModel !== terminalModel ||
-      modelCatalog?.strategies?.fast?.preferred_model_id !== terminalModel ||
       !eligible(byId.get(terminalModel)))) return fixedFailure('INVALID_FALLBACK_MODELS');
   } else {
     const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
