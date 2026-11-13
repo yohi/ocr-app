@@ -19,9 +19,8 @@ jobs:
     env:
       DECISION_ROUTING_MODE: ${{ vars.DECISION_ROUTING_MODE || 'off' }}
       DECISION_LLM_ENABLED: ${{ vars.DECISION_LLM_ENABLED || 'false' }}
-      # Target upgrade is explicit. Old pinned identity remains the default until
-      # verified v1.5.8 binary and model approvals are committed.
-      OCR_AGY_158_ENABLE: ${{ vars.OCR_AGY_158_ENABLE || 'false' }}
+      # Human Owner selected agy 1.5.8. Never silently return to 1.5.1.
+      OCR_AGY_158_ENABLE: 'true'
       # Keep the certified CLI binary immutable throughout the review and audit lifecycle.
       AGY_CLI_DISABLE_AUTO_UPDATE: 'true'
     steps:
@@ -130,9 +129,9 @@ jobs:
         env:
           OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6'
           OCR_NO_UPDATE: '1'
-          AGY_VERSION: ${{ env.OCR_AGY_158_ENABLE == 'true' && '1.5.8' || '1.5.1' }}
-          AGY_ARCHIVE_SHA256: ${{ env.OCR_AGY_158_ENABLE == 'true' && '905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98' || '2a64ccfc5f6679c253769f0760614af5de04d8dc1eeeec9b9752ba4c8dd92250' }}
-          AGY_BINARY_SHA256: ${{ env.OCR_AGY_158_ENABLE == 'true' && '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5' || '72738cf0445918483956a5f0da33abdfcfb21a12dd9a421fd57d063782826669' }}
+          AGY_VERSION: '1.5.8'
+          AGY_ARCHIVE_SHA256: '905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98'
+          AGY_BINARY_SHA256: '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5'
           OCR_AGY_158_BINARY_SHA256: '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5'
           OCR_AGY_158_ENABLE: ${{ env.OCR_AGY_158_ENABLE }}
         run: |
@@ -163,13 +162,8 @@ jobs:
             process.exit(1);
           }
           if (process.env.OCR_AGY_158_ENABLE === 'true') {
-            const config = JSON.parse(readFileSync('self-repo/.github/workflows/config/review-model-catalog.json', 'utf8'));
-            const preferred = config.strategies.fast.preferred_model_id;
-            const model = config.models.find(x => x.model_id === 'gemini-4-hydrogen-medium');
-            if (preferred !== 'gemini-4-hydrogen-medium' || model?.certification_status !== 'certified') {
-              console.error('AGY_HYDROGEN_MODEL_NOT_CERTIFIED');
-              process.exit(1);
-            }
+            // CLI activation is separate from Hydrogen model approval. The reviewed
+            // model catalog and pinned CLI list still gate every model selection.
             const index = JSON.parse(readFileSync('self-repo/.github/workflows/config/review-certification-index.json', 'utf8'));
             if (index.cli_inventory.path !== 'routing-evidence/pro-cli-inventory-20261113.json') {
               console.error('AGY_158_CLI_INDEX_NOT_UPDATED');
@@ -290,7 +284,7 @@ jobs:
           install -d "$HOME/.gemini/antigravity-cli"
           cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
           {
-            "model": "${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || 'gemini-3.8-flash-medium' }}",
+            "model": "${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}",
             "agentMode": "",
             "enableTerminalSandbox": true,
             "toolPermission": "${{ env.OCR_AGY_158_ENABLE == 'true' && 'strict' || 'proceed-in-sandbox' }}",
@@ -319,7 +313,7 @@ jobs:
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
           ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || '' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -486,7 +480,7 @@ jobs:
           ANTIGRAVITY_FALLBACK_MODEL: ${{ vars.ANTIGRAVITY_FALLBACK_MODEL || 'claude-opus-4-6-thinking' }}
           ANTIGRAVITY_PRINT_TIMEOUT_MS: ${{ vars.ANTIGRAVITY_PRINT_TIMEOUT_MS || '300000' }}
           ANTIGRAVITY_MAX_RETRIES: ${{ vars.ANTIGRAVITY_MAX_RETRIES || '1' }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || '' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           node self-repo/.github/workflows/scripts/resolve-threads.mjs \
             --repo "${{ github.event.client_payload.target_repo }}" \
@@ -523,7 +517,7 @@ jobs:
           VALIDATED_RESULT_SHA256: ${{ steps.validate-review.outputs.RESULT_SHA256 }}
           VALIDATION_STATUS: ${{ steps.validate-review.outcome == 'success' && 'passed' || 'failed' }}
           HEAD_STATUS: ${{ steps.validate-head.outcome == 'success' && 'passed' || 'failed' }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || 'gemini-3.8-flash-medium' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
         run: |
           node --input-type=module - <<'EOF'
           import fs from 'node:fs';
@@ -808,7 +802,7 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || 'gemini-3.8-flash-medium' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           OCR_RESULT_PATH: /tmp/ocr-result.json
         run: |
           node --input-type=module - <<'EOF'
@@ -879,7 +873,7 @@ jobs:
           TARGET_REPO: ${{ github.event.client_payload.target_repo }}
           GH_APP_SLUG: ${{ vars.GH_APP_SLUG || 'opencodereview-app' }}
           EXPECTED_SHA: ${{ github.event.client_payload.commit_sha }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || 'gemini-3.8-flash-medium' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: |
           if [ -f "/tmp/ocr-result.json" ]; then
@@ -930,6 +924,6 @@ jobs:
           RUNNER_TEMP: ${{ runner.temp }}
           DECISION_ROUTING_MODE: ${{ env.DECISION_ROUTING_MODE }}
           DECISION_LLM_ENABLED: ${{ env.DECISION_LLM_ENABLED }}
-          OCR_LLM_MODEL: ${{ (env.OCR_AGY_158_ENABLE == 'true' && 'gemini-4-hydrogen-medium' || vars.OCR_LLM_MODEL || vars.ANTIGRAVITY_MODEL) || 'gemini-3.8-flash-medium' }}
+          OCR_LLM_MODEL: ${{ vars.OCR_LLM_MODEL || 'gemini-3.8-flash-medium' }}
           DECISION_LLM_MODEL_ID: ${{ vars.DECISION_LLM_MODEL_ID || 'inception/mercury-decide:free' }}
         run: node self-repo/.github/workflows/scripts/write-model-summary.mjs

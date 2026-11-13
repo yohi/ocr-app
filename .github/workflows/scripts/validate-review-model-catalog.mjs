@@ -154,6 +154,26 @@ export function resolvePinnedModels(catalog, strategy, evidence) {
   }
 }
 
+// Off+Decision may use an explicit OCR_LLM_MODEL after the routed attempts.
+// This check supplements the resolved route; it cannot grant unpinned or revoked access.
+export function isPinnedTerminalModelApproved(catalog, modelId, evidence) {
+  if (typeof modelId !== 'string' || !Array.isArray(catalog?.models)) return false;
+  const models = catalog.models.filter(model => model?.model_id === modelId);
+  if (models.length !== 1 || models[0].certification_status !== 'certified') return false;
+  const available = evidence?.cliAvailableModels;
+  const revoked = evidence?.revokedRefs;
+  const index = evidence?.index;
+  if (!Array.isArray(available) || !available.includes(modelId)
+    || !Array.isArray(revoked) || !revoked.every(ref => typeof ref === 'string')
+    || !Array.isArray(index?.certifications)
+    || typeof index?.cli_inventory?.approval_ref !== 'string'
+    || revoked.includes(index.cli_inventory.approval_ref)) return false;
+  const matching = index.certifications.filter(entry =>
+    `sha256:${entry?.sha256}` === models[0].certification_reference
+      && typeof entry?.approval_ref === 'string');
+  return matching.length === 1 && !revoked.includes(matching[0].approval_ref);
+}
+
 export function resolveCertifiedModels(catalog, strategy, evidence) {
   if (strategy !== 'fast' && strategy !== 'deep') fail('review_model_unavailable');
   try {

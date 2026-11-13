@@ -1,7 +1,7 @@
 import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
 import { readInstalledCliIdentity as defaultReadInstalledCliIdentity } from './load-review-certification.mjs';
-import { resolvePinnedModels, resolveCertifiedModels } from './validate-review-model-catalog.mjs';
+import { resolvePinnedModels, resolveCertifiedModels, isPinnedTerminalModelApproved } from './validate-review-model-catalog.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 import { assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
@@ -103,9 +103,11 @@ export async function runRoutingReview({
       if (resolved.primaryModelId !== route.selected_model_id
         || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
       if (globalOptIn && attemptedModel === terminalDefault) {
-        // Explicit final fallback cannot bypass pinned inventory or revocation.
-        const pinnedFast = resolvePinnedModels(freshInputs.catalog, 'fast', resolveEvidence);
-        if (terminalDefault !== pinnedFast.primaryModelId) denied('ROUTING_ACTIVATION_DENIED');
+        // The configured last-resort model need not be the fast preferred model,
+        // but must be present in this CLI inventory and the non-revoked pinned index.
+        if (!isPinnedTerminalModelApproved(freshInputs.catalog, terminalDefault, resolveEvidence)) {
+          denied('ROUTING_ACTIVATION_DENIED');
+        }
       }
       return { ...freshInputs.catalog, models };
     };
