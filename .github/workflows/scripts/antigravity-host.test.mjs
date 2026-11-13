@@ -1157,6 +1157,44 @@ test('off-mode decision opt-in uses the attested model and records certified att
 });
 
 
+test('off+Decision uses OCR_LLM_MODEL as the final fallback even when not fast-preferred', async () => {
+  const seen = [];
+  const events = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: ['cert-fallback-a'],
+    modelCatalog: { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'lower-tier' } } },
+    terminalDefaultModel: 'cert-disallowed', env: { OCR_LLM_MODEL: 'cert-disallowed' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: event => events.push(event),
+    spawn: (_command, args) => {
+      seen.push(args[args.indexOf('--model') + 1]);
+      return childFor(seen.length < 3
+        ? JSON.stringify({ error: 'No capacity available' })
+        : JSON.stringify(validReview));
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(seen, ['cert-primary', 'cert-fallback-a', 'cert-disallowed']);
+  assert.equal(events.filter(event => event.event === 'attempt_started').length, 3);
+});
+
+test('off+Decision refuses uncertified or mismatched OCR_LLM_MODEL without spawning', async () => {
+  for (const [terminalDefaultModel, configuredModel] of [
+    ['uncertified', 'uncertified'], ['unknown', 'unknown'], ['cert-disallowed', 'lower-tier'],
+  ]) {
+    let spawnCount = 0;
+    const result = await runHost({
+      prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+      model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+      terminalDefaultModel, env: { OCR_LLM_MODEL: configuredModel },
+      ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+      spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+    });
+    assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
+    assert.equal(spawnCount, 0);
+  }
+});
+
 test('certified Antigravity failures emit bounded stage-only diagnostics without leaking child output', async () => {
   const secret = 'ghp_sensitive-child-output-should-never-appear';
   const scenarios = [
