@@ -482,8 +482,7 @@ async function runMode({
       fallbackCandidates.push(normalizeAntigravityModel(id));
     }
     // Only off+Decision mode can use a final default-model attempt.
-    // The model is pinned to the catalog's fast preferred model, not an arbitrary ID.
-    // The explicit OCR_LLM_MODEL is the final candidate. Its eligibility is
+    // The run-scoped terminal model is the final candidate. Its eligibility is
     // checked only if reached, so an unapproved terminal model cannot prevent
     // an otherwise valid primary review from succeeding.
     if (terminalEnabled && terminalDefaultModel !== terminalModel) {
