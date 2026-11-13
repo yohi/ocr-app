@@ -1178,21 +1178,51 @@ test('off+Decision uses OCR_LLM_MODEL as the final fallback even when not fast-p
   assert.equal(events.filter(event => event.event === 'attempt_started').length, 3);
 });
 
-test('off+Decision refuses uncertified or mismatched OCR_LLM_MODEL without spawning', async () => {
-  for (const [terminalDefaultModel, configuredModel] of [
-    ['uncertified', 'uncertified'], ['unknown', 'unknown'], ['cert-disallowed', 'lower-tier'],
-  ]) {
-    let spawnCount = 0;
+test('off+Decision rejects mismatched final model without spawning', async () => {
+  let spawnCount = 0;
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+    terminalDefaultModel: 'cert-disallowed', env: { OCR_LLM_MODEL: 'lower-tier' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
+  assert.equal(spawnCount, 0);
+});
+
+test('off+Decision never spawns an uncertified final fallback', async () => {
+  for (const terminalModel of ['uncertified', 'unknown']) {
+    const attempted = [];
     const result = await runHost({
       prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
       model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
-      terminalDefaultModel, env: { OCR_LLM_MODEL: configuredModel },
+      terminalDefaultModel: terminalModel, env: { OCR_LLM_MODEL: terminalModel },
       ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
-      spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+      spawn: (_command, args) => {
+        attempted.push(args[args.indexOf('--model') + 1]);
+        return childFor(JSON.stringify({ error: 'No capacity available' }));
+      },
     });
     assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
-    assert.equal(spawnCount, 0);
+    assert.deepEqual(attempted, ['cert-primary']);
   }
+});
+
+test('off+Decision permits a successful routed review even if its unused terminal is unapproved', async () => {
+  const attempted = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+    terminalDefaultModel: 'unknown', env: { OCR_LLM_MODEL: 'unknown' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: (_command, args) => {
+      attempted.push(args[args.indexOf('--model') + 1]);
+      return childFor(JSON.stringify(validReview));
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(attempted, ['cert-primary']);
 });
 
 test('certified Antigravity failures emit bounded stage-only diagnostics without leaking child output', async () => {
