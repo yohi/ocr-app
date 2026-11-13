@@ -6,6 +6,7 @@ const workflow = readFileSync(new URL('../ocr-engine.yml', import.meta.url), 'ut
 const catalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const candidate = JSON.parse(readFileSync(new URL('../config/google-ai-pro-hydrogen-probe.json', import.meta.url), 'utf8'));
 const index = JSON.parse(readFileSync(new URL('../config/review-certification-index.json', import.meta.url), 'utf8'));
+const stagedInventory = JSON.parse(readFileSync(new URL('../config/routing-evidence/pro-cli-inventory-20261113.json', import.meta.url), 'utf8'));
 
 test('agy v1.5.8 and Hydrogen Medium are the explicit requested rollout target', () => {
   assert.equal(candidate.target_production.cli_version, '1.5.8');
@@ -43,4 +44,20 @@ test('agy 1.5.8 denies automatic edits and shell access on explicitly enabled ro
   for (const denied of ['command(*)','unsandboxed(*)','read_file(*)','write_file(*)','read_url(*)','execute_url(*)','mcp(*)']) {
     assert.ok(workflow.includes('"' + denied + '"'), 'missing deny policy: ' + denied);
   }
+});
+
+test('owner-observed agy 1.5.8 inventory is pinned but not presented as certified evidence', () => {
+  assert.equal(stagedInventory.schema_version, '1');
+  assert.equal(stagedInventory.cli_version, '1.5.8');
+  assert.equal(stagedInventory.cli_binary_sha256, '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5');
+  assert.equal(stagedInventory.models.length, 18);
+  assert.equal(new Set(stagedInventory.models).size, 18);
+  assert.ok(stagedInventory.models.includes('gemini-4-hydrogen-medium'));
+  assert.ok(stagedInventory.models.includes('gemini-4-hydrogen-high'));
+  assert.ok(stagedInventory.models.includes('gemini-pro-orchestrator-g1-pro'));
+  assert.equal(stagedInventory.models.some(id => id.startsWith('gemini-4-carbon')), false);
+  assert.equal(stagedInventory.observed_at, '2026-11-13T06:54:37.000Z');
+  assert.equal(stagedInventory.expires_at, '2026-11-20T06:54:37.000Z');
+  assert.equal(index.cli_inventory.path, 'routing-evidence/pro-cli-inventory-20261105.json');
+  assert.match(workflow, /AGY_158_CLI_INDEX_NOT_UPDATED/);
 });
