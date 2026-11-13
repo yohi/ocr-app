@@ -28,8 +28,8 @@
     }
   ],
   "cli_inventory": {
-    "path": "routing-evidence/pro-cli-inventory-20261105.json",
-    "sha256": "80f5fdde43a80e07c9e14faacfda9f4aee8bc4d5d28429a1f2c7aafdd0200c7d",
-    "approval_ref": "OWNER-CLI-INVENTORY-20261105"
+    "path": "routing-evidence/pro-cli-inventory-20261113.json",
+    "sha256": "a136c087bd5fec2bfb4eb116c43bfa9a3fdb5bceb23738b823fc4d48aa1b288b",
+    "approval_ref": "OWNER-CLI-INVENTORY-20261113"
   }
 }
