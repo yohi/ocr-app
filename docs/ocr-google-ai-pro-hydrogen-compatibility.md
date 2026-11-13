@@ -2,6 +2,24 @@
 
 基準日: 2026-11-13（JST）
 
+## Human Ownerの追加採択（2026-11-13）
+
+- **採用する規定モデルは `gemini-4-hydrogen-medium`**。低負荷レビューと通常レビューに優先利用し、より高い推論深度が必要な実証ではHighを候補にする。
+- **採用するagy CLIバージョンは `1.5.8`**。公式Linux x64アーカイブSHAは下記固定値を利用する。
+- PR #144では既存レビューワークフローに `OCR_AGY_158_ENABLE` 切替機構を実装。新構成の実行にはv1.5.8実行ファイルSHA、対応する新CLIインベントリ、認定済みHydrogen、認定Index更新の四点を必須とする。満たさなければFail-Closed。**既定の値は`false`で、masterの既存レビューは停止しない。**
+- 新構成を有効にした場合は`OCR_LLM_MODEL`の旧設定よりもHydrogen Mediumを優先し、明示的に`agentMode=""`・`toolPermission=strict`・deny-allツール設定を使用する。
+- 変更の目的は本番切替の実装と安全な移行の完成であり、証拠のないモデルを`certified`と偽装しない。現時点では実運用開始前の証拠取得が残っている。
+
+### 残っている必須証拠
+
+1. v1.5.8の公式Linux x64アーカイブから取得した**実行ファイルSHA-256**（アーカイブSHAとは異なる）。既存の手動Probeが記録可能。ローカルの`sha256sum "$(readlink -f "$(command -v agy)")"`も補助として照合可能。
+2. GitHub ActionsのOAuth環境でHydrogen Mediumの実推論成功（スモーク実行はQuotaを消費するためOwnerが手動で選択する）。
+3. `pro-cli-inventory-20261113.json`の実測CLI SHAを固定してインデックスのDigestを更新し、Hydrogen Mediumのモデル証拠・認定Referenceを新CLIと一致させる。
+4. `review-model-catalog.json`のFast規定モデル、対応モデルの認定と新しいCLIインベントリ・Owner承認の一致。既存`enforce`については新しいCatalog/Source digestの認可が必要。
+5. PR #144ではSonarCloud Security Rating Cが観測されており、個別指摘が未特定。この状態でマージ可能とは主張しない。
+
+これらが揃う前に`OCR_AGY_158_ENABLE=true`を設定すると、CLIインストール前の検証で拒否される。バイナリSHAを空欄や旧SHAで代替しない。
+
 ## 目的と確定済みの事実
 
 - 2026-11-13にHuman Ownerのローカル環境で `agy --version` = `1.5.8`、`agy models` = **18件**（既存13件 + Hydrogen Low/Medium/High/XHigh + Orchestrator）を観測。Carbonは表示されなかった。これは**実モデル一覧の観測証拠**であり、Hydrogenの推論成功やGitHub Actions内のOAuth同等性を証明しない。
@@ -41,9 +59,9 @@
 
 ローカルモデル一覧は既に確認できたため、次の実質的な必要条件は **(a) GitHub Actions OAuthでも同じモデルが見える、(b) OAuthでHydrogen Medium/Highの実推論が成功する、(c) v1.5.8のバイナリSHAを実測しヘッドレスの権限境界が保たれる、(d) 固定インベントリ・承認・監査を新バージョンに整合させる** こと。実行・レビュー品質を確認できたモデルだけ、Human Ownerの判断で有効化する。
 
-- Fast候補: `gemini-4-hydrogen-medium`
+- 規定Fastモデルの確定候補: `gemini-4-hydrogen-medium`
 - Deep候補: `gemini-4-hydrogen-high`
-- 規定モデル: 現行`gemini-3.8-flash-medium`を維持（変更時はPinned Fast preferredと整合させる）。
+- 新規定モデル: `gemini-4-hydrogen-medium`を採択（実運用開始までは従来の`gemini-3.8-flash-medium`を維持）。
 - CarbonはGoogle AI Proで利用不可なので採用しない。
 - Hydrogenが利用可能でも、専用利用枠が存在するとは確認できない。既存のFlashを最終Fallbackとして維持し、独立枠を前提にしない。
 
