@@ -21,12 +21,12 @@
 
 - `.github/workflows/config/google-ai-pro-hydrogen-probe.json` にGoogle AI ProのHydrogen候補4件（Low/Medium/High/XHigh）とCarbon除外を固定。
 - `.github/workflows/scripts/agy-google-ai-pro-model-probe.mjs` で、ログイン済み`agy --output-format json models`の構造化応答を読み、Hydrogenと現行の既知モデルID**だけ**を比較する。
-- `.github/workflows/agy-google-ai-pro-model-probe.yml` は手動起動専用。公式アーカイブをSHA検証して取り出したCLI v1.5.8の実行ファイルSHAを計算し、既存の`ANTIGRAVITY_OAUTH_JSON`でモデル一覧を取得する（推論・レビュー処理は行わない）。
+- `.github/workflows/agy-google-ai-pro-model-probe.yml` は手動起動専用。公式アーカイブをSHA検証して取り出したCLI v1.5.8の実行ファイルSHAを計算し、既存の`ANTIGRAVITY_OAUTH_JSON`でモデル一覧を取得する。既定の `run_hydrogen_smoke=false` では推論しない。**Ownerが`run_hydrogen_smoke=true`を指定した場合に限り**、既存OAuthでHydrogen Medium/Highを各1回だけヘッドレス推論し、成功/失敗だけを安全に報告する（Google AI Proの利用枠を消費する）。
 - GitHub Actions Step Summaryには固定されたIDのLISTED/NOT_LISTEDと検証済みハッシュだけを書き込む。OAuth、自由形式のCLIエラー、raw JSONは投稿・Artifact化しない。
 
 ## 実行方法（Human Ownerが判断して実施）
 
-このPRを採用した場合、masterにマージ後、GitHub Actionsで **OCR App Google AI Pro model compatibility probe** の **Run workflow** を明示的に実行する。通常のOCR Appレビューは起動しない。
+このPRを採用した場合、masterにマージ後、GitHub Actionsで **OCR App Google AI Pro model compatibility probe** の **Run workflow** を明示的に実行する。**本番レビューは起動しない**。既定の `run_hydrogen_smoke=false` はSHAとモデル一覧だけ。`true` を選択するとモデル一覧の成功後に Medium / High の固定プロンプトを各1回（最大2回）実行し、失敗時は後続を停止する。
 
 結果の解釈:
 
@@ -34,6 +34,8 @@
 - `NOT_LISTED` は現行のOAuth認証情報では確認できないことを示す。自動的にGoogleのモデルを有効化しない。
 - `AGY_OAUTH_SECRET_NOT_CONFIGURED` は実OAuth未検証。エラーやレート制限とは混同しない。
 - `AGY_OAUTH_MODEL_LIST_COMMAND_FAILED` は一覧取得失敗。生のstderrは公開しない。
+- `INFERENCE_PASS` は固定プロンプトに対する実行成功。コードレビュー品質・利用枠量・全モデルの利用可能性を示さない。
+- `INFERENCE_FAILED` はスモークテスト失敗。CLIの生の応答・stderr・OAuthは公開しない。推論を明示要求しても該当モデルが表示されなければFail-Closedで失敗とする。
 
 ## 将来の適用判断（自動開始禁止）
 
@@ -45,8 +47,8 @@
 - CarbonはGoogle AI Proで利用不可なので採用しない。
 - Hydrogenが利用可能でも、専用利用枠が存在するとは確認できない。既存のFlashを最終Fallbackとして維持し、独立枠を前提にしない。
 
-実機検証なしで`certification_status=certified`にすることや、テストが存在するだけで本番モデルを切り替えることは禁止。追加レビューの自動起票や認定期限の再設定も行わない。
+実機検証なしで`certification_status=certified`にすることや、テストが存在するだけで本番モデルを切り替えることは禁止。スモークテストはOwnerのQuota消費承認なしに自動実行しない。実行前に `--mode plan` と `toolPermission=strict`、禁止権限でツール操作を抑止する。追加レビューの自動起票や認定期限の再設定も行わない。
 
 ## 完了条件
 
-このPRでは、廃止予定モデルをDeep通常Fallbackから除外し、機密情報を漏らさずOAuth利用可能モデル・CLIハッシュを取得する経路までを完成とする。Actions OAuth実証・実際のHydrogen推論・本番移行は**未実施**。本PR作業はここで終了可能。
+このPRでは、廃止予定モデルをDeep通常Fallbackから除外し、機密情報を漏らさずOAuth利用可能モデル・CLIハッシュを取得し、Ownerが選択した場合のみHydrogen Medium/Highを最大2回推論する経路までを完成とする。Actions OAuth実証・実際のHydrogen推論・本番移行は**未実施**。本PR作業はここで終了可能。
