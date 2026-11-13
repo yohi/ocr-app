@@ -4,6 +4,12 @@ name: OCR App Google AI Pro model compatibility probe
 # repository variables, update authorization records, or post to target PRs.
 on:
   workflow_dispatch:
+    inputs:
+      run_hydrogen_smoke:
+        description: 'Consume Google AI Pro quota to run one headless prompt each on Hydrogen Medium and High'
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -23,7 +29,7 @@ jobs:
           node-version: '24'
 
       - name: Validate fixed probe contract (offline)
-        run: node --test .github/workflows/scripts/agy-google-ai-pro-model-probe.test.mjs
+        run: node --test .github/workflows/scripts/agy-google-ai-pro-model-probe.test.mjs .github/workflows/scripts/agy-google-ai-pro-hydrogen-smoke.test.mjs
 
       - name: Verify pinned agy 1.5.8 archive and inspect CLI SHA
         id: agy
@@ -93,6 +99,7 @@ jobs:
           printf 'configured=true\n' >> "$GITHUB_OUTPUT"
 
       - name: Compare models visible through the same OAuth account
+        id: model_list
         if: steps.oauth.outputs.configured == 'true'
         shell: bash
         env:
@@ -112,9 +119,42 @@ jobs:
             "$models" .github/workflows/config/google-ai-pro-hydrogen-probe.json \
             '1.5.8' "$AGY_BINARY_SHA256"
 
+      - name: Prevent explicitly requested smoke without OAuth evidence
+        if: ${{ inputs.run_hydrogen_smoke && (steps.oauth.outputs.configured != 'true' || steps.model_list.outputs.medium_listed != 'true' || steps.model_list.outputs.high_listed != 'true') }}
+        shell: bash
+        run: |
+          echo 'AGY_HYDROGEN_SMOKE_PRECONDITION_FAILED' >&2
+          exit 1
+
+      - name: Run bounded Hydrogen Medium / High inference smoke (optional)
+        if: ${{ inputs.run_hydrogen_smoke && steps.oauth.outputs.configured == 'true' && steps.model_list.outputs.medium_listed == 'true' && steps.model_list.outputs.high_listed == 'true' }}
+        shell: bash
+        env:
+          AGY_EXE: ${{ steps.agy.outputs.executable }}
+          AGY_BINARY_SHA256: ${{ steps.agy.outputs.binary_sha256 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          cat > "$HOME/.gemini/antigravity-cli/settings.json" <<'EOF'
+          {
+            "agentMode": "",
+            "toolPermission": "strict",
+            "enableTerminalSandbox": true,
+            "permissions": {
+              "deny": [
+                "command(*)", "unsandboxed(*)",
+                "read_file(*)", "write_file(*)", "read_url(*)",
+                "execute_url(*)", "mcp(*)"
+              ]
+            }
+          }
+          EOF
+          node .github/workflows/scripts/agy-google-ai-pro-hydrogen-smoke.mjs "$AGY_EXE"
+
       - name: Remove temporary OAuth credential copies
         if: always()
         shell: bash
         run: |
           rm -f -- "$HOME/.gemini/antigravity-cli/oauth.json" \
-            "$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+            "$HOME/.gemini/antigravity-cli/antigravity-oauth-token" \
+            "$HOME/.gemini/antigravity-cli/settings.json"

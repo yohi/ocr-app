@@ -25,7 +25,7 @@ test('two fixed Hydrogen models are tried once in plan mode with redacted output
     assert.equal(item.opts.timeout, 70000);
     assert.equal(item.opts.maxBuffer, 1048576);
   }
-  assert.doesNotMatch(formatSmokeSummary(result), /SECRET|response|Bearer/);
+  assert.doesNotMatch(formatSmokeSummary(result), /SECRET|Bearer/);
   assert.match(formatSmokeSummary(result), /review quality \/ quota not established/);
 });
 

@@ -119,6 +119,13 @@ async function main() {
   const config = JSON.parse(readFileSync(resolve(configPath), 'utf8'));
   const report = buildGoogleAiProProbeReport({ source, config, cliVersion, binarySha256 });
   const summary = formatGoogleAiProProbeSummary(report);
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, [
+      `medium_listed=${report.hydrogen_listed.includes('gemini-4-hydrogen-medium')}`,
+      `high_listed=${report.hydrogen_listed.includes('gemini-4-hydrogen-high')}`,
+      '',
+    ].join('\n'));
+  }
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   } else {
