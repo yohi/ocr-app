@@ -129,7 +129,7 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         env:
-          OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6'
+          OPENCODEREVIEW_EXPECTED_VERSION: '1.14.4'
           OCR_NO_UPDATE: '1'
           AGY_VERSION: '1.5.8'
           AGY_ARCHIVE_SHA256: '905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98'
@@ -138,9 +138,10 @@ jobs:
           OCR_AGY_158_ENABLE: ${{ env.OCR_AGY_158_ENABLE }}
         run: |
           set -euo pipefail
-          npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION
+          npm install -g --prefix "$HOME/.local" --ignore-scripts "@alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION"
           export PATH="$HOME/.local/bin:$PATH"
           node self-repo/.github/workflows/scripts/compare-opencodereview-version.mjs
+          node self-repo/.github/workflows/scripts/check-opencodereview-contract.mjs
           # Never execute an unverified new CLI or treat an unapproved model as
           # certified. No fallback to the old binary after a requested upgrade.
           inventory_path='self-repo/.github/workflows/config/routing-evidence/pro-cli-inventory-20261105.json'
