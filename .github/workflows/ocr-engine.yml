@@ -125,16 +125,17 @@ jobs:
       - name: Install pinned review tools
         if: steps.target.outputs.internal == 'true'
         env:
-          OPENCODEREVIEW_EXPECTED_VERSION: '1.13.6'
+          OPENCODEREVIEW_EXPECTED_VERSION: '1.14.4'
           OCR_NO_UPDATE: '1'
           AGY_VERSION: '1.5.1'
           AGY_ARCHIVE_SHA256: '2a64ccfc5f6679c253769f0760614af5de04d8dc1eeeec9b9752ba4c8dd92250'
           AGY_BINARY_SHA256: '72738cf0445918483956a5f0da33abdfcfb21a12dd9a421fd57d063782826669'
         run: |
           set -euo pipefail
-          npm install -g --prefix "$HOME/.local" --ignore-scripts @alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION
+          npm install -g --prefix "$HOME/.local" --ignore-scripts "@alibaba-group/open-code-review@$OPENCODEREVIEW_EXPECTED_VERSION"
           export PATH="$HOME/.local/bin:$PATH"
           node self-repo/.github/workflows/scripts/compare-opencodereview-version.mjs
+          node self-repo/.github/workflows/scripts/check-opencodereview-contract.mjs
           # Fail closed if the pinned release does not match the existing certified CLI inventory.
           node --input-type=module - <<'NODE'
           import { readFileSync } from 'node:fs';

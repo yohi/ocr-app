@@ -208,9 +208,10 @@ test('Finalize routing audit prints the structured routing summary', () => {
 
 test('pinned OpenCodeReview CLI compares its actual version and disables self-updates', () => {
   const installStep = step('Install pinned review tools');
-  assert.match(installStep, /OPENCODEREVIEW_EXPECTED_VERSION: '1\.13\.6'/);
+  assert.match(installStep, /OPENCODEREVIEW_EXPECTED_VERSION: '1\.14\.4'/);
   assert.match(installStep, /@alibaba-group\/open-code-review@\$OPENCODEREVIEW_EXPECTED_VERSION/);
   assert.match(installStep, /compare-opencodereview-version\.mjs/);
+  assert.match(installStep, /check-opencodereview-contract\.mjs/);
   assert.match(installStep, /OCR_NO_UPDATE/);
 });
 
@@ -228,8 +229,8 @@ test('production shadow Host entrypoint reauthorizes absent routes with complete
 
 test('production finalizer supplies the certified route and run path for a nonempty review', async () => {
   const value = fixture();
-  const env = { ...value.env, OPENCODEREVIEW_VERSION_EXPECTED: '1.13.6',
-    OPENCODEREVIEW_VERSION_ACTUAL: '1.13.6', OPENCODEREVIEW_VERSION_MATCH: 'true' };
+  const env = { ...value.env, OPENCODEREVIEW_VERSION_EXPECTED: '1.14.4',
+    OPENCODEREVIEW_VERSION_ACTUAL: '1.14.4', OPENCODEREVIEW_VERSION_MATCH: 'true' };
   const result = await execute('Finalize routing audit', value.imports, env);
   assert.equal(result.exitCode, 0);
   const summaryLine = result.logs.find(line => line.startsWith('OCR_ROUTING_SUMMARY '));
@@ -241,8 +242,8 @@ test('production finalizer supplies the certified route and run path for a nonem
   assert.equal(summary.executed_review_model, 'primary');
   assert.deepEqual(summary.attempted_review_models, ['primary']);
   assert.equal(summary.audit_status, 'sealed');
-  assert.equal(summary.opencodereview_version_expected, '1.13.6');
-  assert.equal(summary.opencodereview_version_actual, '1.13.6');
+  assert.equal(summary.opencodereview_version_expected, '1.14.4');
+  assert.equal(summary.opencodereview_version_actual, '1.14.4');
   assert.equal(summary.opencodereview_version_matches, true);
   const finalAudit = JSON.parse(value.files.get('/run/ocr-routing/final.json'));
   assert.equal(finalAudit.executed_review_model, 'primary');
