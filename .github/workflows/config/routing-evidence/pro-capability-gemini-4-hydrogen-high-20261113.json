@@ -1,0 +1,17 @@
+{
+  "schema_version": "1",
+  "subject": "review-model-capability-dossier/v1",
+  "model_id": "gemini-4-hydrogen-high",
+  "capability_tier": "deep",
+  "issuing_repo": "yohi/ocr-app",
+  "quality_basis": [
+    "Hydrogen High is assigned the deep candidate tier by the pre-existing reviewed .github/workflows/config/google-ai-pro-hydrogen-probe.json profile; this is a routing classification, not proof of code review quality.",
+    "GitHub Actions workflow_dispatch https://github.com/yohi/ocr-app/actions/runs/43423036181 (head 9d185168c60d6bba9588e9bb3508389ce5c7e11f, completed 2026-11-13T12:11:42Z) succeeded. Its fixed script runs both Hydrogen Medium and Hydrogen High with Google OAuth, plan mode, toolPermission strict, deny-all sensitive tools, and a fixed short prompt.",
+    "The CI verified the official agy 1.5.8 archive and installed binary digest 9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5, matching the pinned CLI inventory sha256:a136c087bd5fec2bfb4eb116c43bfa9a3fdb5bceb23738b823fc4d48aa1b288b.",
+    "This smoke establishes bounded headless inference only. It does not establish real code-review quality, quota availability, safe file access, or permission to run enforce-mode routing.",
+    "Human Owner instructed scoped Hydrogen High terminal fallback authorization for off + Decision LLM after seeing the successful smoke and existing 429/INVALID_FALLBACK_MODELS failure."
+  ],
+  "decision": "Human Owner approved progression to gemini-4-hydrogen-high as off+Decision final fallback only. Capability_tier=deep is a routing classification, not measured review quality. No enforce-mode activation or permission expansion.",
+  "issued_at": "2026-11-13T12:19:18.911Z",
+  "expires_at": "2026-11-20T06:54:37.000Z"
+}

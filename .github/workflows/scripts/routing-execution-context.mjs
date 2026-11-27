@@ -3,7 +3,7 @@ import { linkSync, lstatSync, readFileSync, unlinkSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { assertRunBindingValid, assertRunBindingEquals } from './ocr-run-binding.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
-import { loadVerifiedCertification } from './load-review-certification.mjs';
+import { loadVerifiedCertification, loadPinnedCliInventory } from './load-review-certification.mjs';
 
 const INVALID = 'ROUTING_EXECUTION_CONTEXT_INVALID';
 const DENIED = 'ROUTING_ACTIVATION_DENIED';
@@ -110,20 +110,27 @@ export function revalidateRoutingExecutionContext({ context, expectedBinding, tr
     }
     let certifiedBundle = null;
     if (trustedInputs.needsModel) {
-      const certificationRepoIdentity = globalOptIn ? trustedInputs.certificationRepoIdentity : repoIdentity;
-      if (!certificationRepoIdentity) return failure(INVALID, 'CERTIFICATION_IDENTITY_MISSING');
-      const verified = loadVerifiedCertification({ catalog: trustedInputs.catalog, index: trustedInputs.index,
-        registry: trustedInputs.registry, repoIdentity: certificationRepoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
-      if (verified.cliAvailableModels.length === 0) return failure(DENIED, 'CERTIFICATION_VALIDATION_FAILED');
       if (trustedInputs.index?.cli_inventory?.sha256 !== context.cli_inventory_sha256) return failure(DENIED, 'CLI_INVENTORY_DIGEST_MISMATCH');
-      if (context.certification_refs.some(ref => !verified.verifiedCertificationRefs.some(item => item.certification_reference === ref))) return failure(DENIED, 'CERTIFICATION_REFERENCE_MISMATCH');
-      certifiedBundle = {
-        catalog: trustedInputs.catalog,
-        evidence: {
-          certification_refs: verified.verifiedCertificationRefs,
-          cli_available_models: verified.cliAvailableModels,
-        },
-      };
+      if (globalOptIn) {
+        if (context.certification_refs.length !== 0) return failure(INVALID, 'OPT_IN_CERTIFICATION_REFS_INVALID');
+        const pinned = loadPinnedCliInventory({ index: trustedInputs.index,
+          readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
+        certifiedBundle = { catalog: trustedInputs.catalog,
+          evidence: { certification_refs: [], cli_available_models: pinned.cliAvailableModels,
+            index: trustedInputs.index, revokedRefs: trustedInputs.registry?.revoked_refs } };
+      } else {
+        const verified = loadVerifiedCertification({ catalog: trustedInputs.catalog, index: trustedInputs.index,
+          registry: trustedInputs.registry, repoIdentity, now, readEvidence: trustedInputs.readEvidence, cliBinarySha256 });
+        if (verified.cliAvailableModels.length === 0) return failure(DENIED, 'CERTIFICATION_VALIDATION_FAILED');
+        if (context.certification_refs.some(ref => !verified.verifiedCertificationRefs.some(item => item.certification_reference === ref))) return failure(DENIED, 'CERTIFICATION_REFERENCE_MISMATCH');
+        certifiedBundle = {
+          catalog: trustedInputs.catalog,
+          evidence: {
+            certification_refs: verified.verifiedCertificationRefs,
+            cli_available_models: verified.cliAvailableModels,
+          },
+        };
+      }
     } else if (context.certification_refs.length !== 0 || context.cli_inventory_sha256 !== null || context.cli_binary_sha256 !== null) return failure(INVALID, 'UNEXPECTED_MODEL_EVIDENCE');
     return { startupAuthorization, certifiedBundle };
   } catch (error) {

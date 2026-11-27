@@ -25,7 +25,7 @@ const features = { classification_status: 'unclassified_code', risk_floor: 'deep
 const realCatalog = JSON.parse(readFileSync(new URL('../config/review-model-catalog.json', import.meta.url), 'utf8'));
 const proCliModelInventory = [
   { model_id: 'gemini-3.8-flash-medium', capability_tier: 'fast', allowed_fallbacks: ['claude-opus-5-5-high', 'gemini-4-argon-high', 'claude-sonnet-5-5-high'] },
-  { model_id: 'claude-opus-5-5-high', capability_tier: 'deep', allowed_fallbacks: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'] },
+  { model_id: 'claude-opus-5-5-high', capability_tier: 'deep', allowed_fallbacks: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'] },
   { model_id: 'claude-opus-5-5-medium', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'claude-opus-5-5-low', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'claude-sonnet-5-5-high', capability_tier: 'deep', allowed_fallbacks: [] },
@@ -37,6 +37,7 @@ const proCliModelInventory = [
   { model_id: 'gemini-4-argon-medium', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'gemini-4-argon-low', capability_tier: 'deep', allowed_fallbacks: [] },
   { model_id: 'gpt-oss-120b-medium', capability_tier: 'deep', allowed_fallbacks: [] },
+  { model_id: 'gemini-4-hydrogen-high', capability_tier: 'deep', allowed_fallbacks: [] },
 ];
 const deepModel = 'claude-opus-5-5-high';
 const certificationReference = `sha256:${'a'.repeat(64)}`;
@@ -51,7 +52,7 @@ const certifiedRealCatalog = {
   },
   unknown_risk_strategy: 'deep',
 };
-const deepPublishRoute = { selected_model_id: deepModel, fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'], selected_strategy: 'deep', proposed_strategy: 'deep' };
+const deepPublishRoute = { selected_model_id: deepModel, fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'], selected_strategy: 'deep', proposed_strategy: 'deep' };
 const route = { proposedStrategy: 'deep', selectedStrategy: 'deep', routeSource: 'deterministic_fallback', decisionStatus: 'unavailable', proposedReviewModel: deepModel, selectedReviewModel: deepModel };
 const versions = { policyVersion: '1.0.0', modelCatalogVersion: catalogVersion };
 const decision = () => createRoutingDecisionRecord({ runBinding: binding, features, decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
@@ -92,7 +93,7 @@ test('anchors the catalog and certified publish fixture to the Pro CLI inventory
   })));
   assert.deepEqual(deepPublishRoute, {
     selected_model_id: 'claude-opus-5-5-high',
-    fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high', 'gpt-oss-120b-medium'],
+    fallback_models: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'],
     selected_strategy: 'deep',
     proposed_strategy: 'deep',
   });
@@ -548,6 +549,7 @@ test('routing log summary reports a skipped selector and the executed review mod
     selection_llm_egress_status: 'denied',
     selected_review_model: 'gemini-3.8-flash-medium',
     executed_review_model: 'gemini-3.8-flash-medium',
+    review_quality_measured: true,
     attempted_review_models: ['gemini-3.8-flash-medium'],
     audit_status: 'sealed',
   });
@@ -636,4 +638,144 @@ test('audit diagnostics expose only fixed failure codes, stages, and reasons', (
     formatRoutingAuditDiagnostic({}),
     'ROUTING_AUDIT_DIAGNOSTIC code=UNKNOWN stage=OTHER reason=OTHER',
   );
+});
+
+test('off+Decision terminal default is auditable but does not claim deep-tier quality', () => {
+  const cloned = structuredClone(certifiedRealCatalog);
+  cloned.models = cloned.models.map((model, index) => ({
+    ...model, certification_reference: `sha256:${String(index + 1).padStart(64, '0')}`,
+  }));
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: cloned.models.map(item => ({
+      sha256: item.certification_reference.slice(7), approval_ref: `OWNER-${item.model_id}`,
+    })) };
+  const bundle = { catalog: cloned, evidence: {
+    cli_available_models: cloned.models.map(item => item.model_id), index, revokedRefs: [],
+  } };
+  const defaultModel = cloned.strategies.fast.preferred_model_id;
+  const planned = [deepModel, ...deepPublishRoute.fallback_models, defaultModel];
+  const started = (idx, model) => event({ event: 'attempt_started', attempt_index: idx, model });
+  const completed = (idx, model, status) => event({ event: 'attempt_completed', attempt_index: idx,
+    model, result: status, duration_ms: 10 });
+  const chain = planned.flatMap((model, i) => [
+    started(i + 1, model),
+    completed(i + 1, model, i === planned.length - 1 ? 'host_validated_success' : 'model_reported_failure'),
+  ]);
+  chain.push(event({ event: 'host_completed', attempt_index: null, model: null,
+    result: null, duration_ms: null, host_status: 'success' }));
+  const selected = { ...deepPublishRoute, effective_mode: 'off', decision_llm_enabled: true,
+    terminal_model_id: defaultModel };
+  assert.deepEqual(validateRoutingAttempts({ attempts: chain, selectedRoute: selected, certifiedBundle: bundle }), {
+    attemptedModels: planned, successModel: defaultModel,
+  });
+  const dir = mkdtempSync(join(tmpdir(), 'ocr-terminal-audit-'));
+  try {
+    mkdirSync(join(dir, 'ocr-routing'));
+    writeFileSync(join(dir, 'ocr-routing', 'attempts.ndjson'), chain.map(JSON.stringify).join('\n') + '\n');
+    const run = { ...binding, mode: 'off', decisionLlmEnabled: true };
+    const record = createRoutingDecisionRecord({ runBinding: run, features, decision: { latencyMs: null, cost: null },
+      egressStatus: 'denied', route, policyVersions: versions });
+    const audited = finalizeRoutingAudit({ decision: record, attempts: chain,
+      reviewResult: { status: 'success' }, validation: { status: 'passed' },
+      headCheck: { status: 'passed' }, runBinding: run,
+      policy: { repoId: 42, repo: 'owner/repo', prNumber: 7, review_scope_gap: false, features_incomplete: false },
+      catalog: cloned, selectedRoute: selected, certifiedBundle: bundle,
+      resultSha256: 'a'.repeat(64), runTemp: dir });
+    assert.equal(audited.host_success_model, defaultModel);
+    assert.equal(audited.executed_review_model, null);
+    assert.equal(audited.review_quality_measured, false);
+    assert.deepEqual(audited.attempted_review_models, planned);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+
+  // An enforce run can never use this lower-tier terminal exception.
+  assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: { ...selected, effective_mode: 'enforce', decision_llm_enabled: false },
+    certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+
+  // Missing intermediate fallback is not an eligible terminal sequence.
+  const tampered = chain.filter(entry => !['gemini-4-argon-high'].includes(entry.model));
+  const reordered = tampered.map((entry, i) => entry.event === 'host_completed'
+    ? entry : { ...entry, attempt_index: Math.ceil((i + 1) / 2) });
+  assert.throws(() => validateRoutingAttempts({
+    attempts: reordered, selectedRoute: selected, certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+
+  const revoked = { ...bundle, evidence: { ...bundle.evidence,
+    revokedRefs: [`OWNER-${defaultModel}`] } };
+  assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: selected, certifiedBundle: revoked,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+});
+
+
+test('off+Decision audits a configured deep Hydrogen terminal after all three routed failures', () => {
+  const terminal = 'gemini-4-hydrogen-high';
+  const cloned = structuredClone(certifiedRealCatalog);
+  cloned.models = cloned.models.map((model, i) => ({
+    ...model, certification_reference: `sha256:${String(i + 1).padStart(64, '0')}`,
+  }));
+  assert.notEqual(terminal, cloned.strategies.fast.preferred_model_id);
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: cloned.models.map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const bundle = { catalog: cloned, evidence: {
+    cli_available_models: cloned.models.map(model => model.model_id), index, revokedRefs: [],
+  } };
+  const allowed = [deepModel, ...deepPublishRoute.fallback_models];
+  const planned = [...allowed, terminal];
+  const started = (idx, model) => event({ event: 'attempt_started', attempt_index: idx, model });
+  const completed = (idx, model, result) => event({ event: 'attempt_completed', attempt_index: idx,
+    model, result, duration_ms: 10 });
+  const chain = planned.flatMap((model, i) => [
+    started(i + 1, model),
+    completed(i + 1, model, i === planned.length - 1 ? 'host_validated_success' : 'model_reported_failure'),
+  ]);
+  chain.push(event({ event: 'host_completed', attempt_index: null, model: null,
+    result: null, duration_ms: null, host_status: 'success' }));
+  const selected = { ...deepPublishRoute, effective_mode: 'off',
+    decision_llm_enabled: true, terminal_model_id: terminal };
+  assert.deepEqual(validateRoutingAttempts({ attempts: chain, selectedRoute: selected,
+    certifiedBundle: bundle }), { attemptedModels: planned, successModel: terminal });
+
+  const dir = mkdtempSync(join(tmpdir(), 'ocr-high-terminal-audit-'));
+  try {
+    mkdirSync(join(dir, 'ocr-routing'));
+    writeFileSync(join(dir, 'ocr-routing', 'attempts.ndjson'), chain.map(JSON.stringify).join('\n') + '\n');
+    const run = { ...binding, mode: 'off', decisionLlmEnabled: true };
+    const record = createRoutingDecisionRecord({ runBinding: run, features,
+      decision: { latencyMs: null, cost: null }, egressStatus: 'denied', route, policyVersions: versions });
+    const audited = finalizeRoutingAudit({ decision: record, attempts: chain,
+      reviewResult: { status: 'success' }, validation: { status: 'passed' },
+      headCheck: { status: 'passed' }, runBinding: run,
+      policy: { repoId: 42, repo: 'owner/repo', prNumber: 7,
+        review_scope_gap: false, features_incomplete: false },
+      catalog: cloned, selectedRoute: selected, certifiedBundle: bundle,
+      runTemp: dir });
+    assert.equal(audited.host_success_model, terminal);
+    assert.equal(audited.executed_review_model, terminal);
+    assert.equal(audited.review_quality_measured, true);
+    assert.deepEqual(audited.attempted_review_models, planned);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+
+  for (const changedRoute of [
+    { ...selected, terminal_model_id: cloned.strategies.fast.preferred_model_id },
+    { ...selected, terminal_model_id: null },
+    { ...selected, terminal_model_id: 'not-in-catalog' },
+    { ...selected, effective_mode: 'enforce', decision_llm_enabled: false },
+  ]) assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: changedRoute, certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+
+  const revoked = { ...bundle, evidence: { ...bundle.evidence, revokedRefs: [`OWNER-${terminal}`] } };
+  assert.throws(() => validateRoutingAttempts({
+    attempts: chain, selectedRoute: selected, certifiedBundle: revoked,
+  }), { message: 'AUDIT_EVENT_INVALID' });
+  const skippedCandidate = chain.filter(item => item.model !== deepPublishRoute.fallback_models[1]);
+  const badOrder = skippedCandidate.map((item, i) => item.event === 'host_completed'
+    ? item : { ...item, attempt_index: Math.ceil((i + 1) / 2) });
+  assert.throws(() => validateRoutingAttempts({
+    attempts: badOrder, selectedRoute: selected, certifiedBundle: bundle,
+  }), { message: 'AUDIT_EVENT_INVALID' });
 });

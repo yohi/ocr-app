@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { loadVerifiedCertification, readInstalledCliIdentity } from './load-review-certification.mjs';
+import { loadVerifiedCertification, loadPinnedCliInventory, readInstalledCliIdentity } from './load-review-certification.mjs';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const NOW = '2026-01-01T00:00:00.000Z';
@@ -254,6 +254,33 @@ test('reads the installed executable identity and rejects target-checkout and sw
   } finally { cleanup(f); }
 });
 
+test('accepts a pinned AGY executable above the old 256 MiB cap but retains the 512 MiB bound', () => {
+  const f = fixture();
+  const executable = join(f.home, '.local/bin/agy');
+  const mib = 1024 * 1024;
+  try {
+    // Sparse file tests the size gate without allocating or reading hundreds of MiB.
+    // The injected readFile isolates size validation; real calls hash actual bytes.
+    for (const size of [257 * mib, 512 * mib]) {
+      truncateSync(executable, size);
+      assert.equal(lstatSync(executable).size, size);
+      const identity = readInstalledCliIdentity({
+        env: { HOME: f.home }, targetRoot: f.root,
+        readFile: () => f.binary,
+      });
+      assert.equal(identity.resolvedPath, realpathSync(executable));
+      assert.equal(identity.binarySha256, hash(f.binary));
+    }
+    truncateSync(executable, 512 * mib + 1);
+    let reads = 0;
+    assert.throws(() => readInstalledCliIdentity({
+      env: { HOME: f.home }, targetRoot: f.root,
+      readFile: () => { reads++; return f.binary; },
+    }), { message: 'REVIEW_CLI_UNAVAILABLE' });
+    assert.equal(reads, 0, 'oversized binaries must be rejected before reading');
+  } finally { cleanup(f); }
+});
+
 test('fails closed when CLI resolution or file reads fail', () => {
   const f = fixture();
   try {
@@ -310,4 +337,27 @@ test('RED 3-2: rejects a CLI binary digest mismatch against the installed execut
     refreshCertification(f);
     assert.throws(() => verify(f), { message: 'REVIEW_CERTIFICATION_INVALID' });
   } finally { cleanup(f); }
+});
+
+test('off-mode snapshot works after certification expiry but rejects CLI mismatch and tampering', () => {
+  const f = fixture();
+  const params = { index: f.index, readEvidence: f.readEvidence, cliBinarySha256: hash(f.binary) };
+  try {
+    // No synthetic date is passed: a pinned snapshot is not a time-valid approval.
+    const pinned = loadPinnedCliInventory(params);
+    assert.deepEqual(pinned.cliAvailableModels, ['model-a']);
+    assert.equal(pinned.inventorySha256, f.index.cli_inventory.sha256);
+    assert.throws(() => verify(f, { now: '2028-01-01T00:00:00.000Z' }),
+      { message: 'REVIEW_CERTIFICATION_INVALID' });
+    assert.throws(() => loadPinnedCliInventory({ ...params, cliBinarySha256: 'f'.repeat(64) }),
+      { message: 'REVIEW_CERTIFICATION_INVALID' });
+    assert.throws(() => loadPinnedCliInventory({ ...params,
+      index: { ...f.index, cli_inventory: { ...f.index.cli_inventory, sha256: 'f'.repeat(64) } } }),
+    { message: 'REVIEW_CERTIFICATION_INVALID' });
+    f.inventory.models = ['model-a', 'model-a'];
+    refreshInventory(f);
+    assert.throws(() => loadPinnedCliInventory(params), { message: 'REVIEW_CERTIFICATION_INVALID' });
+  } finally {
+    cleanup(f);
+  }
 });

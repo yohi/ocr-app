@@ -6,6 +6,7 @@ import { assertRunBindingValid, assertSerializedRunBindingMatches, assertRunBind
 import { validateAttemptEvent, validateAttemptOrder, validateRoutingAttempts } from './routing-attempts.mjs';
 export { validateRoutingAttempts } from './routing-attempts.mjs';
 
+const RANK = Object.freeze({ fast: 0, deep: 1 });
 const CLASSIFICATIONS = ['allowlisted_docs_only', 'allowlisted_low_risk_code', 'high_risk_metadata', 'unclassified_code', 'unclassified_other', 'incomplete'];
 const STRATEGIES = ['fast', 'deep'];
 const ROUTE_SOURCES = ['model_decision', 'deterministic_fallback', 'not_requested'];
@@ -128,6 +129,7 @@ export function createRoutingLogSummary(record) {
     selection_llm_egress_status: record.egress_status,
     selected_review_model: record.selected_review_model,
     executed_review_model: record.executed_review_model,
+    review_quality_measured: record.review_quality_measured,
     attempted_review_models: Object.freeze([...record.attempted_review_models]),
     audit_status: record.audit_status,
   });
@@ -241,7 +243,12 @@ export function finalizeRoutingAudit(input) {
   const completedModels = order.valid ? validatedAttempts.attemptedModels.map(item => appliedRoute ? catalogModel(catalog, item, true) : item).filter(Boolean) : [];
   const attempted = [...new Set(completedModels)];
   const successfulModel = order.valid && validatedAttempts.successModel ? catalogModel(catalog, validatedAttempts.successModel, appliedRoute) : null;
-  const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' && headStatus === 'passed' && successfulModel !== null;
+  const successfulTier = catalog?.models?.find(item => item.model_id === successfulModel)?.capability_tier;
+  // A final fast-model result can be recorded, but is not a verified deep review.
+  const riskFloorMet = successfulModel === null || !selectedRoute?.selected_strategy ||
+    RANK[successfulTier] >= RANK[selectedRoute.selected_strategy];
+  const qualifies = order.valid && order.success && reviewResult?.status === 'success' && reviewStatus === 'passed' &&
+    headStatus === 'passed' && successfulModel !== null && riskFloorMet;
   const model = value => catalogModel(catalog, value ?? null, appliedRoute);
   const repoId = policy?.repoId ?? policy?.repo_id; const repo = policy?.repo ?? policy?.repoName; const pr = policy?.prNumber ?? policy?.pr_number;
   if (!Number.isSafeInteger(repoId) || repoId < 1 || !validRepo(repo) || !Number.isSafeInteger(pr) || pr < 1) throw new Error('AUDIT_SCHEMA_INVALID');

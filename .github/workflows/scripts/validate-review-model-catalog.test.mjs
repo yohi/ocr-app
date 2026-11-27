@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
   resolveCertifiedModels,
+  resolvePinnedModels,
+  isPinnedTerminalModelApproved,
   validateCatalogSemantics,
   validateCatalogShape,
 } from './validate-review-model-catalog.mjs';
@@ -213,4 +216,128 @@ test('RED 3-1: rejects preferred/fallback references to a model with a mismatche
   const oldRef = structuredClone(catalog);
   oldRef.models[1].catalog_version = '0.9.0';
   assert.throws(() => validateCatalogSemantics(oldRef, evidence), /catalog_version_mismatch/);
+});
+
+test('off-mode pinned resolver selects only allowlisted models from exact CLI snapshot', () => {
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: catalog.models.filter(model => model.certification_reference !== null).map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const available = { cliAvailableModels: catalog.models.map(model => model.model_id),
+    index, revokedRefs: [] };
+  assert.deepEqual(resolvePinnedModels(catalog, 'deep', available), {
+    primaryModelId: 'claude-opus-5-5-high',
+    allowedFallbackModels: ['gemini-4-argon-high', 'claude-sonnet-5-5-high'],
+    capabilityTier: 'deep',
+  });
+  for (const missing of ['claude-opus-5-5-high', 'gemini-4-argon-high']) {
+    assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+      cliAvailableModels: available.cliAvailableModels.filter(model => model !== missing),
+    }), /review_model_unavailable/);
+  }
+  const pendingPrimary = structuredClone(catalog);
+  pendingPrimary.models.find(model => model.model_id === 'claude-opus-5-5-high').certification_status = 'pending';
+  pendingPrimary.models.find(model => model.model_id === 'claude-opus-5-5-high').certification_reference = null;
+  assert.throws(() => resolvePinnedModels(pendingPrimary, 'deep', available), /review_model_unavailable/);
+  const pendingFallback = structuredClone(catalog);
+  pendingFallback.models.find(model => model.model_id === 'gemini-4-argon-high').certification_status = 'pending';
+  pendingFallback.models.find(model => model.model_id === 'gemini-4-argon-high').certification_reference = null;
+  assert.throws(() => resolvePinnedModels(pendingFallback, 'deep', available), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'invalid', available), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-CLI'],
+  }), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', {
+    ...available, revokedRefs: ['OWNER-claude-opus-5-5-high'],
+  }), /review_model_unavailable/);
+  assert.throws(() => resolvePinnedModels(catalog, 'deep', { cliAvailableModels: ['claude-opus-5-5-high'] }), /review_model_unavailable/);
+});
+
+test('terminal OCR_LLM_MODEL can differ from fast preferred but must be pinned and unrevoked', () => {
+  const terminal = 'gpt-oss-120b-medium';
+  assert.notEqual(terminal, catalog.strategies.fast.preferred_model_id);
+  const index = { cli_inventory: { approval_ref: 'OWNER-CLI' },
+    certifications: catalog.models.filter(model => model.certification_reference !== null).map(model => ({
+      sha256: model.certification_reference.slice(7), approval_ref: `OWNER-${model.model_id}`,
+    })) };
+  const pinned = { cliAvailableModels: catalog.models.map(model => model.model_id),
+    index, revokedRefs: [] };
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, pinned), true);
+  assert.equal(isPinnedTerminalModelApproved(catalog, 'not-in-catalog', pinned), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, cliAvailableModels: pinned.cliAvailableModels.filter(id => id !== terminal),
+  }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, revokedRefs: [`OWNER-${terminal}`],
+  }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, {
+    ...pinned, revokedRefs: ['OWNER-CLI'],
+  }), false);
+  const tampered = structuredClone(catalog);
+  tampered.models.find(model => model.model_id === terminal).certification_status = 'pending';
+  assert.equal(isPinnedTerminalModelApproved(tampered, terminal, pinned), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, terminal, { ...pinned, index: null }), false);
+});
+
+
+test('Hydrogen High terminal approval binds the successful strict OAuth smoke to the exact pinned CLI', () => {
+  const readConfig = name => readFileSync(new URL('../config/' + name, import.meta.url));
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const model = 'gemini-4-hydrogen-high';
+  const capabilityBytes = readConfig('routing-evidence/pro-capability-gemini-4-hydrogen-high-20261113.json');
+  const certificateBytes = readConfig('routing-evidence/pro-model-certification-gemini-4-hydrogen-high-20261113.json');
+  const inventoryBytes = readConfig('routing-evidence/pro-cli-inventory-20261113.json');
+  const index = JSON.parse(readConfig('review-certification-index.json'));
+  const registry = JSON.parse(readConfig('routing-authorization.json'));
+  const capability = JSON.parse(capabilityBytes);
+  const certificate = JSON.parse(certificateBytes);
+  const inventory = JSON.parse(inventoryBytes);
+  const entry = catalog.models.find(item => item.model_id === model);
+  const certificateHash = digest(certificateBytes);
+  const capabilityHash = digest(capabilityBytes);
+  const inventoryHash = digest(inventoryBytes);
+  const reference = index.certifications.filter(item => item.sha256 === certificateHash);
+  assert.equal(reference.length, 1);
+  assert.equal(reference[0].approval_ref, 'OWNER-MODEL-CERT-GEMINI-4-HYDROGEN-HIGH-20261113');
+  assert.equal(entry.capability_tier, 'deep');
+  assert.equal(entry.certification_status, 'certified');
+  assert.equal(entry.certification_reference, 'sha256:' + certificateHash);
+  assert.equal(certificate.model_id, model);
+  assert.equal(certificate.capability_tier, entry.capability_tier);
+  assert.equal(certificate.catalog_version, catalog.catalog_version);
+  assert.equal(certificate.capability_evidence_sha256, capabilityHash);
+  assert.equal(certificate.cli_evidence_sha256, inventoryHash);
+  assert.equal(index.cli_inventory.sha256, inventoryHash);
+  assert.equal(inventory.cli_binary_sha256,
+    '9db59b6371107b939befa9c507c0a24989fda974e75d81d8529f3689ef7322e5');
+  assert.ok(inventory.models.includes(model));
+  assert.equal(capability.model_id, model);
+  assert.equal(capability.capability_tier, 'deep');
+  assert.match(capability.quality_basis.join(' '), /43423036181/);
+  assert.match(capability.quality_basis.join(' '), /toolPermission strict/);
+  assert.match(capability.quality_basis.join(' '), /does not establish real code-review quality/);
+  const expectedApprovals = [
+    [index.cli_inventory.approval_ref, 'cli_inventory', inventoryHash],
+    ['OWNER-CAPABILITY-GEMINI-4-HYDROGEN-HIGH-20261113', 'model', capabilityHash],
+    [reference[0].approval_ref, 'model', certificateHash],
+  ];
+  for (const [ref, kind, hash] of expectedApprovals) {
+    const approvals = registry.approvals.filter(approval => approval.ref === ref);
+    assert.equal(approvals.length, 1, ref);
+    assert.equal(approvals[0].kind, kind);
+    assert.equal(approvals[0].subject_sha256, 'sha256:' + hash);
+    assert.equal(approvals[0].repo_id, 1318645969);
+    assert.equal(approvals[0].full_name, 'yohi/ocr-app');
+    assert.equal(approvals[0].issued_at, certificate.issued_at);
+    assert.equal(approvals[0].expires_at, certificate.expires_at);
+    assert.ok(!registry.revoked_refs.includes(ref));
+  }
+  const pinned = { cliAvailableModels: inventory.models, index, revokedRefs: registry.revoked_refs };
+  assert.equal(isPinnedTerminalModelApproved(catalog, model, pinned), true);
+  assert.equal(isPinnedTerminalModelApproved(catalog, model,
+    { ...pinned, revokedRefs: [reference[0].approval_ref] }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, model,
+    { ...pinned, cliAvailableModels: inventory.models.filter(item => item !== model) }), false);
+  assert.equal(isPinnedTerminalModelApproved(catalog, model,
+    { ...pinned, revokedRefs: [index.cli_inventory.approval_ref] }), false);
 });

@@ -196,17 +196,17 @@ test('certified review job disables native CLI auto-update for all steps', () =>
   assert.match(step('Finalize routing audit'), /revalidateRoutingExecutionContext/);
 });
 
-test('review workflow pins the official CLI release to the existing approved inventory', () => {
+test('review workflow pins agy 1.5.8 to the observed immutable CLI inventory', () => {
   const installStep = step('Install pinned review tools');
-  const inventory = JSON.parse(fs.readFileSync(new URL('../config/routing-evidence/pro-cli-inventory-20261105.json', import.meta.url), 'utf8'));
-  assert.equal(inventory.cli_version, '1.5.1');
-  assert.match(installStep, /AGY_VERSION: '1\.5\.1'/);
-  assert.match(installStep, /AGY_ARCHIVE_SHA256: '2a64ccfc5f6679c253769f0760614af5de04d8dc1eeeec9b9752ba4c8dd92250'/);
+  const inventory = JSON.parse(fs.readFileSync(new URL('../config/routing-evidence/pro-cli-inventory-20261113.json', import.meta.url), 'utf8'));
+  assert.equal(inventory.cli_version, '1.5.8');
+  assert.match(installStep, /AGY_VERSION: '1\.5\.8'/);
+  assert.match(installStep, /AGY_ARCHIVE_SHA256: '905d4accfbd61bc00bee84bfaf24c59b85d334cabd786cf99237b66cfe06ab98'/);
   assert.ok(installStep.includes("AGY_BINARY_SHA256: '" + inventory.cli_binary_sha256 + "'"));
   assert.match(installStep, /releases\/download\/\$\{AGY_VERSION\}\/agy_cli_linux_x64\.tar\.gz/);
   assert.match(installStep, /AGY_VERSION_CERTIFICATION_MISMATCH/);
   assert.match(installStep, /install-certified-agy\.sh/);
-  assert.doesNotMatch(installStep, /cli\/install\.sh|releases\/latest/);
+  assert.doesNotMatch(installStep, /cli\/install\.sh|releases\/latest|AGY_VERSION: '1\.5\.1'/);
 });
 
 test('certified CLI installer verifies both digests and refuses malformed or mismatched artifacts', () => {

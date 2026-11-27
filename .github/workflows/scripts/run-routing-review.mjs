@@ -1,6 +1,7 @@
 import { fetchCurrentRoutingAuthorization } from './routing-authorization.mjs';
 import { evaluateRoutingStartup } from './routing-authorization.mjs';
 import { readInstalledCliIdentity as defaultReadInstalledCliIdentity } from './load-review-certification.mjs';
+import { resolvePinnedModels, resolveCertifiedModels, isPinnedTerminalModelApproved } from './validate-review-model-catalog.mjs';
 import { readRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 import { assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { validateRoutingDecisionRecord } from './ocr-routing-audit.mjs';
@@ -89,19 +90,28 @@ export async function runRoutingReview({
     let sealed;
     let cliIdentity = null;
     let certification = null;
-    const verifyCertifiedRoute = async checked => {
+    let terminalDefault = null;
+    const verifyCertifiedRoute = async (checked, attemptedModel = null) => {
       const evidence = checked.certifiedBundle?.evidence;
       const available = new Set(evidence?.cli_available_models ?? evidence?.cliAvailableModels ?? []);
       const models = freshInputs.catalog?.models?.filter(model => available.has(model.model_id)) ?? [];
       const resolveEvidence = { verifiedCertificationRefs: evidence?.certification_refs ?? evidence?.verifiedCertificationRefs,
-        cliAvailableModels: [...available] };
-      const resolver = resolveModels ?? (await import('./validate-review-model-catalog.mjs')).resolveCertifiedModels;
-      const resolved = resolver({ ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
+        cliAvailableModels: [...available],
+        ...(globalOptIn ? { index: evidence?.index, revokedRefs: evidence?.revokedRefs } : {}) };
+      const resolver = resolveModels ?? (globalOptIn ? resolvePinnedModels : resolveCertifiedModels);
+      const resolved = resolver(globalOptIn ? freshInputs.catalog : { ...freshInputs.catalog, models }, route.selected_strategy, resolveEvidence);
       if (resolved.primaryModelId !== route.selected_model_id
         || resolved.allowedFallbackModels.join('\0') !== route.fallback_models.join('\0')) denied('ROUTING_ACTIVATION_DENIED');
+      if (globalOptIn && attemptedModel === terminalDefault) {
+        // The configured last-resort model need not be the fast preferred model,
+        // but must be present in this CLI inventory and the non-revoked pinned index.
+        if (!isPinnedTerminalModelApproved(freshInputs.catalog, terminalDefault, resolveEvidence)) {
+          denied('ROUTING_ACTIVATION_DENIED');
+        }
+      }
       return { ...freshInputs.catalog, models };
     };
-    const authorizeBeforeSpawn = async () => {
+    const authorizeBeforeSpawn = async attemptedModel => {
       try {
         const current = await fetchCurrentAuthorization({ ...authorityParams, now: now() });
         if (!current?.registry) return false;
@@ -112,7 +122,7 @@ export async function runRoutingReview({
           const checked = await revalidateExecutionContext({ context: sealed, expectedBinding,
             trustedInputs: { ...freshInputs, registry: current.registry, operationalDossiers: current.operationalDossiers,
               needsModel: route.reviewable_file_count > 0 }, repoIdentity, now: now(), cliBinarySha256: currentCli.binarySha256 });
-          if (route.reviewable_file_count > 0) await verifyCertifiedRoute(checked);
+          if (route.reviewable_file_count > 0) await verifyCertifiedRoute(checked, attemptedModel);
           return true;
         }
         return evaluateStartup({
@@ -148,6 +158,9 @@ export async function runRoutingReview({
       if (mode !== 'shadow') denied('NO_SELECTED_REVIEW_ROUTE');
       return runAuthorizedHost({ ...legacy, routingMode: 'shadow' });
     }
+    terminalDefault = globalOptIn ? route.terminal_model_id : null;
+    if (globalOptIn && (typeof terminalDefault !== 'string' ||
+      !/^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/.test(terminalDefault))) denied('ROUTING_ACTIVATION_DENIED');
     sealed = await readExecutionContext({ runTemp: env.RUNNER_TEMP, expectedBinding });
     if (!sealed) denied('ROUTING_EXECUTION_CONTEXT_INVALID');
     let decision;
@@ -191,6 +204,7 @@ export async function runRoutingReview({
         model: route.selected_model_id,
         fallbackModels: [...route.fallback_models],
         modelCatalog: certification,
+        ...(globalOptIn ? { terminalDefaultModel: terminalDefault } : {}),
         executablePath: cliIdentity.resolvedPath,
         executableIdentity: cliIdentity,
         targetRoot: env.TARGET_REPO_PATH,

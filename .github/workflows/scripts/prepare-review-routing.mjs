@@ -13,13 +13,13 @@ import { selectReviewRoute } from './select-review-model.mjs';
 import { createRunBindingFromEnv as createCanonicalRunBindingFromEnv, assertRunBindingValid, assertRunBindingEquals, assertSerializedRunBindingMatches } from './ocr-run-binding.mjs';
 import { createRoutingDecisionRecord, writeRoutingDecision } from './ocr-routing-audit.mjs';
 import { evaluateRoutingStartup, fetchCurrentRoutingAuthorization, hashRoutingSourceManifest } from './routing-authorization.mjs';
-import { loadVerifiedCertification, readInstalledCliIdentity } from './load-review-certification.mjs';
+import { loadVerifiedCertification, loadPinnedCliInventory, readInstalledCliIdentity } from './load-review-certification.mjs';
 import { readRoutingExecutionContext, writeRoutingExecutionContext, revalidateRoutingExecutionContext } from './routing-execution-context.mjs';
 
 const ROUTE_KEYS = Object.freeze([
   'schema_version', 'workflow_run_id', 'run_attempt', 'head_sha', 'effective_mode', 'decision_llm_enabled', 'status',
   'reviewable_file_count', 'proposed_strategy', 'selected_strategy', 'selected_model_id',
-  'fallback_models', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
+  'fallback_models', 'terminal_model_id', 'route_source', 'decision_status', 'policy_version', 'model_catalog_version',
 ]);
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$/;
 const STRATEGIES = ['fast', 'deep', null];
@@ -56,6 +56,8 @@ function validateRoute(value) {
   modelId(value.selected_model_id, true);
   if (!Array.isArray(value.fallback_models) || value.fallback_models.length > 16 || new Set(value.fallback_models).size !== value.fallback_models.length) routeError();
   for (const fallback of value.fallback_models) modelId(fallback);
+  if (value.effective_mode === 'off') modelId(value.terminal_model_id);
+  else if (value.terminal_model_id !== null) routeError();
   for (const key of ['policy_version', 'model_catalog_version']) {
     if (typeof value[key] !== 'string' || value[key].length < 1 || value[key].length > 128 || /[\r\n]/.test(value[key])) routeError();
   }
@@ -95,6 +97,8 @@ export function serializeSelectedReviewRoute({ route, runBinding, policyVersions
     selected_strategy: route.selectedStrategy,
     selected_model_id: route.selectedModelId ?? route.selectedReviewModel ?? null,
     fallback_models: runBinding.mode === 'shadow' ? [] : [...route.fallbackModels],
+    terminal_model_id: runBinding.mode === 'off' && runBinding.decisionLlmEnabled === true
+      ? route.terminalModelId : null,
     route_source: route.routeSource,
     decision_status: route.decisionStatus,
     policy_version: policyVersions.policyVersion,
@@ -257,14 +261,12 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
   }
   if (globalOptIn && needsModel) {
     cliIdentity = await (readCliIdentity ?? inputs.readCliIdentity)();
-    const verified = loadVerifiedCertification({ catalog, index: inputs.index, registry: latestAuthorization.registry,
-      repoIdentity: { repo_id: centralIdentity.id, full_name: centralIdentity.full_name }, now: now(),
+    // A stale certification must not disable advisory classification in off mode.
+    // Still fail closed if the pinned CLI binary or catalog model allowlist differs.
+    const inventory = loadPinnedCliInventory({ index: inputs.index,
       readEvidence: readEvidence ?? inputs.readEvidence, cliBinarySha256: cliIdentity.binarySha256 });
-    if (verified.verifiedCertificationRefs.length === 0 || verified.cliAvailableModels.length === 0) {
-      throw new Error('REVIEW_CERTIFICATION_INVALID');
-    }
-    verifiedBundle = { catalog, evidence: { verifiedCertificationRefs: verified.verifiedCertificationRefs,
-      cliAvailableModels: verified.cliAvailableModels } };
+    verifiedBundle = { catalog, evidence: { cliAvailableModels: inventory.cliAvailableModels,
+      index: inputs.index, revokedRefs: latestAuthorization.registry.revoked_refs } };
   }
   if (decisionLlmEnabled && features.reviewable_file_count > 0 && !features.features_incomplete && grant.allowed) {
     decision = await requestReviewDecision({ decisionState: buildDecisionState(features), grant, expectedBinding: binding, apiKey: env.OPENROUTER_API_KEY, apiUrl: env.DECISION_LLM_API_URL, modelId: env.DECISION_LLM_MODEL_ID, fetchImpl, timeoutMs: 5000 });
@@ -283,6 +285,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
     decisionStatus: normalizedDecisionStatus,
     reviewableCount: features.reviewable_file_count,
     selectedModelId: resolved.selectedReviewModel,
+    terminalModelId: globalOptIn ? env.OCR_LLM_MODEL : null,
   };
   const serializedRoute = serializeSelectedReviewRoute({ route: routeResult, runBinding: binding, policyVersions });
   {
@@ -292,7 +295,7 @@ export async function prepareRoutingStep({ runBinding, env, fs: fileSystem = fs,
       repo_identity: { repoId: repoIdentity.id, fullName: repoIdentity.full_name, headSha: binding.headSha },
       authorization: { policy_sha256: inputs.policySha256.slice(7), catalog_sha256: inputs.catalogSha256.slice(7),
         source_manifest_sha256: inputs.sourceManifestSha256.slice(7), approval_refs: freshStartup.approvalRefs },
-      certification_refs: verifiedBundle?.evidence.verifiedCertificationRefs.map(ref => ref.certification_reference) ?? [],
+      certification_refs: binding.mode === 'enforce' ? verifiedBundle?.evidence.verifiedCertificationRefs.map(ref => ref.certification_reference) ?? [] : [],
       cli_inventory_sha256: needsModel ? inputs.index.cli_inventory.sha256 : null,
       cli_binary_sha256: needsModel ? cliIdentity.binarySha256 : null,
     } });

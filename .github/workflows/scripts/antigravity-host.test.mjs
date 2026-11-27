@@ -1141,7 +1141,9 @@ test('off-mode decision opt-in uses the attested model and records certified att
   const events = [];
   const result = await runHost({
     prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
-    model: 'cert-primary', fallbackModels: ['cert-fallback-a'], modelCatalog: certifiedCatalog,
+    model: 'cert-primary', fallbackModels: ['cert-fallback-a'],
+    modelCatalog: { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'lower-tier' } } },
+    terminalDefaultModel: 'lower-tier', env: { OCR_LLM_MODEL: 'lower-tier' },
     ...attestedExecutable(), maxRetries: 0, onAttemptEvent: event => events.push(event),
     spawn: command => {
       commands.push(command);
@@ -1154,6 +1156,74 @@ test('off-mode decision opt-in uses the attested model and records certified att
   assert.deepEqual(events.map(event => event.event), ['attempt_started', 'attempt_completed', 'host_completed']);
 });
 
+
+test('off+Decision uses OCR_LLM_MODEL as the final fallback even when not fast-preferred', async () => {
+  const seen = [];
+  const events = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: ['cert-fallback-a'],
+    modelCatalog: { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'lower-tier' } } },
+    terminalDefaultModel: 'cert-disallowed', env: { OCR_LLM_MODEL: 'cert-disallowed' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: event => events.push(event),
+    spawn: (_command, args) => {
+      seen.push(args[args.indexOf('--model') + 1]);
+      return childFor(seen.length < 3
+        ? JSON.stringify({ error: 'No capacity available' })
+        : JSON.stringify(validReview));
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(seen, ['cert-primary', 'cert-fallback-a', 'cert-disallowed']);
+  assert.equal(events.filter(event => event.event === 'attempt_started').length, 3);
+});
+
+test('off+Decision rejects mismatched final model without spawning', async () => {
+  let spawnCount = 0;
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+    terminalDefaultModel: 'cert-disallowed', env: { OCR_LLM_MODEL: 'lower-tier' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
+  assert.equal(spawnCount, 0);
+});
+
+test('off+Decision never spawns an uncertified final fallback', async () => {
+  for (const terminalModel of ['uncertified', 'unknown']) {
+    const attempted = [];
+    const result = await runHost({
+      prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+      model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+      terminalDefaultModel: terminalModel, env: { OCR_LLM_MODEL: terminalModel },
+      ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+      spawn: (_command, args) => {
+        attempted.push(args[args.indexOf('--model') + 1]);
+        return childFor(JSON.stringify({ error: 'No capacity available' }));
+      },
+    });
+    assert.equal(result.message, 'INVALID_FALLBACK_MODELS');
+    assert.deepEqual(attempted, ['cert-primary']);
+  }
+});
+
+test('off+Decision permits a successful routed review even if its unused terminal is unapproved', async () => {
+  const attempted = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: [], modelCatalog: certifiedCatalog,
+    terminalDefaultModel: 'unknown', env: { OCR_LLM_MODEL: 'unknown' },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: (_command, args) => {
+      attempted.push(args[args.indexOf('--model') + 1]);
+      return childFor(JSON.stringify(validReview));
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(attempted, ['cert-primary']);
+});
 
 test('certified Antigravity failures emit bounded stage-only diagnostics without leaking child output', async () => {
   const secret = 'ghp_sensitive-child-output-should-never-appear';
@@ -1229,4 +1299,100 @@ test('certified diagnostic sink failure cannot change the review verdict', async
   });
   assert.equal(result.status, 'failed');
   assert.equal(result.message, 'REVIEW_EXECUTION_FAILED');
+});
+
+test('off+Decision attempts configured default LAST after all routed models fail with 429', async () => {
+  const seen = [];
+  const diagnostics = [];
+  const events = [];
+  const agyError = 'AGY_ERROR: ' + JSON.stringify({
+    status: 'RESOURCE_EXHAUSTED', error_code: 429, code_kind: 'http',
+    retryable: true, error_id: 'ghp_PRIVATE_SECRET',
+    short_error: 'Individual quota reached Bearer ghp_PRIVATE_SECRET',
+  }) + '\n';
+  const models = { ...certifiedCatalog,
+    strategies: { fast: { preferred_model_id: 'lower-tier' } },
+  };
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'cert-primary', fallbackModels: ['cert-fallback-a','cert-fallback-b'],
+    terminalDefaultModel: 'lower-tier', env: { OCR_LLM_MODEL: 'lower-tier' },
+    modelCatalog: models, ...attestedExecutable(), maxRetries: 0,
+    onAttemptEvent: item => events.push(item), onDiagnostic: item => diagnostics.push(item),
+    spawn: (_command, args) => {
+      const model = args[args.indexOf('--model') + 1];
+      seen.push(model);
+      return model === 'lower-tier'
+        ? childFor(JSON.stringify(validReview))
+        : childFor('', { stderr: agyError, exitCode: 3 });
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(seen, ['cert-primary', 'cert-fallback-a', 'cert-fallback-b', 'lower-tier']);
+  assert.deepEqual(events.filter(item => item.event === 'attempt_completed').map(item => item.model), seen);
+  assert.equal(diagnostics.filter(line => line.includes('AGY_ERROR_DIAGNOSTIC')).length, 3);
+  assert.match(diagnostics[0], /stage=process_exit reason=nonzero_exit/);
+  assert.match(diagnostics[1], /category=rate_limited status=RESOURCE_EXHAUSTED error_code=429/);
+  assert.doesNotMatch(JSON.stringify(diagnostics), /PRIVATE_SECRET|Bearer|short_error|error_id/);
+});
+
+test('off+Decision repeats default as final when it was first; enforce never does so', async () => {
+  const catalog = { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'lower-tier' } },
+    models: certifiedCatalog.models.map(item => item.model_id === 'lower-tier'
+      ? { ...item, allowed_fallbacks: ['cert-primary'] } : item),
+  };
+  const seen = [];
+  const result = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    model: 'lower-tier', fallbackModels: ['cert-primary'],
+    modelCatalog: catalog, terminalDefaultModel: 'lower-tier',
+    env: { OCR_LLM_MODEL: 'lower-tier' }, ...attestedExecutable(), maxRetries: 0,
+    onAttemptEvent: () => {},
+    spawn: (_command, args) => {
+      const model = args[args.indexOf('--model') + 1];
+      seen.push(model);
+      return seen.length === 3 ? childFor(JSON.stringify(validReview))
+        : childFor('', { stderr: 'AGY_ERROR: {"status":"UNAVAILABLE","error_code":503,"code_kind":"http","retryable":true}\n', exitCode: 3 });
+    },
+  });
+  assert.equal(result.status, 'success');
+  assert.deepEqual(seen, ['lower-tier', 'cert-primary', 'lower-tier']);
+
+  let enforceSpawns = 0;
+  const enforce = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'enforce',
+    model: 'cert-primary', fallbackModels: [], modelCatalog: catalog,
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: () => { enforceSpawns++; return childFor('', { stderr: 'AGY_ERROR: {"status":"UNAVAILABLE","error_code":503,"code_kind":"http"}\n', exitCode: 3 }); },
+  });
+  assert.equal(enforce.status, 'failed');
+  assert.equal(enforceSpawns, 1);
+});
+
+test('off+Decision denies unapproved default and authorization revocation before spawn', async () => {
+  let spawnCount = 0;
+  const unauthorized = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    env: { OCR_LLM_MODEL: 'model-not-in-catalog' },
+    model: 'cert-primary', fallbackModels: [], terminalDefaultModel: 'model-not-in-catalog',
+    modelCatalog: { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'model-not-in-catalog' } } },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    spawn: () => { spawnCount++; return childFor(JSON.stringify(validReview)); },
+  });
+  assert.equal(unauthorized.message, 'INVALID_FALLBACK_MODELS');
+  assert.equal(spawnCount, 0);
+
+  let authorized = 0;
+  const denied = await runHost({
+    prompt: 'Review.', cwd: '/tmp/trusted', routingMode: 'off', decisionLlmEnabled: true,
+    env: { OCR_LLM_MODEL: 'lower-tier' },
+    model: 'cert-primary', fallbackModels: [], terminalDefaultModel: 'lower-tier',
+    modelCatalog: { ...certifiedCatalog, strategies: { fast: { preferred_model_id: 'lower-tier' } } },
+    ...attestedExecutable(), maxRetries: 0, onAttemptEvent: () => {},
+    authorizeBeforeSpawn: model => (++authorized === 1 && model === 'cert-primary'),
+    spawn: (_command, args) => { spawnCount++; return childFor('', { stderr: 'AGY_ERROR: {"status":"UNAVAILABLE","error_code":503,"code_kind":"http"}\n', exitCode: 3 }); },
+  });
+  assert.equal(denied.status, 'failed');
+  assert.equal(authorized, 2);
+  assert.equal(spawnCount, 1);
 });

@@ -2,6 +2,7 @@ import { spawn as nodeSpawn } from 'node:child_process';
 import { resolve as resolvePath } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { readInstalledCliIdentity } from './load-review-certification.mjs';
+import { parseAgyError, formatAgyErrorDiagnostic } from './agy-error-diagnostic.mjs';
 
 const SCHEMA_VERSION = '1.0';
 const REVIEW_MODE = 'review';
@@ -211,7 +212,7 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
   const certifiedRoute = routingMode === 'enforce' || (routingMode === 'off' && decisionLlmEnabled === true);
   if (typeof authorizeBeforeSpawn === 'function') {
     try {
-      if (await authorizeBeforeSpawn() !== true) {
+      if (await authorizeBeforeSpawn(model) !== true) {
         return { error: new Error('ROUTING_ACTIVATION_DENIED'), failureKind: 'authorization_denied' };
       }
     } catch {
@@ -343,6 +344,7 @@ async function readChild({ prompt, cwd, timeoutMs, printTimeoutMs, spawn, mode, 
         finish({
           error: new Error(`Antigravity host exited with ${signal || `code ${code}`}${errorDetail}`),
           failureKind: 'process_exit',
+          agyError: parseAgyError(stderr),
           exitCode: Number.isInteger(code) ? code : null,
           exitSignaled: signal !== null && signal !== undefined,
         });
@@ -392,6 +394,7 @@ async function runMode({
   fallbackModel,
   fallbackModels,
   modelCatalog,
+  terminalDefaultModel,
   routingMode = 'off',
   runAttemptId,
   onAttemptEvent,
@@ -452,6 +455,8 @@ async function runMode({
     ? printTimeoutMs
     : resolvePrintTimeoutMs(env);
   const effectiveModel = model ? normalizeAntigravityModel(model) : resolveModel(env);
+  const terminalEnabled = routingMode === 'off' && decisionLlmEnabled === true;
+  const terminalModel = terminalEnabled ? resolveModel(env) : null;
   let fallbackCandidates;
   if (certifiedRoute) {
     const catalogModels = Array.isArray(modelCatalog?.models) ? modelCatalog.models : [];
@@ -476,12 +481,21 @@ async function runMode({
       seen.add(id);
       fallbackCandidates.push(normalizeAntigravityModel(id));
     }
+    // Only off+Decision mode can use a final default-model attempt.
+    // The run-scoped terminal model is the final candidate. Its eligibility is
+    // checked only if reached, so an unapproved terminal model cannot prevent
+    // an otherwise valid primary review from succeeding.
+    if (terminalEnabled && terminalDefaultModel !== terminalModel) {
+      return fixedFailure('INVALID_FALLBACK_MODELS');
+    }
   } else {
     const configuredFallbackModel = fallbackModel || env?.ANTIGRAVITY_FALLBACK_MODEL;
     fallbackCandidates = configuredFallbackModel ? [normalizeAntigravityModel(configuredFallbackModel)] : [];
   }
-  const models = [effectiveModel, ...fallbackCandidates]
+  const standardModels = [effectiveModel, ...fallbackCandidates]
     .filter((candidate, index, candidates) => candidate && candidates.indexOf(candidate) === index);
+  // Re-try default as the final candidate even when it was initially selected.
+  const models = terminalEnabled ? [...standardModels, terminalModel] : standardModels;
   const progressSink = certifiedRoute ? undefined : onProgress;
   const emitSafeFailureDiagnostic = (childResult, validatedResult, attemptIndex) => {
     if (!certifiedRoute) return;
@@ -518,6 +532,8 @@ async function runMode({
     // The entire line consists of static enums, a bounded exit code and our attempt counter.
     try {
       onDiagnostic(`ANTIGRAVITY_HOST_DIAGNOSTIC stage=${stage} reason=${reason} output_format=${outputFormat} exit_code=${exitCode} attempt=${attemptIndex}`);
+      const provider = formatAgyErrorDiagnostic(childResult.agyError, attemptIndex);
+      if (provider) onDiagnostic(provider);
     } catch {
       // Diagnostic logging is best effort; it never changes authorization or review results.
     }
@@ -526,6 +542,13 @@ async function runMode({
   const attempts = Math.max(1, maxRetries + 1);
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const currentModel = models[modelIndex];
+    // Model approval is required before, not after, the last-resort attempt.
+    if (certifiedRoute && terminalEnabled && modelIndex === models.length - 1) {
+      const entry = modelCatalog?.models?.find(item => item?.model_id === currentModel);
+      if (entry?.certification_status !== 'certified' || !['fast', 'deep'].includes(entry.capability_tier)) {
+        return fixedFailure('INVALID_FALLBACK_MODELS');
+      }
+    }
     let shouldFallback = false;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -597,7 +620,13 @@ async function runMode({
       if (!validatedResult || validatedResult.status === 'failed') {
         emitSafeFailureDiagnostic(childResult, validatedResult, currentIndex);
       }
-      if (validatedResult) return complete(validatedResult);
+      if (validatedResult) {
+        if (terminalEnabled && validatedResult.status === 'failed' && modelIndex < models.length - 1) {
+          shouldFallback = true;
+          break;
+        }
+        return complete(validatedResult);
+      }
 
       const errorMessage = childResult.error?.message ?? validationMessage ?? 'Antigravity host returned invalid output';
       if (isFallbackError(errorMessage)) {
@@ -607,6 +636,12 @@ async function runMode({
           break;
         }
         return complete(failure(mode, certifiedRoute ? 'MODEL_REPORTED_FAILURE' : errorMessage));
+      }
+      // All authorized candidates are attempted in advisory mode, with the
+      // configured default last; authorization failures above still stop.
+      if (terminalEnabled && modelIndex < models.length - 1) {
+        shouldFallback = true;
+        break;
       }
       if (attempt < attempts && isTransientError(errorMessage)) {
         await new Promise(r => setTimeout(r, retryDelayMs * attempt));
